@@ -14,13 +14,13 @@ const Patra = sequelize.define('Patra', {
 
   // Received by Office
   receivedByOffice: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false,
   },
 
   // Name and Designation of the Recipient
   recipientNameAndDesignation: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false,
   },
 
@@ -90,7 +90,7 @@ const Patra = sequelize.define('Patra', {
 
   // Subject and Details of the Letter
   subjectAndDetails: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false,
   },
 
