@@ -6,7 +6,7 @@ const File = require('../models/File');
 require('dotenv').config();
 
 // Initialize Mistral client
-const mistralClient = new Mistral({ 
+const mistralClient = new Mistral({
     apiKey: process.env.MISTRAL_API_KEY || "B7X86kZ2MwX7Bfv3SsDn9FqAjSXKhOYW"
 });
 
@@ -30,7 +30,7 @@ const upload = multer({
             cb(null, fileName);
         },
     }),
-    limits: { 
+    limits: {
         fileSize: 10 * 1024 * 1024, // 10MB
         files: 1 // Only allow one file
     },
@@ -85,67 +85,67 @@ const processPdf = async (documentUrl) => {
 // Enhanced function to extract recipients and their designations with comprehensive Marathi support
 const extractRecipientsAndDesignations = (cleanText) => {
     const recipients = [];
-    
+
     // Enhanced patterns for comprehensive name and designation extraction including Marathi
     const enhancedRecipientPatterns = [
         // Pattern for formal addressing with titles and saheb (Enhanced)
         /मा\.?\s*([^,\n]{10,60})\s*साहेब/gi,
         /माननीय\s*([^,\n]{10,60})\s*साहेब/gi,
-        
+
         // Pattern for Marathi titles with names
         /श्री\.?\s*([अ-ह\s]{3,40})[,\s]*([अ-ह\s]{5,50}(?:अधिकारी|अधीक्षक|सचिव|अध्यक्ष|प्रमुख|सहायक|मंत्री|आयुक्त|कलेक्टर|तहसिलदार))/gi,
         /श्रीमती\.?\s*([अ-ह\s]{3,40})[,\s]*([अ-ह\s]{5,50}(?:अधिकारी|अधीक्षक|सचिव|अध्यक्ष|प्रमुख|सहायक|मंत्री|आयुक्त|कलेक्टर|तहसिलदार))/gi,
-        
+
         // Pattern for Dr./Adv./Mr./Ms. with titles (Enhanced with Marathi)
         /((?:Dr\.?|Adv\.?|Mr\.?|Ms\.?|श्री\.?|श्रीमती\.?|डॉ\.?)\s*[A-Za-zअ-ह\s\.]{3,40})[,\s]*([A-Za-zअ-ह\s]{5,50}(?:President|Secretary|Treasurer|Officer|अधिकारी|अधीक्षक|सचिव|अध्यक्ष|प्रमुख|सहायक|मंत्री|आयुक्त|कलेक्टर|तहसिलदार))/gi,
-        
+
         // Pattern for police and government officials (Enhanced)
         /([A-Za-zअ-ह\s]{3,40})[,\s]*(?:पोलीस\s*अधीक्षक|पोलीस\s*अधिकारी|पोलीस\s*निरीक्षक|पोलीस\s*उपनिरीक्षक|Superintendent\s*of\s*Police|Inspector|अधिकारी|तहसिलदार|कलेक्टर|आयुक्त|जिल्हाधिकारी|उपजिल्हाधिकारी)/gi,
-        
+
         // Pattern for formal titles with names (Enhanced)
         /(Chief\s*Secretary|पोलीस\s*महासंचालक|अपर\s*पोलीस\s*महासंचालक|मुख्यमंत्री|गृहमंत्री|राज्यमंत्री|सचिव|अतिरिक्त\s*सचिव|संयुक्त\s*सचिव)[,\s]*([A-Za-zअ-ह\s]{3,40})/gi,
-        
+
         // Pattern for numbered list format (प्रति section) - Enhanced
         /प्रति[,\s]*\n?\s*\d+\.?\s*([A-Za-zअ-ह\s]{5,60})[,\s]*\n?\s*([A-Za-zअ-ह\s]{3,50})/gi,
-        
+
         // Pattern for addresses with names and titles (Enhanced)
         /([A-Za-zअ-ह\s]{3,40})[,\s]*\n?\s*([A-Za-zअ-ह\s]{5,50}(?:विभाग|Department|कार्यालय|Office|मंत्रालय|Ministry|आयोग|Commission))/gi,
-        
+
         // Pattern for names with mobile numbers nearby
         /([A-Za-zअ-ह\s]{3,40})\s*[\/\n]?\s*(?:National|N\.|राष्ट्रीय|रा\.)\s*([A-Za-zअ-ह\s]{5,40})\s*\n?\s*[6-9]\d{9}/gi,
-        
+
         // Pattern for formal letter addressing (Enhanced)
         /The\s+([A-Za-z\s]{10,60})[,\s]*\n?\s*([A-Za-z\s]{5,50}(?:Department|Office|Ministry))/gi,
         /माननीय\s+([अ-ह\s]{10,60})[,\s]*\n?\s*([अ-ह\s]{5,50}(?:विभाग|कार्यालय|मंत्रालय))/gi,
-        
+
         // Pattern for कक्ष अधिकारी type officials (Enhanced)
         /\(([A-Za-zअ-ह\s\.]{3,40})\)\s*\n?\s*([A-Za-zअ-ह\s]{5,50}(?:अधिकारी|विभाग|कार्यालय|मंत्रालय|आयोग))/gi,
-        
+
         // NEW: Pattern for Marathi names with common titles
         /([अ-ह\s]{3,40})\s*(?:जी|साहेब|मॅडम)[,\s]*([अ-ह\s]{5,50}(?:अधिकारी|अधीक्षक|सचिव|अध्यक्ष|प्रमुख|सहायक|मंत्री|आयुक्त|कलेक्टर|तहसिलदार))/gi,
-        
+
         // NEW: Pattern for government positions in Marathi
         /(मुख्यमंत्री|गृहमंत्री|राज्यमंत्री|केंद्रीय\s*मंत्री|पोलीस\s*महासंचालक|मुख्य\s*सचिव|अतिरिक्त\s*मुख्य\s*सचिव|सचिव|अतिरिक्त\s*सचिव|संयुक्त\s*सचिव|उप\s*सचिव)[,\s]*([अ-ह\s]{3,40})?/gi,
-        
+
         // NEW: Pattern for district level officials
         /(जिल्हाधिकारी|उपजिल्हाधिकारी|तहसिलदार|नायब\s*तहसिलदार|तलाठी|ग्राम\s*सेवक)[,\s]*([अ-ह\s]{3,40})?/gi,
-        
+
         // NEW: Pattern for police hierarchy in Marathi
         /(पोलीस\s*महासंचालक|अतिरिक्त\s*पोलीस\s*महासंचालक|पोलीस\s*महानिरीक्षक|पोलीस\s*उप\s*महानिरीक्षक|पोलीस\s*अधीक्षक|अतिरिक्त\s*पोलीस\s*अधीक्षक|पोलीस\s*उप\s*अधीक्षक|पोलीस\s*निरीक्षक|पोलीस\s*उपनिरीक्षक|पोलीस\s*हवालदार)[,\s]*([अ-ह\s]{3,40})?/gi,
-        
+
         // NEW: Pattern for court officials
         /(न्यायाधीश|न्यायमूर्ती|न्यायाधिकारी|मुख्य\s*न्यायाधीश|जिल्हा\s*न्यायाधीश|न्यायालयीन\s*अधिकारी)[,\s]*([अ-ह\s]{3,40})?/gi,
-        
+
         // NEW: Pattern for educational officials
         /(कुलगुरू|प्राचार्य|उप\s*प्राचार्य|मुख्याध्यापक|मुख्याध्यापिका|शिक्षण\s*अधिकारी|शिक्षण\s*निरीक्षक)[,\s]*([अ-ह\s]{3,40})?/gi,
-        
+
         // NEW: Pattern for municipal officials
         /(महापौर|उपमहापौर|आयुक्त|उप\s*आयुक्त|सहायक\s*आयुक्त|नगर\s*सचिव|कार्यकारी\s*अधिकारी)[,\s]*([अ-ह\s]{3,40})?/gi,
-        
+
         // NEW: Pattern for common Marathi surnames with titles
         /(पाटील|देशमुख|जाधव|शिंदे|गायकवाड|चव्हाण|कुलकर्णी|मोरे|भोसले|काळे|शेख|अहमद|खान|मुल्ला|शेळके|घोरपडे|साळुंखे|वाघ|सिंह|शर्मा|वर्मा|गुप्ता|अग्रवाल|जैन|शाह|मेहता|ठाकूर|राजपूत)\s*([अ-ह\s]{3,40})?[,\s]*([A-Za-zअ-ह\s]{5,50}(?:अधिकारी|अधीक्षक|सचिव|अध्यक्ष|प्रमुख|सहायक|मंत्री|आयुक्त|कलेक्टर|तहसिलदार))/gi
     ];
-    
+
     // Extract recipients using all patterns
     enhancedRecipientPatterns.forEach(pattern => {
         let matches = [...cleanText.matchAll(pattern)];
@@ -162,30 +162,30 @@ const extractRecipientsAndDesignations = (cleanText) => {
             }
         });
     });
-    
+
     // Additional extraction for formal addressing (Enhanced with Marathi)
     const formalPatterns = [
         // Pattern for "The + Title" format
         /The\s+(Superintendent\s+of\s+Police)[,\s]*([A-Za-zअ-ह\s]{3,30})?/gi,
         /The\s+(Chief\s+Secretary)[,\s]*([A-Za-zअ-ह\s]{3,30})?/gi,
         /The\s+(Inspector\s+General\s+of\s+Police)[,\s]*([A-Za-zअ-ह\s]{3,30})?/gi,
-        
+
         // Pattern for police officials with locations (Enhanced)
         /पोलीस\s*अधीक्षक[,\s]*([A-Za-zअ-ह\s]{3,30})/gi,
         /पोलीस\s*महासंचालक[,\s]*([A-Za-zअ-ह\s]{3,30})?/gi,
         /पोलीस\s*महानिरीक्षक[,\s]*([A-Za-zअ-ह\s]{3,30})?/gi,
         /पोलीस\s*उप\s*महानिरीक्षक[,\s]*([A-Za-zअ-ह\s]{3,30})?/gi,
-        
+
         // Pattern for departmental heads (Enhanced)
         /([A-Za-zअ-ह\s]{3,40})\s*विभाग/gi,
         /([A-Za-zअ-ह\s]{3,40})\s*Department/gi,
         /([A-Za-zअ-ह\s]{3,40})\s*मंत्रालय/gi,
         /([A-Za-zअ-ह\s]{3,40})\s*आयोग/gi,
-        
+
         // NEW: Pattern for Marathi government departments
         /(गृह\s*विभाग|वित्त\s*विभाग|महसूल\s*विभाग|शिक्षण\s*विभाग|आरोग्य\s*विभाग|कृषी\s*विभाग|उद्योग\s*विभाग|परिवहन\s*विभाग|ग्रामविकास\s*विभाग|शहरी\s*विकास\s*विभाग)[,\s]*([अ-ह\s]{3,40})?/gi
     ];
-    
+
     formalPatterns.forEach(pattern => {
         let matches = [...cleanText.matchAll(pattern)];
         matches.forEach(match => {
@@ -203,14 +203,14 @@ const extractRecipientsAndDesignations = (cleanText) => {
             }
         });
     });
-    
+
     // NEW: Extract names from signature lines and letterheads
     const signaturePatterns = [
         /हस्ताक्षर[:\s]*([अ-ह\s]{3,40})/gi,
         /स्वाक्षरी[:\s]*([अ-ह\s]{3,40})/gi,
         /\(([अ-ह\s]{3,40})\)[,\s]*([अ-ह\s]{5,50}(?:अधिकारी|अधीक्षक|सचिव|अध्यक्ष|प्रमुख|सहायक|मंत्री|आयुक्त|कलेक्टर|तहसिलदार))/gi
     ];
-    
+
     signaturePatterns.forEach(pattern => {
         let matches = [...cleanText.matchAll(pattern)];
         matches.forEach(match => {
@@ -226,12 +226,12 @@ const extractRecipientsAndDesignations = (cleanText) => {
             }
         });
     });
-    
+
     // Remove duplicates and clean up
     const uniqueRecipients = [...new Set(recipients)]
-        .filter(recipient => 
-            recipient.length > 5 && 
-            !recipient.match(/^\d+$/) && 
+        .filter(recipient =>
+            recipient.length > 5 &&
+            !recipient.match(/^\d+$/) &&
             !recipient.includes('Email') &&
             !recipient.includes('www.') &&
             !recipient.includes('@') &&
@@ -243,7 +243,7 @@ const extractRecipientsAndDesignations = (cleanText) => {
             !recipient.includes('Date:')
         )
         .slice(0, 8); // Increased limit to capture more recipients
-    
+
     return uniqueRecipients.join(' | ');
 };
 
@@ -251,13 +251,13 @@ const extractRecipientsAndDesignations = (cleanText) => {
 const extractStructuredData = (text) => {
     // Remove image tags and other markdown, clean the text
     const cleanText = text.replace(/!\[.*?\]\(.*?\)/g, '')
-                          .replace(/\*\*/g, '')
-                          .replace(/\n\s*\n/g, '\n')
-                          .replace(/#+/g, '') // Remove markdown headers
-                          .trim();
-    
+        .replace(/\*\*/g, '')
+        .replace(/\n\s*\n/g, '\n')
+        .replace(/#+/g, '') // Remove markdown headers
+        .trim();
+
     console.log('Processing text:', cleanText.substring(0, 500)); // Debug log
-    
+
     // Initialize result with empty fields
     const result = {
         receivedByOffice: '',
@@ -273,10 +273,10 @@ const extractStructuredData = (text) => {
         officeType: '', // NEW: कार्यालयाचा प्रकार
         officeName: ''  // NEW: कार्यालय
     };
-    
+
     // Extract all mobile numbers first (both Marathi and English digits, 10 and 12 digit formats)
     const allPhoneNumbers = [];
-    
+
     // Function to convert Marathi digits to English
     const convertMarathiToEnglish = (text) => {
         const marathiToEnglish = {
@@ -285,11 +285,11 @@ const extractStructuredData = (text) => {
         };
         return text.replace(/[०-९]/g, (match) => marathiToEnglish[match] || match);
     };
-    
+
     // Convert text to have both original and English digit versions
     const textWithEnglishDigits = convertMarathiToEnglish(cleanText);
     const combinedText = cleanText + ' ' + textWithEnglishDigits;
-    
+
     const phonePatterns = [
         // English digits patterns
         /\+91[6-9]\d{9}\b/g,
@@ -308,13 +308,13 @@ const extractStructuredData = (text) => {
         /मो\.\s*(\+?९?91)?[\s-]?([६-९][०-९]{9}|[6-9]\d{9})/gi,
         /Mo\.\s*(\+?९?91)?[\s-]?([६-९][०-९]{9}|[6-9]\d{9})/gi
     ];
-    
+
     phonePatterns.forEach(pattern => {
         const matches = combinedText.match(pattern) || [];
         matches.forEach(match => {
             let convertedMatch = convertMarathiToEnglish(match);
             let cleanNumber = convertedMatch.replace(/[^\d+]/g, '');
-            
+
             if (cleanNumber.startsWith('+91') && cleanNumber.length === 13) {
                 allPhoneNumbers.push(cleanNumber);
             } else if (cleanNumber.startsWith('91') && cleanNumber.length === 12) {
@@ -324,13 +324,13 @@ const extractStructuredData = (text) => {
             }
         });
     });
-    
+
     // Remove duplicates and format mobile numbers
     const uniqueNumbers = [...new Set(allPhoneNumbers)];
     if (uniqueNumbers.length > 0) {
         result.mobileNumber = uniqueNumbers.join(',');
     }
-    
+
     // Extract received by office (office name patterns) - Enhanced with more Marathi patterns
     const officePatterns = [
         /जिल्हाधिकारी\s+व\s+जिल्हा\s*दंडाधिकारी\s+कार्यालय[,\s]*([^\n]+)/i,
@@ -347,7 +347,7 @@ const extractStructuredData = (text) => {
         /([^\n]*विभाग[^\n]*)/i,
         /([^\n]*मंत्रालय[^\n]*)/i
     ];
-    
+
     for (const pattern of officePatterns) {
         const match = cleanText.match(pattern);
         if (match) {
@@ -359,7 +359,7 @@ const extractStructuredData = (text) => {
             }
         }
     }
-    
+
     if (!result.receivedByOffice) {
         const genericPatterns = [
             /जिल्हाधिकारी[^\n]*/i,
@@ -367,7 +367,7 @@ const extractStructuredData = (text) => {
             /कलेक्टर[^\n]*/i,
             /तहसिलदार[^\n]*/i
         ];
-        
+
         for (const pattern of genericPatterns) {
             const match = cleanText.match(pattern);
             if (match) {
@@ -387,7 +387,7 @@ const extractStructuredData = (text) => {
         /([^\n]*संदर्भात[^\n]*)/i,
         /([^\n]*विषयक[^\n]*)/i
     ];
-    
+
     for (const pattern of subjectPatterns) {
         const match = cleanText.match(pattern);
         if (match && match[1] && match[1].trim().length > 10) {
@@ -582,7 +582,7 @@ const extractStructuredData = (text) => {
         /दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
         /तारीख[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi
     ];
-    
+
     for (const pattern of datePatterns) {
         const matches = cleanText.match(pattern);
         if (matches) {
@@ -601,10 +601,10 @@ const extractStructuredData = (text) => {
     const letterMediumPatterns = [
         // Soft copy patterns
         { pattern: /soft copy|softcopy|electronic copy|digital copy|e-copy|ऑनलाइन|online|eOffice|ई-ऑफिस|इलेक्ट्रॉनिक|डिजिटल|ईमेल|email|इमेल/i, type: 'soft copy' },
-        
+
         // Hard copy patterns  
         { pattern: /hard copy|hardcopy|physical copy|paper copy|print copy|printed copy|डाकेने|post|टपाल|हाताने|hand|By Hand|हस्तगत|कागदी प्रत|छपाई|प्रिंट/i, type: 'hard copy' },
-        
+
         // Other specific mediums
         { pattern: /फॅक्स|fax|फैक्स/i, type: 'फॅक्स' },
         { pattern: /कुरियर|courier/i, type: 'कुरियर' },
@@ -625,13 +625,13 @@ const extractStructuredData = (text) => {
     // If no specific medium found, determine based on context
     if (!mediumFound) {
         // If document mentions digital/online elements, assume soft copy
-        if (cleanText.includes('PDF') || cleanText.includes('scan') || cleanText.includes('digital') || 
+        if (cleanText.includes('PDF') || cleanText.includes('scan') || cleanText.includes('digital') ||
             cleanText.includes('computer') || cleanText.includes('संगणक') || cleanText.includes('स्कॅन')) {
             result.letterMedium = 'soft copy';
-        } 
+        }
         // If mentions postal/physical delivery, assume hard copy
-        else if (cleanText.includes('डाक') || cleanText.includes('पोस्ट') || cleanText.includes('वितरण') || 
-                 cleanText.includes('delivery') || cleanText.includes('हस्तक्षेप')) {
+        else if (cleanText.includes('डाक') || cleanText.includes('पोस्ट') || cleanText.includes('वितरण') ||
+            cleanText.includes('delivery') || cleanText.includes('हस्तक्षेप')) {
             result.letterMedium = 'hard copy';
         }
         // Default based on typical government correspondence
@@ -644,10 +644,10 @@ const extractStructuredData = (text) => {
     const actionTypePatterns = [
         // Proceeding/चालू कार्यवाही patterns
         { pattern: /proceeding|चालू कार्यवाही|कार्यवाही चालू|प्रगतीपथावर|सुरू कार्यवाही/i, type: 'proceeding / चालू कार्यवाही' },
-        
+
         // Answer/उत्तर patterns  
         { pattern: /answer|उत्तर|प्रतिउत्तर|जबाब|पासखा|उत्तर देणे|जवाब देणे|प्रत्युत्तर/i, type: 'answer / उत्तर' },
-        
+
         // Other specific action types
         { pattern: /चौकशी|inquiry|तपास|investigation/i, type: 'चौकशी' },
         { pattern: /तपासणी|inspection|निरीक्षण/i, type: 'तपासणी' },
@@ -690,13 +690,13 @@ const extractStructuredData = (text) => {
         /सविनय\s+निवेदन\s+([^।\n]+)/i,
         /विनंती\s+आहे\s+की\s*([^।\n]+)/i
     ];
-    
+
     for (const pattern of remarksPatterns) {
         const match = cleanText.match(pattern);
         if (match && match[1]) {
             let remark = match[1].trim().replace(/\s+/g, ' ').trim();
-            
-            if (remark.length > 15 && 
+
+            if (remark.length > 15 &&
                 !remark.match(/^[क्र\.\s\-\/\d०-९A-Z]+$/) &&
                 !remark.match(/^[\d\/\-\.E]+$/)) {
                 result.remarks = remark;
@@ -704,13 +704,13 @@ const extractStructuredData = (text) => {
             }
         }
     }
-    
+
     if (!result.remarks) {
         const lines = cleanText.split('\n');
         for (const line of lines) {
             const trimmedLine = line.trim();
-            
-            if (trimmedLine.length > 25 && 
+
+            if (trimmedLine.length > 25 &&
                 !trimmedLine.includes('कार्यालय') &&
                 !trimmedLine.includes('Email:') &&
                 !trimmedLine.includes('www.') &&
@@ -720,20 +720,20 @@ const extractStructuredData = (text) => {
                 !trimmedLine.includes('Mo.') &&
                 !trimmedLine.includes('प्रति') &&
                 !trimmedLine.includes('दिनांक') &&
-                (trimmedLine.includes('साहित्य') || 
-                 trimmedLine.includes('उपकरणे') ||
-                 trimmedLine.includes('संगणक') ||
-                 trimmedLine.includes('धोरण') ||
-                 trimmedLine.includes('वाटप') ||
-                 trimmedLine.includes('करणे') ||
-                 trimmedLine.includes('मागणी') ||
-                 trimmedLine.includes('विनंती') ||
-                 trimmedLine.includes('बाबत') ||
-                 trimmedLine.includes('संदर्भात') ||
-                 trimmedLine.includes('अनुदान') ||
-                 trimmedLine.includes('योजना') ||
-                 trimmedLine.includes('कार्यक्रम'))) {
-                
+                (trimmedLine.includes('साहित्य') ||
+                    trimmedLine.includes('उपकरणे') ||
+                    trimmedLine.includes('संगणक') ||
+                    trimmedLine.includes('धोरण') ||
+                    trimmedLine.includes('वाटप') ||
+                    trimmedLine.includes('करणे') ||
+                    trimmedLine.includes('मागणी') ||
+                    trimmedLine.includes('विनंती') ||
+                    trimmedLine.includes('बाबत') ||
+                    trimmedLine.includes('संदर्भात') ||
+                    trimmedLine.includes('अनुदान') ||
+                    trimmedLine.includes('योजना') ||
+                    trimmedLine.includes('कार्यक्रम'))) {
+
                 result.remarks = trimmedLine.replace(/\s+/g, ' ').substring(0, 300);
                 break;
             }
@@ -777,25 +777,25 @@ const extractStructuredData = (text) => {
     // Extract specific office name (कार्यालय) - FIXED for precise matching
     const officeNamePatterns = [
         // PRIORITY: Your 5 specific target offices (exact matching first)
-        { 
-            pattern: /अहिल्यानगर|Ahilyanagar/i, 
-            name: 'जिल्हा पोलीस अधीक्षक अहिल्यानगर (District Superintendent of Police Ahilyanagar)' 
+        {
+            pattern: /अहिल्यानगर|Ahilyanagar/i,
+            name: 'जिल्हा पोलीस अधीक्षक अहिल्यानगर (District Superintendent of Police Ahilyanagar)'
         },
-        { 
-            pattern: /पुणे.*?ग्रामीण|ग्रामीण.*?पुणे|Pune.*?Rural|Rural.*?Pune/i, 
-            name: 'जिल्हा पोलीस अधीक्षक पुणे ग्रामीण (District Superintendent of Police Pune Rural)' 
+        {
+            pattern: /पुणे.*?ग्रामीण|ग्रामीण.*?पुणे|Pune.*?Rural|Rural.*?Pune/i,
+            name: 'जिल्हा पोलीस अधीक्षक पुणे ग्रामीण (District Superintendent of Police Pune Rural)'
         },
-        { 
-            pattern: /जळगाव|Jalgaon/i, 
-            name: 'जिल्हा पोलीस अधीक्षक जळगाव (District Superintendent of Police Jalgaon)' 
+        {
+            pattern: /जळगाव|Jalgaon/i,
+            name: 'जिल्हा पोलीस अधीक्षक जळगाव (District Superintendent of Police Jalgaon)'
         },
-        { 
-            pattern: /नंदुरबार|Nandurbar/i, 
-            name: 'जिल्हा पोलीस अधीक्षक नंदुरबार (District Superintendent of Police Nandurbar)' 
+        {
+            pattern: /नंदुरबार|Nandurbar/i,
+            name: 'जिल्हा पोलीस अधीक्षक नंदुरबार (District Superintendent of Police Nandurbar)'
         },
-        { 
-            pattern: /नाशिक.*?ग्रामीण|ग्रामीण.*?नाशिक|Nashik.*?Rural|Rural.*?Nashik/i, 
-            name: 'जिल्हा पोलीस अधीक्षक नाशिक ग्रामीण (District Superintendent of Police Nashik Rural)' 
+        {
+            pattern: /नाशिक.*?ग्रामीण|ग्रामीण.*?नाशिक|Nashik.*?Rural|Rural.*?Nashik/i,
+            name: 'जिल्हा पोलीस अधीक्षक नाशिक ग्रामीण (District Superintendent of Police Nashik Rural)'
         }
     ];
 
@@ -823,7 +823,7 @@ const extractStructuredData = (text) => {
     });
 
     console.log('Final extracted result:', JSON.stringify(result, null, 2));
-    
+
     return result;
 };
 
@@ -831,26 +831,26 @@ const extractStructuredData = (text) => {
 const uploadAndExtract = (req, res) => {
     uploadSingle(req, res, async (err) => {
         if (err) {
-            return res.status(400).json({ 
-                success: false, 
-                error: err.message || 'File upload failed' 
+            return res.status(400).json({
+                success: false,
+                error: err.message || 'File upload failed'
             });
         }
 
         if (!req.file) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'No file uploaded' 
+            return res.status(400).json({
+                success: false,
+                error: 'No file uploaded'
             });
         }
 
         try {
             const file = req.file;
             console.log(`Processing file: ${file.originalname}`);
-            
+
             // Process the PDF
             const result = await processPdf(file.location);
-            
+
             if (!result.success) {
                 throw new Error(result.error);
             }
@@ -892,7 +892,7 @@ const uploadAndExtract = (req, res) => {
                     extractedAt: new Date().toISOString()
                 }
             });
-            
+
             // Return response with both file info AND extracted data
             res.status(200).json({
                 success: true,
@@ -940,9 +940,9 @@ const uploadAndExtract = (req, res) => {
 
         } catch (error) {
             console.error('Error:', error);
-            res.status(500).json({ 
-                success: false, 
-                error: error.message || 'Failed to process file' 
+            res.status(500).json({
+                success: false,
+                error: error.message || 'Failed to process file'
             });
         }
     });
@@ -951,12 +951,12 @@ const uploadAndExtract = (req, res) => {
 // Get all files - ENHANCED to include extracted data
 const getAllFiles = async (req, res) => {
     try {
-        const files = await File.findAll({ 
+        const files = await File.findAll({
             order: [['createdAt', 'DESC']],
             attributes: ['id', 'originalName', 'fileUrl', 'fileSize', 'createdAt', 'extractData']
         });
-        
-        // Include extracted data in the response for each file
+
+        // Include extracted data and text in the response for each file
         const filesWithExtractedData = files.map(file => ({
             id: file.id,
             originalName: file.originalName,
@@ -964,9 +964,11 @@ const getAllFiles = async (req, res) => {
             fileSize: file.fileSize,
             createdAt: file.createdAt,
             hasExtractedData: !!(file.extractData && file.extractData.structuredData),
-            extractedData: file.extractData && file.extractData.structuredData ? file.extractData.structuredData : null
+            extractData: file.extractData,
+            // extractedData: file.extractData && file.extractData.structuredData ? file.extractData.structuredData : null,
+            // text: file.extractData && file.extractData.text ? file.extractData.text : null // Add the text field here
         }));
-        
+
         res.json({ success: true, files: filesWithExtractedData });
     } catch (error) {
         console.error('Error fetching files:', error);
@@ -979,12 +981,12 @@ const getFileById = async (req, res) => {
     try {
         const file = await File.findByPk(req.params.id);
         if (!file) {
-            return res.status(404).json({ 
-                success: false, 
-                error: 'File not found' 
+            return res.status(404).json({
+                success: false,
+                error: 'File not found'
             });
         }
-        
+
         // Include extracted data in the response
         const responseFile = {
             id: file.id,
@@ -999,9 +1001,8 @@ const getFileById = async (req, res) => {
             updatedAt: file.updatedAt,
             extractData: file.extractData,
             hasExtractedData: !!(file.extractData && file.extractData.structuredData),
-            extractedData: file.extractData && file.extractData.structuredData ? file.extractData.structuredData : null
         };
-        
+
         res.json({ success: true, file: responseFile });
     } catch (error) {
         console.error('Error fetching file:', error);
@@ -1014,18 +1015,18 @@ const deleteFileById = async (req, res) => {
     try {
         const file = await File.findByPk(req.params.id);
         if (!file) {
-            return res.status(404).json({ 
-                success: false, 
-                error: 'File not found' 
+            return res.status(404).json({
+                success: false,
+                error: 'File not found'
             });
         }
-        
+
         // TODO: Delete file from S3
         await file.destroy();
-        
-        res.json({ 
-            success: true, 
-            message: 'File deleted successfully' 
+
+        res.json({
+            success: true,
+            message: 'File deleted successfully'
         });
     } catch (error) {
         console.error('Error deleting file:', error);
@@ -1037,18 +1038,18 @@ const deleteFileById = async (req, res) => {
 const getExtractedData = async (req, res) => {
     try {
         const file = await File.findByPk(req.params.id);
-        
+
         if (!file) {
-            return res.status(404).json({ 
-                success: false, 
-                error: 'File not found' 
+            return res.status(404).json({
+                success: false,
+                error: 'File not found'
             });
         }
 
         if (!file.extractData || !file.extractData.text) {
-            return res.status(404).json({ 
-                success: false, 
-                error: 'No extracted data available for this file' 
+            return res.status(404).json({
+                success: false,
+                error: 'No extracted data available for this file'
             });
         }
 
@@ -1062,10 +1063,10 @@ const getExtractedData = async (req, res) => {
             // Extract structured data from the text using improved function
             structuredData = extractStructuredData(file.extractData.text);
         }
-        
+
         // Debug log to see extracted data
         console.log('Final structured data:', JSON.stringify(structuredData, null, 2));
-        
+
         // Prepare response data with all required fields
         const responseData = {
             receivedByOffice: structuredData.receivedByOffice || '',
@@ -1081,7 +1082,7 @@ const getExtractedData = async (req, res) => {
             officeType: structuredData.officeType || '', // NEW
             officeName: structuredData.officeName || ''  // NEW
         };
-        
+
         // Format the final response
         const response = {
             success: true,
@@ -1095,13 +1096,13 @@ const getExtractedData = async (req, res) => {
                 model: file.extractData.model || 'mistral-ocr-latest'
             }
         };
-        
+
         res.status(200).json(response);
 
     } catch (error) {
         console.error('Error getting extracted data:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             error: 'Server error while extracting data',
             details: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
