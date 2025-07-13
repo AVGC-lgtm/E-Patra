@@ -285,92 +285,11 @@ const Dashboard = () => {
       </motion.div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-        {/* Pie Chart */}
-        <motion.div 
-          className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.3 }}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-800">Letter Status</h3>
-            <select 
-              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
-            >
-              <option value="thisMonth">This Month</option>
-              <option value="lastMonth">Last Month</option>
-              <option value="thisYear">This Year</option>
-            </select>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={70}
-                  outerRadius={90}
-                  paddingAngle={pieData.length > 1 ? 5 : 0}
-                  dataKey="value"
-                  label={({ name, value, percent }) => {
-                    const total = pieData.reduce((sum, item) => sum + item.value, 0);
-                    const displayPercent = total > 0 ? (value / total) * 100 : 0;
-                    return total > 0 ? `${Math.round(displayPercent)}%` : '';
-                  }}
-                  labelLine={false}
-                  isAnimationActive={false}
-
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={COLORS[index % COLORS.length]} 
-                      stroke="#fff"
-                      strokeWidth={2}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  formatter={(value, name, props) => {
-                    const total = pieData.reduce((sum, item) => sum + item.value, 0);
-                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                    return [`${value} ${name} (${percent}%)`, ''];
-                  }}
-                  contentStyle={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.98)',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '0.5rem',
-                    padding: '0.75rem 1rem',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                    fontSize: '0.875rem',
-                    fontWeight: '500'
-                  }}
-                />
-                <Legend 
-                  layout="horizontal"
-                  verticalAlign="bottom"
-                  align="center"
-                  wrapperStyle={{
-                    paddingTop: '1.5rem',
-                    fontSize: '0.75rem',
-                    fontWeight: '500'
-                  }}
-                  formatter={(value, entry, index) => (
-                    <span className="text-gray-600">{value}</span>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.div>
-
+      <div className="grid grid-cols-1 gap-8 mb-12"> {/* Changed to single column */}
+      
         {/* Bar Chart */}
         <motion.div 
-          className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 lg:col-span-2"
+          className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 w-full" // Ensure full width
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.4 }}
@@ -379,7 +298,7 @@ const Dashboard = () => {
             <h3 className="text-lg font-semibold text-gray-800">Letters Overview</h3>
             <div className="flex space-x-2">
               <select className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
-                <option>Last 6 Months</option>
+                <option>Last 12 Months</option> {/* Updated label */}
                 <option>This Year</option>
                 <option>Last Year</option>
               </select>
@@ -388,10 +307,10 @@ const Dashboard = () => {
               </button>
             </div>
           </div>
-          <div className="h-64">
+          <div className="h-64 w-full"> {/* Ensure full width */}
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={letterData}
+                data={letterData.slice(0, 12)} // Ensure only 12 months are shown
                 margin={{
                   top: 5,
                   right: 30,
@@ -442,7 +361,7 @@ const Dashboard = () => {
                   radius={[4, 4, 0, 0]}
                   barSize={28}
                 >
-                  {letterData.map((entry, index) => (
+                  {letterData.slice(0, 12).map((entry, index) => (
                     <Cell 
                       key={`cell-${index}`} 
                       fill={entry.trend === 'up' ? 'url(#barGradient)' : '#e0e7ff'}
