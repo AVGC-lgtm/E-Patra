@@ -3,29 +3,23 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useLanguage } from '../context/LanguageContext';
 import translations from '../translations';
-import ReactToPrint from 'react-to-print';
+import { 
+  FiUpload, 
+  FiPaperclip, 
+  FiX, 
+  FiPlus, 
+  FiRefreshCw, 
+  FiFileText 
+} from 'react-icons/fi';
 
-// Print-specific styles
-const printStyles = `
-  @media print {
-    body * {
-      visibility: hidden;
-    }
-    .print-section, .print-section * {
-      visibility: visible;
-    }
-    .print-section {
-      position: absolute;
-      left: 0;
-      top: 0;
-      width: 100%;
-      padding: 20px;
-    }
-    .no-print {
-      display: none !important;
-    }
-  }
-`;
+// Format file size helper function
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
 
 const TrackApplication = () => {
   const { referenceNumber: refNumber } = useParams();
@@ -36,7 +30,16 @@ const TrackApplication = () => {
   const [error, setError] = useState('');
   const { language } = useLanguage();
   const t = translations[language] || translations['en'];
-  const printRef = useRef();
+  const [mainFiles, setMainFiles] = useState([]);
+
+  const handleMainFileChange = (e) => {
+    setMainFiles(Array.from(e.target.files));
+  };
+
+  const extractTextFromFile = async (file) => {
+    // Implement your file text extraction logic here
+    console.log('Extracting text from:', file.name);
+  };
 
   useEffect(() => {
     if (refNumber) {
@@ -77,9 +80,7 @@ const TrackApplication = () => {
   const handleSearch = (e) => {
     e.preventDefault();
     if (referenceNumber.trim()) {
-      // Update the URL with the reference number
       navigate(`/dashboard/track-application/${referenceNumber}`);
-      // fetchApplication will be triggered by the useEffect
     }
   };
 
@@ -105,6 +106,9 @@ const TrackApplication = () => {
       <h1 className="text-2xl font-bold mb-6">
         {language === 'mr' ? 'अर्ज ट्रॅक करा' : 'Track Application'}
       </h1>
+      
+ 
+
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="mb-6">
           <h2 className="text-lg font-semibold mb-4">
@@ -141,77 +145,7 @@ const TrackApplication = () => {
             <p className="text-red-700">{error}</p>
           </div>
         ) : application ? (
-          <>
-            {/* Print Section */}
-            <div className="hidden">
-              <div ref={printRef} className="print-section p-6">
-                <div className="text-center mb-6">
-                  <h2 className="text-xl font-bold">
-                    {language === 'mr' ? 'अर्जाची तपशीलवार माहिती' : 'Application Details'}
-                  </h2>
-                  <div className="border-t-2 border-gray-300 my-3"></div>
-                </div>
-                
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="border-b pb-2 mb-4">
-                    <h3 className="font-semibold text-lg mb-3">
-                      {language === 'mr' ? 'मूलभूत माहिती' : 'Basic Information'}
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-600">
-                          {language === 'mr' ? 'संदर्भ क्रमांक' : 'Reference Number'}
-                        </p>
-                        <p className="font-medium">{application.referenceNumber || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">
-                          {language === 'mr' ? 'अर्जाची तारीख' : 'Application Date'}
-                        </p>
-                        <p className="font-medium">
-                          {new Date(application.letterDate).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">
-                          {language === 'mr' ? 'विषय' : 'Subject'}
-                        </p>
-                        <p className="font-medium">
-                          {application.subjectAndDetails?.split(':')[0] || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">
-                          {language === 'mr' ? 'स्थिती' : 'Status'}
-                        </p>
-                        <p className="font-medium capitalize">
-                          {application.letterStatus?.toLowerCase() || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {application.subjectAndDetails && (
-                    <div className="border-b pb-4 mb-4">
-                      <h3 className="font-semibold text-lg mb-2">
-                        {language === 'mr' ? 'तपशील' : 'Details'}
-                      </h3>
-                      <p className="whitespace-pre-line">{application.subjectAndDetails}</p>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="mt-8 pt-4 border-t text-center text-sm text-gray-500">
-                  {language === 'mr' 
-                    ? 'ही एक स्वयंचलितपणे व्यवस्थापित प्रत आहे, कृपया यास मुद्रित दस्तऐवज म्हणून वापरा.'
-                    : 'This is an automatically generated document, please use as a printed copy.'
-                  }
-                </div>
-              </div>
-            </div>
-            
-            {/* Main Content */}
-            <div className="space-y-6">
+          <div className="space-y-6">
             {/* Application Details */}
             <div className="bg-white p-4 rounded-lg border">
               <h3 className="font-semibold mb-3">
@@ -298,28 +232,7 @@ const TrackApplication = () => {
                 })}
               </div>
             </div>
-
-            {/* Actions */}
-            <div className="flex justify-end no-print">
-              <ReactToPrint
-                trigger={() => (
-                  <button 
-                    className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                    </svg>
-                    {language === 'mr' ? 'प्रिंट करा' : 'Print'}
-                  </button>
-                )}
-                content={() => printRef.current}
-                pageStyle={printStyles}
-                documentTitle={`Application_${application?.referenceNumber || 'details'}`}
-                onAfterPrint={() => console.log('Print completed')}
-              />
-            </div>
           </div>
-          </>
         ) : (
           <div className="bg-gray-50 p-6 rounded-lg">
             <p className="text-gray-600">

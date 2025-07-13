@@ -284,13 +284,13 @@ const InwardStaffLetters = () => {
                     {language === 'mr' ? 'संदर्भ क्रमांक' : 'Reference No'}
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {language === 'mr' ? 'पाठवणारा' : 'Sender'}
+                    {language === 'mr' ? 'पत्र पाठविणारे कार्यालय' : 'Sender'}
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {language === 'mr' ? 'विषय' : 'Subject'}
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {language === 'mr' ? 'प्राप्ती तारीख' : 'Received Date'}
+                    {language === 'mr' ? 'पत्र मिळाल्याचा दिनांक' : 'Received Date'}
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {language === 'mr' ? 'स्थिती' : 'Status'}
