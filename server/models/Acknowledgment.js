@@ -1,6 +1,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
-const Patra = require('./Patra');  // Reference to the Patra model
+const Patra = require('./InwardPatra');  // Reference to the Patra model
 const User = require('./User');  // Reference to the User model
 const PoliceStation = require('./PoliceStation'); // Reference to the PoliceStation model
 

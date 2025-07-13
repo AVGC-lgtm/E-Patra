@@ -1,10 +1,6 @@
-const Patra = require('../models/Patra');
+const Patra = require('../models/InwardPatra');
 const User = require('../models/User');
-const PoliceStation = require('../models/PoliceStation');
-const Acknowledgment = require('../models/Acknowledgment');
 const { Op } = require('sequelize');
-const path = require('path');
-const fs = require('fs');
 
 // Function to generate 8-digit reference number
 const generateReferenceNumber = async () => {
@@ -12,10 +8,8 @@ const generateReferenceNumber = async () => {
   let isUnique = false;
 
   while (!isUnique) {
-    // Generate 8-digit random number
     referenceNumber = Math.floor(10000000 + Math.random() * 90000000).toString();
 
-    // Check if this reference number already exists
     const existingPatra = await Patra.findOne({ where: { referenceNumber } });
     if (!existingPatra) {
       isUnique = true;
@@ -25,22 +19,20 @@ const generateReferenceNumber = async () => {
   return referenceNumber;
 };
 
-// Create a new Patra
+// Create a new Patra (InwardPatra)
 const createPatra = async (req, res) => {
   const {
-    receivedByOffice,
-    recipientNameAndDesignation,
+    dateOfReceiptOfLetter,
+    officeSendingLetter,
+    senderNameAndDesignation,
+    mobileNumber,
+    letterMedium,
+    letterClassification,
     letterType,
     letterDate,
-    officeType,
-    office,
-    mobileNumber,
-    remarks,
-    branchName,  // branchName is used to store PoliceStation ID
-    typeOfAction,
-    letterStatus,
-    letterMedium,
-    subjectAndDetails,
+    subject,
+    outwardLetterNumber,
+    numberOfCopies,
     userId
   } = req.body;
 
@@ -53,54 +45,37 @@ const createPatra = async (req, res) => {
     // Generate unique reference number
     const referenceNumber = await generateReferenceNumber();
 
-    // Handle uploaded files
-    let letterFiles = [];
+    // Handle uploaded files and assign fileId (if file is uploaded)
+    let fileId = null;
     if (req.files && req.files.length > 0) {
-      letterFiles = req.files.map(file => ({
-        originalName: file.originalname,
-        fileName: file.filename,
-        filePath: file.path,
-        fileSize: file.size,
-        mimeType: file.mimetype,
-        uploadedAt: new Date()
-      }));
+      // Assuming files are handled elsewhere and fileId is already assigned
+      fileId = req.files[0].fileId;  // Assuming the first uploaded file is linked with the record
     }
 
     const newPatra = await Patra.create({
       referenceNumber,
-      receivedByOffice,
-      recipientNameAndDesignation,
+      dateOfReceiptOfLetter,
+      officeSendingLetter,
+      senderNameAndDesignation,
+      mobileNumber,
+      letterMedium,
+      letterClassification,
       letterType,
       letterDate,
-      officeType,
-      office,
-      mobileNumber,
-      remarks,
-      branchName,  // Used to store the PoliceStation ID (branchName is a foreign key to PoliceStation's id)
-      typeOfAction,
-      letterStatus: 'pending',
-      letterMedium,
-      subjectAndDetails,
-      letterFiles,
+      subject,
+      outwardLetterNumber,
+      numberOfCopies,
+      fileId, // Added fileId here to associate the uploaded file
       userId: user.id,
     });
 
     return res.status(201).json({
       message: 'Patra created successfully',
-      referenceNumber: referenceNumber
+      referenceNumber: referenceNumber,
+      patraId: newPatra.id, // Added patraId in response
     });
   } catch (error) {
     console.error('Error creating Patra:', error);
-
-    // Clean up uploaded files if Patra creation failed
-    if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
-        fs.unlink(file.path, (err) => {
-          if (err) console.error('Error deleting file:', err);
-        });
-      });
-    }
-
     return res.status(500).json({ error: 'Server error' });
   }
 };
@@ -111,7 +86,6 @@ const getAllPatras = async (req, res) => {
     const patras = await Patra.findAll({
       include: [
         { model: User, attributes: ['id', 'email'] },  // Include User to show creator info
-        { model: PoliceStation, attributes: ['id', 'name'] }  // Include PoliceStation to show branch name
       ]
     });
     return res.status(200).json(patras);
@@ -129,7 +103,6 @@ const getPatraById = async (req, res) => {
     const patra = await Patra.findByPk(id, {
       include: [
         { model: User, attributes: ['id', 'email'] },  // Include User to show creator info
-        { model: PoliceStation, attributes: ['id', 'name'] }  // Include PoliceStation to show branch name
       ]
     });
 
@@ -153,7 +126,6 @@ const getPatraByReferenceNumber = async (req, res) => {
       where: { referenceNumber },
       include: [
         { model: User, attributes: ['id', 'email'] },
-        { model: PoliceStation, attributes: ['id', 'name'] }
       ]
     });
 
@@ -177,7 +149,6 @@ const getPatraByUserId = async (req, res) => {
       where: { userId },
       include: [
         { model: User, attributes: ['id', 'email'] },
-        { model: PoliceStation, attributes: ['id', 'name'] }
       ]
     });
 
@@ -202,17 +173,6 @@ const deletePatraById = async (req, res) => {
       return res.status(404).json({ error: 'Patra not found' });
     }
 
-    // Delete associated files
-    if (patra.letterFiles && patra.letterFiles.length > 0) {
-      patra.letterFiles.forEach(fileInfo => {
-        if (fs.existsSync(fileInfo.filePath)) {
-          fs.unlink(fileInfo.filePath, (err) => {
-            if (err) console.error('Error deleting file:', err);
-          });
-        }
-      });
-    }
-
     await patra.destroy();
     return res.status(200).json({ message: 'Patra deleted successfully' });
   } catch (error) {
@@ -221,23 +181,21 @@ const deletePatraById = async (req, res) => {
   }
 };
 
-// Update a Patra by ID - Complete Update with File Management
+// Update a Patra by ID
 const updatePatraById = async (req, res) => {
   const { id } = req.params;
   const {
-    receivedByOffice,
-    recipientNameAndDesignation,
+    dateOfReceiptOfLetter,
+    officeSendingLetter,
+    senderNameAndDesignation,
+    mobileNumber,
+    letterMedium,
+    letterClassification,
     letterType,
     letterDate,
-    officeType,
-    office,
-    mobileNumber,
-    remarks,
-    branchName,  // branchName is used to store PoliceStation ID
-    typeOfAction,
-    letterStatus,
-    letterMedium,
-    subjectAndDetails,
+    subject,
+    outwardLetterNumber,
+    numberOfCopies,
     userId
   } = req.body;
 
@@ -252,26 +210,31 @@ const updatePatraById = async (req, res) => {
       return res.status(400).json({ error: 'User not found' });
     }
 
-    const updatedStatus = letterStatus || 'pending';
-
     const updateData = {
-      receivedByOffice: receivedByOffice || patra.receivedByOffice,
-      recipientNameAndDesignation: recipientNameAndDesignation || patra.recipientNameAndDesignation,
-      letterType: letterType || patra.letterType,
-      letterDate: letterDate || patra.letterDate,
-      officeType: officeType || patra.officeType,
-      office: office || patra.office,
-      mobileNumber: mobileNumber !== undefined ? mobileNumber : patra.mobileNumber,
-      remarks: remarks !== undefined ? remarks : patra.remarks,
-      branchName: branchName || patra.branchName,  // Branch Name used to reference PoliceStation ID
-      typeOfAction: typeOfAction || patra.typeOfAction,
-      letterStatus: updatedStatus,
-      letterMedium: letterMedium || patra.letterMedium,
-      subjectAndDetails: subjectAndDetails || patra.subjectAndDetails,
-      userId: user.id
+      dateOfReceiptOfLetter,
+      officeSendingLetter,
+      senderNameAndDesignation,
+      mobileNumber,
+      letterMedium,
+      letterClassification,
+      letterType,
+      letterDate,
+      subject,
+      outwardLetterNumber,
+      numberOfCopies,
+      userId: user.id,
     };
 
-    await patra.update(updateData);
+    // Handle fileId if file is uploaded
+    let fileId = patra.fileId;
+    if (req.files && req.files.length > 0) {
+      fileId = req.files[0].fileId;  // Assuming the first uploaded file is linked with the record
+    }
+
+    await patra.update({
+      ...updateData,
+      fileId, // Update fileId
+    });
     await patra.reload();
 
     return res.status(200).json({ message: 'Patra updated successfully', patra });
@@ -290,7 +253,6 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
       where: { id: patraId, userId },
       include: [
         { model: User, attributes: ['id', 'email'] },
-        { model: PoliceStation, attributes: ['id', 'name'] }
       ]
     });
 

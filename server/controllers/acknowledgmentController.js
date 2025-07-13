@@ -1,5 +1,5 @@
 const Acknowledgment = require('../models/Acknowledgment');
-const Patra = require('../models/Patra');  // Reference to Patra model
+const Patra = require('../models/InwardPatra');  // Reference to Patra model
 const User = require('../models/User');  // Reference to User model
 const PoliceStation = require('../models/PoliceStation'); // Reference to PoliceStation model
 

@@ -6,7 +6,7 @@ const cors = require('cors');
 const path = require('path');
 const authRoutes = require('./routes/authRoutes');
 const roleRoutes = require('./routes/roleRoutes');
-const patraRoutes = require('./routes/patraRoutes');
+const InwardPatraRoutes = require('./routes/InwardPatraRoutes');
 const sequelize = require('./config/database');
 const Role = require('./models/Role');  // Import Role model
 const PoliceStation = require('./models/PoliceStation');  // Import PoliceStation model
@@ -72,7 +72,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/roles', roleRoutes);
-app.use('/api/patras', patraRoutes);
+app.use('/api/patras', InwardPatraRoutes);
 app.use('/api/acknowledgments', acknowledgmentRoutes);
 app.use('/api', policeStationRoutes); 
 app.use('/api/files', fileRoutes);

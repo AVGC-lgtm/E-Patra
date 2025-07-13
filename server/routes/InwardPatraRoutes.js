@@ -1,6 +1,6 @@
-// routes/patraRoutes.js
+// routes/InwardPatraRoutes.js
 const express = require('express');
-const patraController = require('../controllers/patraController');
+const patraController = require('../controllers/InwardPatraController');
 const { uploadMultiple, handleUploadError } = require('../middleware/upload');
 const router = express.Router();
 

@@ -34,6 +34,14 @@ const File = sequelize.define('File', {
   extractData: {
     type: DataTypes.JSON,
     allowNull: true
+  },
+  solution: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  problemStatemet: {
+    type: DataTypes.TEXT,
+    allowNull: true
   }
 }, {
   timestamps: true,
