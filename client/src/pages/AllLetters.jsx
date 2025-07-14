@@ -209,9 +209,7 @@ const AllLetters = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {language === 'mr' ? 'स्थिती' : 'Status'}
                   </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {language === 'mr' ? 'पावती' : 'Acknowledged'}
-                  </th>
+                  
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {language === 'mr' ? 'क्रिया' : 'Actions'}
                   </th>
@@ -258,25 +256,7 @@ const AllLetters = () => {
                             'N/A'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <button
-                          onClick={() => toggleAcknowledge(letter._id || letter.id)}
-                          className={`p-2 rounded-full ${
-                            acknowledgedLetters.has(letter._id || letter.id)
-                              ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                          } transition-colors`}
-                          title={acknowledgedLetters.has(letter._id || letter.id) 
-                            ? (language === 'mr' ? 'पावती रद्द करा' : 'Mark as unacknowledged')
-                            : (language === 'mr' ? 'पावती द्या' : 'Mark as acknowledged')}
-                        >
-                          {acknowledgedLetters.has(letter._id || letter.id) ? (
-                            <FiCheck size={18} />
-                          ) : (
-                            <FiX size={18} />
-                          )}
-                        </button>
-                      </td>
+              
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end space-x-3">
                           <button 

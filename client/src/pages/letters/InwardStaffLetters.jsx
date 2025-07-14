@@ -17,6 +17,8 @@ const InwardStaffLetters = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [acknowledgedLetters, setAcknowledgedLetters] = useState(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const recordsPerPage = 10;
   
   // Status filter options with translations
   const statusOptions = [
@@ -195,139 +197,153 @@ const InwardStaffLetters = () => {
     return matchesSearch && matchesStatus && matchesDate;
   });
 
+  const totalPages = Math.ceil(filteredLetters.length / recordsPerPage);
+  const paginatedLetters = filteredLetters.slice((currentPage - 1) * recordsPerPage, currentPage * recordsPerPage);
+
   return (
     <div className="p-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {language === 'mr' ? 'सर्व आंतर-शासकीय पत्रे' : 'All Inward Letters'}
-          </h1>
-          <p className="text-gray-500">
-            {language === 'mr' 
-              ? 'सर्व आंतर-शासकीय पत्रे पहा आणि व्यवस्थापित करा' 
-              : 'View and manage all inward letters'}
-          </p>
-        </div>
-        <div className="mt-4 md:mt-0 flex space-x-2">
-          <div className="relative">
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-            >
-              {dateOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="relative">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-            >
-              {statusOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FiSearch className="h-5 w-5 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              placeholder={language === 'mr' ? 'शोधा...' : 'Search...'}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-            />
-          </div>
-          <button
-            onClick={handleRefresh}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">
+          {language === 'mr' ? 'सर्व आंतर-शासकीय पत्रे' : 'All Inward Letters'}
+        </h1>
+        <p className="text-gray-500">
+          {language === 'mr' 
+            ? 'सर्व आंतर-शासकीय पत्रे पहा आणि व्यवस्थापित करा' 
+            : 'View and manage all inward letters'}
+        </p>
+      </div>
+      <div className="mt-4 md:mt-0 flex space-x-2">
+        <div className="relative">
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
           >
-            <FiRefreshCw className="mr-2 h-4 w-4" />
-            {language === 'mr' ? 'रिफ्रेश करा' : 'Refresh'}
-          </button>
+            {dateOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="relative">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+          >
+            {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <FiSearch className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            placeholder={language === 'mr' ? 'शोधा...' : 'Search...'}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+          />
+        </div>
+        <button
+          onClick={handleRefresh}
+          className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          <FiRefreshCw className="mr-2 h-4 w-4" />
+          {language === 'mr' ? 'रिफ्रेश करा' : 'Refresh'}
+        </button>
+      </div>
+    </div>
+  
+    {error && (
+      <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <FiX className="h-5 w-5 text-red-400" />
+          </div>
+          <div className="ml-3">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
         </div>
       </div>
-
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <FiX className="h-5 w-5 text-red-400" />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          </div>
+    )}
+  
+    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+      {loading ? (
+        <div className="flex justify-center items-center p-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
         </div>
-      )}
-
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-        {loading ? (
-          <div className="flex justify-center items-center p-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-          </div>
-        ) : filteredLetters.length > 0 ? (
-          <div className="overflow-x-auto">
+      ) : filteredLetters.length > 0 ? (
+        <>
+          <div className="w-full overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gradient-to-r from-blue-600 to-blue-800">
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                     {language === 'mr' ? 'संदर्भ क्रमांक' : 'Reference No'}
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {language === 'mr' ? 'पत्र पाठविणारे कार्यालय' : 'Sender'}
+                  <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap min-w-[220px]">
+                    {language === 'mr' ? 'पत्र पाठविणारे कार्यालय' : 'Sender Office'}
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
+                    {language === 'mr' ? 'मोबाईल नंबर' : 'Mobile'}
+                  </th>
+                  <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap min-w-[280px]">
+                    {language === 'mr' ? 'पाठविणाऱ्याचे नाव व पदनाम' : 'Sender Details'}
+                  </th>
+                  <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap min-w-[300px]">
                     {language === 'mr' ? 'विषय' : 'Subject'}
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {language === 'mr' ? 'पत्र मिळाल्याचा दिनांक' : 'Received Date'}
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                     {language === 'mr' ? 'स्थिती' : 'Status'}
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {language === 'mr' ? 'पावती' : 'Acknowledge'}
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className="px-8 py-4 text-right text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                     {language === 'mr' ? 'क्रिया' : 'Actions'}
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredLetters.map((letter) => (
-                  <tr key={letter._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                {paginatedLetters.map((letter, idx) => (
+                  <tr 
+                    key={letter._id} 
+                    className={`transition-all hover:bg-blue-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+                  >
+                    <td className="px-8 py-4 whitespace-nowrap text-sm font-medium text-blue-600 max-w-[200px] truncate">
                       <button 
                         onClick={() => navigate(`/dashboard/track-application/${letter.referenceNumber}`)}
-                        className="text-indigo-600 hover:text-indigo-800 hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 rounded"
+                        className="hover:text-blue-800 hover:underline focus:outline-none"
                         title={language === 'mr' ? 'अर्जाचा मागोवा पहा' : 'Track application'}
                       >
                         {letter.referenceNumber || 'N/A'}
                       </button>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {letter.sender || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
+                    <td className="px-8 py-4 text-sm text-gray-900 max-w-[220px]">
                       <div className="line-clamp-2">
-                        {letter.subjectAndDetails || 'No Subject'}
+                        {letter.officeSendingLetter || 'N/A'}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {letter.receivedDate ? new Date(letter.receivedDate).toLocaleDateString() : 'N/A'}
+                    <td className="px-8 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {letter.mobileNumber || 'N/A'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    <td className="px-8 py-4 text-sm text-gray-900 max-w-[280px]">
+                      <div className="line-clamp-2">
+                        {letter.senderNameAndDesignation || 'N/A'}
+                      </div>
+                    </td>
+                    <td className="px-8 py-4 text-sm text-gray-900 max-w-[300px]">
+                      <div className="line-clamp-2">
+                        {letter.subject || 'No Subject'}
+                      </div>
+                    </td>
+                    <td className="px-8 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                         letter.letterStatus === 'approved' ? 'bg-green-100 text-green-800' :
                         letter.letterStatus === 'rejected' ? 'bg-red-100 text-red-800' :
                         'bg-yellow-100 text-yellow-800'
@@ -335,65 +351,30 @@ const InwardStaffLetters = () => {
                         {letter.letterStatus || 'pending'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <button
-                        onClick={() => toggleAcknowledge(letter._id)}
-                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                          acknowledgedLetters.has(letter._id)
-                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                            : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                        }`}
-                      >
-                        {acknowledgedLetters.has(letter._id) ? (
-                          <>
-                            <FiCheck className="mr-1 h-3 w-3" />
-                            {language === 'mr' ? 'स्वीकारले' : 'Acknowledged'}
-                          </>
-                        ) : (
-                          <>
-                            <FiCheck className="mr-1 h-3 w-3" />
-                            {language === 'mr' ? 'स्वीकारा' : 'Acknowledge'}
-                          </>
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end">
+                    <td className="px-8 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end space-x-2">
                         {letter.letterFiles && letter.letterFiles.length > 0 ? (
-                          <div className="relative group">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Get the first file from letterFiles array
-                                const fileToDownload = letter.letterFiles[0];
-                                handleDownload({
-                                  filePath: fileToDownload.filePath,
-                                  originalName: fileToDownload.originalName
-                                });
-                              }}
-                              className="p-2 -m-2 rounded-full text-indigo-600 hover:text-indigo-900 hover:bg-indigo-100 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                              title={language === 'mr' ? 'डाउनलोड करा' : 'Download'}
-                            >
-                              <FiDownload className="h-5 w-5" />
-                            </button>
-                            <div className="absolute z-10 left-1/2 transform -translate-x-1/2 mt-1 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
-                              {language === 'mr' ? 'डाउनलोड करा' : 'Download'}
-                              <div className="absolute left-1/2 -top-1 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
-                            </div>
-                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const fileToDownload = letter.letterFiles[0];
+                              handleDownload({
+                                filePath: fileToDownload.filePath,
+                                originalName: fileToDownload.originalName
+                              });
+                            }}
+                            className="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-100 transition-colors"
+                            title={language === 'mr' ? 'डाउनलोड करा' : 'Download'}
+                          >
+                            <FiDownload className="h-5 w-5" />
+                          </button>
                         ) : (
-                          <div className="relative group">
-                            <span 
-                              className="p-2 -m-2 inline-flex items-center justify-center text-gray-400 cursor-not-allowed" 
-                              title={language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available'}
-                            >
-                              <FiDownload className="h-5 w-5" />
-                            </span>
-                            <div className="absolute z-10 left-1/2 transform -translate-x-1/2 mt-1 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
-                              {language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available'}
-                              <div className="absolute left-1/2 -top-1 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
-                            </div>
-                          </div>
+                          <span 
+                            className="text-gray-400 p-1 cursor-not-allowed" 
+                            title={language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available'}
+                          >
+                            <FiDownload className="h-5 w-5" />
+                          </span>
                         )}
                       </div>
                     </td>
@@ -402,21 +383,44 @@ const InwardStaffLetters = () => {
               </tbody>
             </table>
           </div>
-        ) : (
-          <div className="text-center py-12">
-            <FiFileText className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">
-              {language === 'mr' ? 'पत्रे सापडली नाहीत' : 'No letters found'}
-            </h3>
-            <p className="mt-1 text-sm text-gray-500">
-              {language === 'mr' 
-                ? 'कोणतीही पत्रे आढळली नाहीत. कृपया आपली शोधशोध बदला किंवा नवीन पत्र जोडा.' 
-                : 'No letters found. Please try changing your search or add a new letter.'}
-            </p>
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-end mt-4 px-2 gap-4">
+            <span className="text-sm text-gray-700 mr-2">
+              {language === 'mr'
+                ? `पृष्ठ ${currentPage} / ${totalPages}`
+                : `Page ${currentPage} of ${totalPages}`}
+            </span>
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition"
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+            >
+              {language === 'mr' ? 'मागील' : 'Previous'}
+            </button>
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition"
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages || totalPages === 0}
+            >
+              {language === 'mr' ? 'पुढील' : 'Next'}
+            </button>
           </div>
-        )}
-      </div>
+        </>
+      ) : (
+        <div className="text-center py-12">
+          <FiFileText className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900">
+            {language === 'mr' ? 'पत्रे सापडली नाहीत' : 'No letters found'}
+          </h3>
+          <p className="mt-1 text-sm text-gray-500">
+            {language === 'mr' 
+              ? 'कोणतीही पत्रे आढळली नाहीत. कृपया आपली शोधशोध बदला किंवा नवीन पत्र जोडा.' 
+              : 'No letters found. Please try changing your search or add a new letter.'}
+          </p>
+        </div>
+      )}
     </div>
+  </div>
   );
 };
 

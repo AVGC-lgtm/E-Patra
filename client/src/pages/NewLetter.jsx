@@ -11,6 +11,7 @@ import { format, parseISO } from "date-fns";
 const NewLetter = () => {
   const [mainFiles, setMainFiles] = useState([]);
   const [additionalFiles, setAdditionalFiles] = useState([]);
+  const [mainFileId, setMainFileId] = useState(null);
   
   // Handle main letter file upload
   const handleMainFileChange = async (e) => {
@@ -147,22 +148,6 @@ const NewLetter = () => {
       }
     });
     
-    // Special handling for office type to match dropdown options
-    if (extractedData.officeType) {
-      const officeTypeMap = {
-        'SP (एसपी)': 'senior_post_sp',
-        'DGP': 'senior_post_dgp',
-        'IGP': 'senior_post_igp',
-        'Additional DGP': 'senior_post_addl_dgp'
-        // Add more mappings as needed
-      };
-      
-      const mappedType = officeTypeMap[extractedData.officeType];
-      if (mappedType) {
-        formUpdates.officeType = mappedType;
-      }
-    }
-    
     // If we have the file URL, we can use it for preview
     if (data.file?.url) {
       formUpdates.fileUrl = data.file.url;
@@ -188,7 +173,7 @@ const NewLetter = () => {
     try {
       console.log('Sending file for text extraction:', file.name, file);
       
-      const response = await fetch('https://3d3c5ca3759e.ngrok-free.app/api/files/upload', {
+      const response = await fetch('http://localhost:5000/api/files/upload', {
         method: 'POST',
         body: formData,
         // Don't set Content-Type header, let the browser set it with the correct boundary
@@ -202,6 +187,10 @@ const NewLetter = () => {
       let responseData;
       try {
         responseData = JSON.parse(responseText);
+        if (responseData.file && responseData.file.id) {
+              setMainFileId(responseData.file.id);
+              console.log('Uploaded file ID:', responseData.file.id);
+           }
       } catch (e) {
         console.error('Failed to parse response as JSON:', e);
         throw new Error('Invalid response format from server');
@@ -279,130 +268,7 @@ const NewLetter = () => {
       };
       
       formUpdates.letterStatus = statusMap[extractedData.letterStatus?.toLowerCase()] || 'received';
-      
-      // Map officeType - convert to match form values
-      const officeTypeMap = {
-        'sp (एसपी)': 'SP',
-        'dgp': 'IGP',
-        'igp': 'IGP',
-        'additional dgp': 'IGP',
-        'police commissioner': 'SP',
-        'divisional commissioner': 'SDPO',
-        'sdpo': 'SDPO',
-        'police station': 'Police Station'
-      };
-      
-      if (extractedData.officeType) {
-        const lowerOfficeType = extractedData.officeType.toLowerCase();
-        formUpdates.officeType = officeTypeMap[lowerOfficeType] || '';
-      }
-      
-      // Map office - try to extract from officeName or use default
-      if (extractedData.officeName) {
-        const officeName = extractedData.officeName.toLowerCase();
-        
-        // Check for Marathi office names first
-        if (officeName.includes('अहमदनगर') || officeName.includes('ahmednagar')) {
-          formUpdates.office = 'District Police Officer Ahmednagar';
-        } else if (officeName.includes('पुणे') || officeName.includes('pune')) {
-          formUpdates.office = 'District Police Officer Pune Rural';
-        } else if (officeName.includes('जळगाव') || officeName.includes('jalgaon')) {
-          formUpdates.office = 'District Police Officer Jalgaon';
-        } else if (officeName.includes('नंदुरबार') || officeName.includes('nandurbar')) {
-          formUpdates.office = 'District Police Officer Nandurbar';
-        } else if (officeName.includes('नाशिक') || officeName.includes('nashik')) {
-          formUpdates.office = 'District Police Officer Nashik Rural';
-        } 
-        // Try to extract from receivedByOffice if officeName is not specific enough
-        else if (extractedData.receivedByOffice) {
-          const receivedBy = extractedData.receivedByOffice.toLowerCase();
-          if (receivedBy.includes('अहमदनगर') || receivedBy.includes('ahmednagar')) {
-            formUpdates.office = 'District Police Officer Ahmednagar';
-          } else if (receivedBy.includes('पुणे') || receivedBy.includes('pune')) {
-            formUpdates.office = 'District Police Officer Pune Rural';
-          } else if (receivedBy.includes('जळगाव') || receivedBy.includes('jalgaon')) {
-            formUpdates.office = 'District Police Officer Jalgaon';
-          } else if (receivedBy.includes('नंदुरबार') || receivedBy.includes('nandurbar')) {
-            formUpdates.office = 'District Police Officer Nandurbar';
-          } else if (receivedBy.includes('नाशिक') || receivedBy.includes('nashik')) {
-            formUpdates.office = 'District Police Officer Nashik Rural';
-          }
-        }
-        
-        // If still not found, try to find any district name in the office name
-        if (!formUpdates.office) {
-          const districts = [
-            { en: 'ahmednagar', mr: 'अहमदनगर', value: 'District Police Officer Ahmednagar' },
-            { en: 'pune', mr: 'पुणे', value: 'District Police Officer Pune Rural' },
-            { en: 'jalgaon', mr: 'जळगाव', value: 'District Police Officer Jalgaon' },
-            { en: 'nandurbar', mr: 'नंदुरबार', value: 'District Police Officer Nandurbar' },
-            { en: 'nashik', mr: 'नाशिक', value: 'District Police Officer Nashik Rural' }
-          ];
-          
-          for (const district of districts) {
-            if (officeName.includes(district.en) || officeName.includes(district.mr)) {
-              formUpdates.office = district.value;
-              break;
-            }
-          }
-        }
-      }
-      
-      // Map actionType
-      const actionTypeMap = {
-        'चौकशी': 'proceeding',
-        'proceeding': 'proceeding',
-        'answer': 'answer',
-        'reply': 'answer',
-        'जबाब': 'answer'
-      };
-      
-      if (extractedData.actionType) {
-        const lowerActionType = extractedData.actionType.toLowerCase();
-        formUpdates.actionType = actionTypeMap[lowerActionType] || 'proceeding';
-      } else {
-        formUpdates.actionType = 'proceeding'; // Default value
-      }
-      
-      // Map letterType - use the exact value from the form options
-      if (extractedData.letterType) {
-        // First try to match with translation keys
-        const letterTypeMap = {
-          'तक्रारी अर्ज': t.complaint_letter,
-          'अर्ज': t.application,
-          'विनंती पत्र': t.request_letter,
-          'कळ': t.report,
-          'अहवाल': t.report,
-          'परिपत्रक': t.circular,
-          'आदेश': t.order,
-          'सूचना': t.notice,
-          'वरिष्ठ टपाल': t.senior_post,
-          'वरिष्ठ टपाल - पोलिस महासंचालक': t.senior_post_dgp,
-          'complaint': t.complaint_letter,
-          'application': t.application,
-          'request': t.request_letter,
-          'report': t.report,
-          'circular': t.circular,
-          'order': t.order,
-          'notice': t.notice,
-          'senior post': t.senior_post,
-          'senior post - police commissioner': t.senior_post_dgp
-        };
-        
-        // First try exact match, then try partial match
-        let mappedLetterType = letterTypeMap[extractedData.letterType];
-        
-        if (!mappedLetterType) {
-          // Try partial match
-          const partialMatch = Object.entries(letterTypeMap).find(([key]) => 
-            extractedData.letterType.toLowerCase().includes(key.toLowerCase())
-          );
-          mappedLetterType = partialMatch?.[1];
-        }
-        
-        // If still no match, use the original value or default to 'other'
-        formUpdates.letterType = mappedLetterType || extractedData.letterType || t.other;
-      }
+    
       
       console.log('Mapped form updates:', formUpdates);
       
@@ -472,15 +338,11 @@ const NewLetter = () => {
         letterCategory: extracted.letterCategory || prev.letterCategory,
         letterType: extracted.letterType || prev.letterType,
         letterDate: extracted.letterDate || prev.letterDate,
-        officeType: extracted.officeType || prev.officeType,
-        office: extracted.office || prev.office,
         mobileNumber: extracted.mobileNumber || prev.mobileNumber,
-        remarks: extracted.remarks || prev.remarks,
         subject: extracted.subject || prev.subject,
-        details: extracted.details || prev.details,
         // For branch name, you might need additional logic to match with your branch data
         officeBranchName: extracted.officeBranchName || prev.officeBranchName,
-        actionType: extracted.actionType || prev.actionType
+    
       }));
       
       toast.success('Form fields auto-filled from document');
@@ -687,46 +549,26 @@ const NewLetter = () => {
 
 
   const [formData, setFormData] = useState({
-    receivedByOffice: '',
-    recipientName: '',
-    letterCategory: '',
-    letterMedium: '',
-    letterType: '',
-    letterStatus: '',
-    letterDate: '',
-    dateOfReceiptOfLetter: '',
-    officeType: '',
-    office: '',
-    mobileNumber: '',
-    remarks: '',
-    officeBranchName: '',
-    actionType: '',
-    subject: '',
-    details: '',
-    numberOfCopies: '',
-    outwardLetterNumber: '',
+    officeSendingLetter: '',
     senderNameAndDesignation: '',
+    outwardLetterNumber: '',
+    numberOfCopies: '',
+    mobileNumber: '',
+    letterMedium: '',
+    letterCategory: '',
+    letterType: '',
     letterClassification: '',
-    officeSendingLetter: ''
+    dateOfReceiptOfLetter: '',
+    letterDate: '',
+    remarks: '',
+    subject: '',
+    fileId: '',
   });
   
   // State to track if we're processing files
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const [availableBranches, setAvailableBranches] = useState([]);
 
-  // Update available branches when officeType or office changes
-  useEffect(() => {
-    if (formData.officeType && formData.office) {
-      const branchData = getBranchData();
-      const branches = branchData[formData.officeType]?.[formData.office] || [];
-      setAvailableBranches(branches);
-      setFormData(prev => ({ ...prev, officeBranchName: '' }));
-    } else {
-      setAvailableBranches([]);
-      setFormData(prev => ({ ...prev, officeBranchName: '' }));
-    }
-  }, [formData.officeType, formData.office]);
 
   // Update handleChange to reset letterType if letterCategory changes
   const handleChange = (e) => {
@@ -747,9 +589,14 @@ const NewLetter = () => {
       // Combine recipient name and designation as required by the backend
       const recipientNameAndDesignation = `${formData.recipientName} - ${formData.recipientDesignation}`;
       
-      // Combine subject and details as required by the backend
+      // Combine subject and det by the backend
       const subjectAndDetails = `${formData.subject}: ${formData.details}`;
-      
+
+      if (!mainFileId) {
+        console.error('❌ No fileId found! Did you upload first?');
+        return;
+      }
+
       // Add all form fields to FormData
       formDataToSend.append('receivedByOffice', formData.receivedByOffice);
       formDataToSend.append('recipientName', formData.recipientName);
@@ -758,45 +605,30 @@ const NewLetter = () => {
       formDataToSend.append('letterMedium', formData.letterMedium);
       formDataToSend.append('letterType', formData.letterType);
       formDataToSend.append('letterStatus', formData.letterStatus);
-      formDataToSend.append('letterDate', formData.letterDate);
-      formDataToSend.append('officeType', formData.officeType);
-      formDataToSend.append('office', formData.office);
+      formDataToSend.append('letterDate', formData.letterDate)
       formDataToSend.append('mobileNumber', formData.mobileNumber);
-      formDataToSend.append('remarks', formData.remarks);
-      
-      // Find the selected branch to get its ID
-      let branchId = null; // Default to null if no branch is selected
-      if (formData.officeType && formData.office && formData.officeBranchName) {
-        const branchData = getBranchData();
-        const branches = branchData[formData.officeType]?.[formData.office] || [];
-        const selectedBranch = branches.find(branch => branch.name === formData.officeBranchName);
-        if (selectedBranch && selectedBranch.id) {
-          // Ensure we have a valid numeric ID
-          branchId = Number.isInteger(selectedBranch.id) ? selectedBranch.id : parseInt(selectedBranch.id, 10);
-        }
-      }
-      
-      // Only append officeBranchName if it has a value
-      if (formData.officeBranchName) {
-        formDataToSend.append('officeBranchName', formData.officeBranchName);
-      } else {
-        formDataToSend.append('officeBranchName', '');
-      }
-      
-      // Always include branchName with a default value of 0 if no branch is selected
-      // This is needed because the database field is NOT NULL
-      formDataToSend.append('branchName', branchId !== null ? branchId : 0);
-      formDataToSend.append('actionType', formData.actionType);
-      formDataToSend.append('typeOfAction', formData.actionType); // Add typeOfAction as required
+      formDataToSend.append('officeSendingLetter', formData.officeSendingLetter);
+      formDataToSend.append('senderNameAndDesignation', formData.senderNameAndDesignation);
+      formDataToSend.append('outwardLetterNumber', formData.outwardLetterNumber);
+      formDataToSend.append('letterClassification', formData.letterClassification);
+      formDataToSend.append('dateOfReceiptOfLetter', formData.dateOfReceiptOfLetter);
       formDataToSend.append('subject', formData.subject);
-      formDataToSend.append('details', formData.details);
-      formDataToSend.append('subjectAndDetails', subjectAndDetails); // Add combined subject and details
       formDataToSend.append('userId', '1'); // Replace with actual user ID from auth context
+      formDataToSend.append('fileId',formData.fileId);
       
       // Append all files (both main and additional) to the 'letterFiles' field
       [...mainFiles, ...additionalFiles].forEach((file) => {
         formDataToSend.append('letterFiles', file);
       });
+
+      // if (mainFileId) {
+      //   formDataToSend.append('fileId', mainFileId);
+      //   formDataToSend.append('file_id', mainFileId);
+      //   console.log('Appending fileId/file_id to formData:', mainFileId);
+      // }
+
+     
+
       
       const response = await fetch('http://localhost:5000/api/patras', {
         method: 'POST',
@@ -825,18 +657,18 @@ const NewLetter = () => {
         letterMedium: '',
         letterType: '',
         letterStatus: '',
-        letterDate: new Date().toISOString().split('T')[0],
-        officeType: '',
-        office: '',
         mobileNumber: '',
         remarks: '',
-        officeBranchName: '',
-        actionType: '',
         subject: '',
-        details: ''
+        officeSendingLetter: '',
+        senderNameAndDesignation: '',
+        outwardLetterNumber: '',
+        letterClassification: '',
+        dateOfReceiptOfLetter: ''
       });
       setMainFiles([]);
       setAdditionalFiles([]);
+      setMainFileId(null); // Reset fileId after successful submission
       
     } catch (error) {
       console.error('Error submitting form:', error);
@@ -845,7 +677,34 @@ const NewLetter = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Loading Overlay */}
+      {isProcessing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-blue-100/60">
+          <div className="flex flex-col items-center gap-6 p-8 bg-white bg-opacity-90 rounded-2xl shadow-2xl border border-blue-200">
+            {/* Modern animated spinner */}
+            <div className="relative flex items-center justify-center">
+              <span className="block w-20 h-20 border-4 border-blue-400 border-t-blue-700 border-b-blue-200 rounded-full animate-spin"></span>
+              <span className="absolute inset-0 flex items-center justify-center">
+                <svg className="w-8 h-8 text-blue-500 opacity-80" fill="none" viewBox="0 0 24 24">
+                  <path d="M12 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M12 18v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M4.93 4.93l2.83 2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M16.24 16.24l2.83 2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M2 12h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M18 12h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M4.93 19.07l2.83-2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M16.24 7.76l2.83-2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </span>
+            </div>
+            <span className="text-xl font-semibold text-blue-800 text-center drop-shadow">
+              {currentLanguage === 'mr' ? 'फाइल प्रक्रिया व फील्ड मॅपिंग सुरू आहे...' : 'Processing file and mapping fields...'}
+            </span>
+          </div>
+        </div>
+      )}
+      {/* Main content below */}
       <div className="bg-white p-8 rounded-2xl shadow-lg border border-blue-100">
         <h2 className="text-3xl font-bold text-blue-700 mb-8 flex items-center gap-2">
           <FiPaperclip className="text-blue-500 text-3xl" /> {t.newLetter}
@@ -870,45 +729,32 @@ const NewLetter = () => {
             </div>
             
             {mainFiles.length > 0 && (
-              <div className="mt-4 space-y-2">
+              <div className="mt-4 flex flex-col gap-3">
                 {mainFiles.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-blue-100 rounded-lg shadow-sm">
-                    <div className="flex items-center">
-                      <FiPaperclip className="text-blue-400 mr-2" />
-                      <span className="text-sm text-blue-900 truncate max-w-xs font-medium">{file.name} <span className="text-xs text-blue-500">({t.fileUploaded})</span></span>
+                  <div
+                    key={index}
+                    className="flex items-center justify-between bg-white border border-blue-200 rounded-xl shadow-sm px-4 py-2 transition hover:shadow-md"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FiPaperclip className="text-blue-400 flex-shrink-0" />
+                      <span className="text-sm text-blue-900 font-medium truncate max-w-[220px]">{file.name}</span>
+                      <span className="ml-2 px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700 font-semibold">
+                        {t.fileUploaded}
+                      </span>
                     </div>
-                    <button 
-                      type="button" 
-                      className="text-blue-400 hover:text-red-500 transition"
+                    <button
+                      type="button"
+                      className="ml-4 text-blue-400 hover:text-red-500 bg-blue-50 hover:bg-red-50 rounded-full p-1 transition"
                       onClick={() => setMainFiles([])}
+                      title={t.remove}
                     >
-                      <FiX title={t.remove} />
+                      <FiX />
                     </button>
                   </div>
                 ))}
               </div>
             )}
             
-            {/* Process File Button - Only for OCR Processing */}
-            {mainFiles.length > 0 && (
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    mainFiles.forEach(file => {
-                      const fileCopy = new File([file], file.name, { type: file.type });
-                      extractTextFromFile(fileCopy).catch(error => {
-                        console.error('Error in text extraction:', error);
-                      });
-                    });
-                  }}
-                  className="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 font-semibold shadow"
-                >
-                  <FiUpload className="mr-2" />
-                  {t.processFile}
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
@@ -916,47 +762,47 @@ const NewLetter = () => {
         <form onSubmit={handleSubmit} className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-blue-900">{t.receivedByOffice}</label>
+              <label className="block text-sm font-semibold text-blue-900">{t.receivedByOffice || "Office Sending Letter"}</label>
               <input
                 type="text"
-                name="receivedByOffice"
-                value={formData.receivedByOffice}
+                name="officeSendingLetter"
+                value={formData.officeSendingLetter}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition placeholder-gray-400 bg-white hover:border-blue-300"
-                required
+
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-blue-900">{t.recipientName}</label>
+              <label className="block text-sm font-semibold text-blue-900">{t.recipientName || "Sender Name and Designation"}</label>
               <input
                 type="text"
-                name="recipientName"
-                value={formData.recipientName}
+                name="senderNameAndDesignation"
+                value={formData.senderNameAndDesignation}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition placeholder-gray-400 bg-white hover:border-blue-300"
-                required
+
               />
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-blue-900">{t.outward_letter_no}</label>
               <input
                 type="text"
-                name="outward_letter_no"
-                value={formData.outward_letter_no}
+                name="outwardLetterNumber"
+                value={formData.outwardLetterNumber}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition placeholder-gray-400 bg-white hover:border-blue-300"
-                required
+
               />
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-blue-900">{t.no_of_documents}</label>
               <input
                 type="text"
-                name="no_of_documents"
-                value={formData.no_of_documents}
+                name="numberOfCopies"
+                value={formData.numberOfCopies}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition placeholder-gray-400 bg-white hover:border-blue-300"
-                required
+
               />
             </div>
             <div className="space-y-2">
@@ -967,7 +813,7 @@ const NewLetter = () => {
                 value={formData.mobileNumber}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition placeholder-gray-400 bg-white hover:border-blue-300"
-                required
+
               />
             </div>
             <div className="space-y-2">
@@ -977,7 +823,7 @@ const NewLetter = () => {
                 value={formData.letterMedium}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-300"
-                required
+
               >
                 <option value="">{t.selectMedium}</option>
                 <option value="hard_copy">{t.hard_copy}</option>
@@ -991,10 +837,10 @@ const NewLetter = () => {
                 name="letterCategory"
                 value={formData.letterCategory}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-300"
-                required
+                className="w-full min-h-[44px] px-4 py-2 border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-400 appearance-auto text-blue-900"
+
               >
-                <option value="">{t.select_category}</option>
+                <option value="" disabled hidden>{t.select_category || 'Select Category'}</option>
                 <option value="senior mail">{t.senior_mail}</option>
                 <option value="a class">{t.a_class}</option>
                 <option value="reference">{t.reference}</option>
@@ -1014,58 +860,57 @@ const NewLetter = () => {
                 name="letterType"
                 value={formData.letterType}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-300"
-                required
+                className="w-full min-h-[44px] px-4 py-2 border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-400 appearance-auto text-blue-900"
+
               >
-                <option value="">{t.selectType}</option>
+                <option value="" disabled hidden>{t.selectType || 'Select Type'}</option>
                 {(letterTypeOptionsMap[formData.letterCategory] || []).map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
             </div>
+            {/* Swap the date pickers to correct mapping */}
             <div className="space-y-2 w-full">
-  <label className="block text-sm font-semibold text-blue-900">{t.letterDate}</label>
-  <div className="w-full">
-    <DatePicker
-      selected={formData.letterDate ? parseISO(formData.letterDate) : null}
-      onChange={(date) => handleChange({
-        target: {
-          name: "letterDate",
-          value: date ? format(date, "yyyy-MM-dd") : ""
-        }
-      })}
-      dateFormat="MMMM d, yyyy"
-      className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-300"
-      required
-      showYearDropdown
-      dropdownMode="select"
-      wrapperClassName="w-full"
-      placeholderText="Select date"
-    />
-  </div>
-</div>
-
-<div className="space-y-2 w-full">
-  <label className="block text-sm font-semibold text-blue-900">{t.date_of_receipt_of_the_letter}</label>
-  <div className="w-full">
-    <DatePicker
-      selected={formData.dateOfReceiptOfLetter ? parseISO(formData.dateOfReceiptOfLetter) : null}
-      onChange={(date) => handleChange({
-        target: {
-          name: "dateOfReceiptOfLetter",
-          value: date ? format(date, "yyyy-MM-dd") : ""
-        }
-      })}
-      dateFormat="MMMM d, yyyy"
-      className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-300"
-      required
-      showYearDropdown
-      dropdownMode="select"
-      wrapperClassName="w-full"
-      placeholderText="Select date"
-    />
-  </div>
-</div>
+              <label className="block text-sm font-semibold text-blue-900">{t.date_of_receipt_of_the_letter}</label>
+              <div className="w-full">
+                <DatePicker
+                  selected={formData.dateOfReceiptOfLetter ? parseISO(formData.dateOfReceiptOfLetter) : null}
+                  onChange={(date) => handleChange({
+                    target: {
+                      name: "dateOfReceiptOfLetter",
+                      value: date ? format(date, "yyyy-MM-dd") : ""
+                    }
+                  })}
+                  dateFormat="MMMM d, yyyy"
+                  className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-300"
+  
+                  showYearDropdown
+                  dropdownMode="select"
+                  wrapperClassName="w-full"
+                 
+                />
+              </div>
+            </div>
+            <div className="space-y-2 w-full">
+              <label className="block text-sm font-semibold text-blue-900">{t.letterDate}</label>
+              <div className="w-full">
+                <DatePicker
+                  selected={formData.letterDate ? parseISO(formData.letterDate) : null}
+                  onChange={(date) => handleChange({
+                    target: {
+                      name: "letterDate",
+                      value: date ? format(date, "yyyy-MM-dd") : ""
+                    }
+                  })}
+                  dateFormat="MMMM d, yyyy"
+                  className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-300"
+  
+                  showYearDropdown
+                  dropdownMode="select"
+                  wrapperClassName="w-full"
+                />
+              </div>
+            </div>
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-blue-900">{t.subject}</label>
@@ -1075,7 +920,6 @@ const NewLetter = () => {
               value={formData.subject}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-300"
-              required
             />
           </div>
           <div className="flex justify-end space-x-3 pt-4">
@@ -1091,5 +935,4 @@ const NewLetter = () => {
     </div>
   );
 };
-
 export default NewLetter;

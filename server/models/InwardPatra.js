@@ -14,7 +14,7 @@ const InwardPatra = sequelize.define('InwardPatra', {
 
   // 1. Date of Receipt of the Letter
   dateOfReceiptOfLetter: {
-    type: DataTypes.DATEONLY,
+    type: DataTypes.TEXT,
     allowNull: false,
   },
 
@@ -32,7 +32,7 @@ const InwardPatra = sequelize.define('InwardPatra', {
 
   // 4. Mobile Number
   mobileNumber: {
-    type: DataTypes.STRING(15),
+    type: DataTypes.TEXT,
     allowNull: true,
   },
 
@@ -70,7 +70,6 @@ const InwardPatra = sequelize.define('InwardPatra', {
   outwardLetterNumber: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true,
   },
 
   // 11. Number of Copies
