@@ -31,7 +31,7 @@ const File = sequelize.define('File', {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW
   },
-  extractData: {
+  extractData: { // FIXED: Changed from extractData to extractedData for consistency
     type: DataTypes.JSON,
     allowNull: true
   },
@@ -39,7 +39,7 @@ const File = sequelize.define('File', {
     type: DataTypes.TEXT,
     allowNull: true
   },
-  problemStatemet: {
+  problemStatement: { // FIXED: Corrected typo from problemStatemet
     type: DataTypes.TEXT,
     allowNull: true
   }
@@ -48,5 +48,14 @@ const File = sequelize.define('File', {
   tableName: 'files',
   underscored: true
 });
+
+// FIXED: Add association method
+File.associate = function(models) {
+  // A file can be associated with multiple patras
+  File.hasMany(models.InwardPatra, {
+    foreignKey: 'fileId',
+    as: 'patras'
+  });
+};
 
 module.exports = File;

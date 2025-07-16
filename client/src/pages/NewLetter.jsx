@@ -8,10 +8,43 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { format, parseISO } from "date-fns";
 
+
 const NewLetter = () => {
   const [mainFiles, setMainFiles] = useState([]);
   const [additionalFiles, setAdditionalFiles] = useState([]);
   const [mainFileId, setMainFileId] = useState(null);
+  
+  // ADDED: Get user information from localStorage
+  const [userId, setUserId] = useState(null);
+  const [userInfo, setUserInfo] = useState(null);
+  
+  // ADDED: Get user information on component mount
+  useEffect(() => {
+    // Get user ID from localStorage
+    const storedUserId = localStorage.getItem('userId');
+    
+    // Get complete user info object
+    const storedUserInfo = localStorage.getItem('userInfo');
+    
+    if (storedUserId) {
+      setUserId(parseInt(storedUserId)); // Convert to number to match backend expectation
+      console.log('Found user ID:', storedUserId);
+    }
+    
+    if (storedUserInfo) {
+      try {
+        const parsedUserInfo = JSON.parse(storedUserInfo);
+        setUserInfo(parsedUserInfo);
+        console.log('User info loaded:', parsedUserInfo);
+      } catch (error) {
+        console.error('Error parsing user info:', error);
+      }
+    }
+    
+    if (!storedUserId) {
+      console.warn('No user ID found. User might not be logged in.');
+    }
+  }, []);
   
   // Handle main letter file upload
   const handleMainFileChange = async (e) => {
@@ -188,9 +221,15 @@ const NewLetter = () => {
       try {
         responseData = JSON.parse(responseText);
         if (responseData.file && responseData.file.id) {
-              setMainFileId(responseData.file.id);
-              console.log('Uploaded file ID:', responseData.file.id);
-           }
+          setMainFileId(responseData.file.id);
+          console.log('Uploaded file ID:', responseData.file.id);
+          
+          // ADDED: Update form data with file ID
+          setFormData(prev => ({
+            ...prev,
+            fileId: responseData.file.id
+          }));
+        }
       } catch (e) {
         console.error('Failed to parse response as JSON:', e);
         throw new Error('Invalid response format from server');
@@ -201,7 +240,9 @@ const NewLetter = () => {
       console.log('Extracted data:', extractedData);
       
       if (!extractedData) {
-        throw new Error('No extracted data found in response');
+        console.log('No extracted data found, but file uploaded successfully');
+        toast.success('File uploaded successfully');
+        return;
       }
       
       // Helper function to safely convert date string to ISO format
@@ -238,10 +279,67 @@ const NewLetter = () => {
         }
       };
 
+      // Helper function to normalize classification value to internal key
+      const normalizeClassificationToKey = (value) => {
+        if (!value) return '';
+        
+        // If it's already an internal key, return it
+        const validKeys = ['senior_mail', 'a_class', 'reference', 'c_class', 'direct_visit', 
+                          'legal_and_administrative', 'cyber_technical', 'application', 
+                          'license_and_permission', 'portal_application', 'others'];
+        
+        if (validKeys.includes(value)) {
+          return value;
+        }
+        
+        // Try to find the key by matching against display values in both languages
+        for (const lang of ['en', 'mr']) {
+          const foundKey = Object.keys(letterClassificationMap[lang] || {}).find(
+            key => letterClassificationMap[lang][key].toLowerCase() === value.toLowerCase()
+          );
+          if (foundKey) {
+            return foundKey;
+          }
+        }
+        
+        // Enhanced fallback map with all possible values
+        const fallbackMap = {
+          // English to internal keys
+          'senior mail': 'senior_mail',
+          'a class': 'a_class',
+          'reference': 'reference',
+          'c class': 'c_class',
+          'direct visit': 'direct_visit',
+          'legal and administrative': 'legal_and_administrative',
+          'cyber technical': 'cyber_technical',
+          'application': 'application',
+          'license and permission': 'license_and_permission',
+          'portal application': 'portal_application',
+          'others': 'others',
+          
+          // Marathi to internal keys
+          'वरिष्ठ टपाल': 'senior_mail',
+          'अ वर्ग': 'a_class',
+          'संदर्भ': 'reference',
+          'क वर्ग': 'c_class',
+          'व वर्ग': 'direct_visit',
+          'कायदेशीर व प्रशासकीय': 'legal_and_administrative',
+          'सायबर आणि तांत्रिक': 'cyber_technical',
+          'अर्ज': 'application',
+          'परवाने आणि परवानग्या': 'license_and_permission',
+          'पोर्टल अर्ज': 'portal_application',
+          'इतर': 'others'
+        };
+        
+        const normalizedValue = fallbackMap[value.toLowerCase()] || fallbackMap[value];
+        console.log('Normalizing classification:', { input: value, output: normalizedValue });
+        return normalizedValue || value;
+      };
+
       // Map only the specific fields from extracted data
       const formUpdates = {
         dateOfReceiptOfLetter: convertDateToISO(extractedData.dateOfReceiptOfLetter),
-        letterClassification: extractedData.letterClassification || '',
+        letterClassification: normalizeClassificationToKey(extractedData.letterClassification),
         letterDate: convertDateToISO(extractedData.letterDate),
         letterMedium: extractedData.letterMedium || '',
         letterType: extractedData.letterType || '',
@@ -250,7 +348,8 @@ const NewLetter = () => {
         officeSendingLetter: extractedData.officeSendingLetter || '',
         outwardLetterNumber: extractedData.outwardLetterNumber || '',
         senderNameAndDesignation: extractedData.senderNameAndDesignation || '',
-        subject: extractedData.subject || ''
+        subject: extractedData.subject || '',
+        fileId: responseData.file.id // ADDED: Include file ID in updates
       };
       
 
@@ -281,73 +380,6 @@ const NewLetter = () => {
       toast.success('Form fields updated from extracted data');
       return;
       
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.error('Failed to parse response as JSON:', e);
-        toast.error('Invalid response from server');
-        return null;
-      }
-      
-      if (!response.ok) {
-        console.error('Error extracting text. Status:', response.status, 'Response:', data);
-        toast.error(data.error || `Failed to extract text (${response.status})`);
-        return null;
-      }
-      
-      console.log('Full response data:', data);
-      
-      if (!data.text) {
-        console.warn('No text field in response:', data);
-        toast.warning('No text was extracted from the file');
-        return null;
-      }
-      
-      console.log('Raw extracted text:', data.text);
-      
-      // First try to parse as JSON (in case it's an API response)
-      try {
-        const apiResponse = JSON.parse(data.text);
-        if (apiResponse && typeof apiResponse === 'object') {
-          console.log('API Response detected:', apiResponse);
-          const mappedData = mapApiResponseToForm(apiResponse);
-          if (Object.keys(mappedData).length > 0) {
-            toast.success('Form fields updated from API response');
-            return;
-          }
-        }
-      } catch (e) {
-        // Not a JSON response, try text parsing
-        console.log('Not a JSON response, trying text parsing');
-      }
-      
-      // Fall back to text parsing if not an API response
-      const extracted = parseExtractedText(data.text);
-      console.log('Parsed data:', extracted);
-      
-      if (Object.keys(extracted).length === 0) {
-        console.warn('No data could be extracted from the text');
-        toast.warning('Could not extract form data from the document');
-        return null;
-      }
-      setFormData(prev => ({
-        ...prev,
-        receivedByOffice: extracted.receivedByOffice || prev.receivedByOffice,
-        recipientName: extracted.recipientName || prev.recipientName,
-        letterCategory: extracted.letterCategory || prev.letterCategory,
-        letterType: extracted.letterType || prev.letterType,
-        letterDate: extracted.letterDate || prev.letterDate,
-        mobileNumber: extracted.mobileNumber || prev.mobileNumber,
-        subject: extracted.subject || prev.subject,
-        // For branch name, you might need additional logic to match with your branch data
-        officeBranchName: extracted.officeBranchName || prev.officeBranchName,
-    
-      }));
-      
-      toast.success('Form fields auto-filled from document');
-      return data;
-      
     } catch (error) {
       console.error('Error in extractTextFromFile:', error);
       toast.error(`Error processing file: ${error.message}`);
@@ -372,9 +404,48 @@ const NewLetter = () => {
   const { language: currentLanguage } = useLanguage();
   const t = translations[currentLanguage] || translations['en']; // Fallback to English
   
-  // Add this mapping at the top of the component, after translations and t are defined
+  // ADDED: Effect to handle language changes and update display values
+  useEffect(() => {
+    // When language changes, we need to ensure the form displays the correct values
+    if (formData.letterClassification) {
+      // Force a re-render by updating the state
+      setFormData(prev => ({ ...prev }));
+    }
+  }, [currentLanguage]); // Re-run when language changes
+  
+  // FIXED: Letter classification mapping for consistent language support
+  const letterClassificationMap = {
+    en: {
+      'senior_mail': 'senior mail',
+      'a_class': 'a class', 
+      'reference': 'reference',
+      'c_class': 'c class',
+      'direct_visit': 'direct visit',
+      'legal_and_administrative': 'legal and administrative',
+      'cyber_technical': 'cyber technical',
+      'application': 'application',
+      'license_and_permission': 'license and permission',
+      'portal_application': 'portal application',
+      'others': 'others'
+    },
+    mr: {
+      'senior_mail': 'वरिष्ठ टपाल',
+      'a_class': 'अ वर्ग',
+      'reference': 'संदर्भ', 
+      'c_class': 'क वर्ग',
+      'direct_visit': 'व वर्ग',
+      'legal_and_administrative': 'कायदेशीर व प्रशासकीय',
+      'cyber_technical': 'सायबर आणि तांत्रिक',
+      'application': 'अर्ज',
+      'license_and_permission': 'परवाने आणि परवानग्या',
+      'portal_application': 'पोर्टल अर्ज',
+      'others': 'इतर'
+    }
+  };
+
+  // FIXED: Updated letterTypeOptionsMap with consistent keys
   const letterTypeOptionsMap = {
-    'senior mail': [
+    'senior_mail': [
       { value: t.senior_post_dgp, label: t.senior_post_dgp },
       { value: t.senior_post_govt_maharashtra, label: t.senior_post_govt_maharashtra },
       { value: t.senior_post_igp, label: t.senior_post_igp },
@@ -387,7 +458,7 @@ const NewLetter = () => {
       { value: t.senior_post_sp, label: t.senior_post_sp },
       { value: t.senior_post_sdpo, label: t.senior_post_sdpo },
     ],
-    'a class': [
+    'a_class': [
       { value: t.category_a_pm, label: t.category_a_pm },
       { value: t.category_a_cm, label: t.category_a_cm },
       { value: t.category_a_deputy_cm, label: t.category_a_deputy_cm },
@@ -419,7 +490,7 @@ const NewLetter = () => {
       { value: t.government_order, label: t.government_order },
       { value: t.government_reference, label: t.government_reference },
     ],
-    'c class': [
+    'c_class': [
       { value: t.category_k_police_commissioner, label: t.category_k_police_commissioner },
       { value: t.category_k_divisional_commissioner, label: t.category_k_divisional_commissioner },
       { value: t.category_k_district_collector, label: t.category_k_district_collector },
@@ -436,11 +507,11 @@ const NewLetter = () => {
       { value: t.category_k_all_police_stations, label: t.category_k_all_police_stations },
       { value: t.category_k_all_branches, label: t.category_k_all_branches },
     ],
-    'direct visit': [
+    'direct_visit': [
       { value: t.category_v_sp_ahmednagar, label: t.category_v_sp_ahmednagar },
       { value: t.category_v_addl_sp_ahmednagar, label: t.category_v_addl_sp_ahmednagar },
     ],
-    'legal and administrative': [
+    'legal_and_administrative': [
       { value: t.confidential, label: t.confidential },
       { value: t.approval_crime, label: t.approval_crime },
       { value: t.error, label: t.error },
@@ -468,7 +539,7 @@ const NewLetter = () => {
       { value: t.in_charge_officer_order, label: t.in_charge_officer_order },
       { value: t.do_order, label: t.do_order },
     ],
-    'cyber technical': [
+    'cyber_technical': [
       { value: t.cyber, label: t.cyber },
       { value: t.cdr, label: t.cdr },
       { value: t.caf, label: t.caf },
@@ -500,7 +571,7 @@ const NewLetter = () => {
       { value: t.democracy_application, label: t.democracy_application },
       { value: t.confidential_application, label: t.confidential_application },
     ],
-    'license and permission': [
+    'license_and_permission': [
       { value: t.weapon_license, label: t.weapon_license },
       { value: t.character_verification, label: t.character_verification },
       { value: t.loudspeaker_license, label: t.loudspeaker_license },
@@ -514,7 +585,7 @@ const NewLetter = () => {
       { value: t.deity_status_b, label: t.deity_status_b },
       { value: t.other_licenses, label: t.other_licenses },
     ],
-    'portal application': [
+    'portal_application': [
       { value: t.portal_pm_pg, label: t.portal_pm_pg },
       { value: t.portal_your_government, label: t.portal_your_government },
       { value: t.portal_home_minister, label: t.portal_home_minister },
@@ -532,12 +603,10 @@ const NewLetter = () => {
     ],
   };
 
-  // Branch data with translations
-
   // Function to get branch name in current language
   const getBranchName = (branchKey) => {
-    if (currentLanguage === 'mr' && branch_data[branchKey]) {
-      return branch_data[branchKey];
+    if (currentLanguage === 'mr' && translations.branch_data[branchKey]) {
+      return translations.branch_data[branchKey];
     }
     // Default to English name if no translation found
     return branchKey.split('_').map(word => {
@@ -547,7 +616,6 @@ const NewLetter = () => {
     }).join(' ');
   };
 
-
   const [formData, setFormData] = useState({
     officeSendingLetter: '',
     senderNameAndDesignation: '',
@@ -555,29 +623,109 @@ const NewLetter = () => {
     numberOfCopies: '',
     mobileNumber: '',
     letterMedium: '',
-    letterCategory: '',
-    letterType: '',
     letterClassification: '',
+    letterType: '',
     dateOfReceiptOfLetter: '',
     letterDate: '',
     remarks: '',
     subject: '',
-    fileId: '',
+    fileId: '', // ADDED: Initialize fileId
   });
   
   // State to track if we're processing files
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // FIXED: Helper function to get display value for classification
+  const getClassificationDisplayValue = (key) => {
+    if (!key) return '';
+    // If the key exists in the current language mapping, return the translated value
+    if (letterClassificationMap[currentLanguage] && letterClassificationMap[currentLanguage][key]) {
+      return letterClassificationMap[currentLanguage][key];
+    }
+    // Fallback to English if available
+    if (letterClassificationMap['en'] && letterClassificationMap['en'][key]) {
+      return letterClassificationMap['en'][key];
+    }
+    // If it's already a display value, try to find the corresponding key and return the translated version
+    for (const lang of ['mr', 'en']) {
+      const foundKey = Object.keys(letterClassificationMap[lang] || {}).find(
+        mapKey => letterClassificationMap[lang][mapKey] === key
+      );
+      if (foundKey && letterClassificationMap[currentLanguage] && letterClassificationMap[currentLanguage][foundKey]) {
+        return letterClassificationMap[currentLanguage][foundKey];
+      }
+    }
+    return key;
+  };
 
-
-  // Update handleChange to reset letterType if letterCategory changes
+  // FIXED: Updated handleChange to properly handle classification changes
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-      ...(name === 'letterCategory' ? { letterType: '' } : {})
-    }));
+    
+    if (name === 'letterClassification') {
+      // Find the key that matches the selected value in current language
+      let selectedKey = null;
+      
+      // First, try to find the key directly in current language mapping
+      selectedKey = Object.keys(letterClassificationMap[currentLanguage] || {}).find(
+        key => letterClassificationMap[currentLanguage][key] === value
+      );
+      
+      // If not found, try in other language
+      if (!selectedKey) {
+        const otherLang = currentLanguage === 'mr' ? 'en' : 'mr';
+        selectedKey = Object.keys(letterClassificationMap[otherLang] || {}).find(
+          key => letterClassificationMap[otherLang][key] === value
+        );
+      }
+      
+      // Fallback: direct mapping
+      if (!selectedKey) {
+        const directMapping = {
+          'वरिष्ठ टपाल': 'senior_mail',
+          'senior mail': 'senior_mail',
+          'अ वर्ग': 'a_class',
+          'a class': 'a_class',
+          'संदर्भ': 'reference',
+          'reference': 'reference',
+          'क वर्ग': 'c_class',
+          'c class': 'c_class',
+          'व वर्ग': 'direct_visit',
+          'direct visit': 'direct_visit',
+          'कायदेशीर व प्रशासकीय': 'legal_and_administrative',
+          'legal and administrative': 'legal_and_administrative',
+          'सायबर आणि तांत्रिक': 'cyber_technical',
+          'cyber technical': 'cyber_technical',
+          'अर्ज': 'application',
+          'application': 'application',
+          'परवाने आणि परवानग्या': 'license_and_permission',
+          'license and permission': 'license_and_permission',
+          'पोर्टल अर्ज': 'portal_application',
+          'portal application': 'portal_application',
+          'इतर': 'others',
+          'others': 'others'
+        };
+        selectedKey = directMapping[value];
+      }
+      
+      console.log('Classification selection:', { 
+        value, 
+        selectedKey, 
+        currentLanguage,
+        mappingCheck: letterClassificationMap[currentLanguage]
+      });
+      
+      setFormData(prev => ({
+        ...prev,
+        [name]: selectedKey || value, // Store the key, not the display value
+        letterType: '' // Reset letter type when classification changes
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -586,50 +734,71 @@ const NewLetter = () => {
     try {
       const formDataToSend = new FormData();
       
-      // Combine recipient name and designation as required by the backend
-      const recipientNameAndDesignation = `${formData.recipientName} - ${formData.recipientDesignation}`;
-      
-      // Combine subject and det by the backend
-      const subjectAndDetails = `${formData.subject}: ${formData.details}`;
-
-      if (!mainFileId) {
+      // MODIFIED: Check for both mainFileId and formData.fileId
+      if (!mainFileId && !formData.fileId) {
         console.error('❌ No fileId found! Did you upload first?');
+        toast.error('Please upload a file first');
         return;
       }
 
-      // Add all form fields to FormData
-      formDataToSend.append('receivedByOffice', formData.receivedByOffice);
-      formDataToSend.append('recipientName', formData.recipientName);
-      formDataToSend.append('recipientNameAndDesignation', recipientNameAndDesignation);
-      formDataToSend.append('letterCategory', formData.letterCategory);
-      formDataToSend.append('letterMedium', formData.letterMedium);
-      formDataToSend.append('letterType', formData.letterType);
-      formDataToSend.append('letterStatus', formData.letterStatus);
-      formDataToSend.append('letterDate', formData.letterDate)
-      formDataToSend.append('mobileNumber', formData.mobileNumber);
+      // MODIFIED: Check if user is logged in
+      if (!userId || !userInfo) {
+        console.error('❌ No user found! User might not be logged in.');
+        toast.error('Please log in first');
+        return;
+      }
+
+      // Helper function to get the display value for submission based on current language
+      const getSubmissionValue = (field, value) => {
+        if (field === 'letterClassification') {
+          // Return the display value in current language
+          return getClassificationDisplayValue(value);
+        }
+        if (field === 'letterMedium') {
+          // Return the display value for letter medium
+          const mediumMap = {
+            'hard_copy': currentLanguage === 'mr' ? 'हार्ड कॉपी' : 'Hard Copy',
+            'soft_copy': currentLanguage === 'mr' ? 'सॉफ्ट कॉपी' : 'Soft Copy',
+            'soft_copy_and_hard_copy': currentLanguage === 'mr' ? 'सॉफ्ट कॉपी आणि हार्ड कॉपी' : 'Soft Copy and Hard Copy'
+          };
+          return mediumMap[value] || value;
+        }
+        return value;
+      };
+
+      // Add all form fields to FormData - Use display values for submission
       formDataToSend.append('officeSendingLetter', formData.officeSendingLetter);
       formDataToSend.append('senderNameAndDesignation', formData.senderNameAndDesignation);
       formDataToSend.append('outwardLetterNumber', formData.outwardLetterNumber);
-      formDataToSend.append('letterClassification', formData.letterClassification);
       formDataToSend.append('dateOfReceiptOfLetter', formData.dateOfReceiptOfLetter);
+      formDataToSend.append('letterClassification', getSubmissionValue('letterClassification', formData.letterClassification));
+      formDataToSend.append('letterMedium', getSubmissionValue('letterMedium', formData.letterMedium));
+      formDataToSend.append('letterType', formData.letterType);
+      formDataToSend.append('letterDate', formData.letterDate);
+      formDataToSend.append('mobileNumber', formData.mobileNumber);
+      formDataToSend.append('numberOfCopies', formData.numberOfCopies);
       formDataToSend.append('subject', formData.subject);
-      formDataToSend.append('userId', '1'); // Replace with actual user ID from auth context
-      formDataToSend.append('fileId',formData.fileId);
+      
+      // MODIFIED: Use the actual userId from state/localStorage
+      formDataToSend.append('userId', userId);
+      
+      // ADDED: Add the fileId from either source
+      const fileIdToUse = formData.fileId || mainFileId;
+      formDataToSend.append('fileId', fileIdToUse);
+      
+      console.log('Submitting with userId:', userId, 'and fileId:', fileIdToUse);
+      console.log('Form data being submitted:', {
+        letterClassification: getSubmissionValue('letterClassification', formData.letterClassification),
+        letterMedium: getSubmissionValue('letterMedium', formData.letterMedium),
+        letterType: formData.letterType,
+        currentLanguage: currentLanguage
+      });
       
       // Append all files (both main and additional) to the 'letterFiles' field
       [...mainFiles, ...additionalFiles].forEach((file) => {
         formDataToSend.append('letterFiles', file);
       });
 
-      // if (mainFileId) {
-      //   formDataToSend.append('fileId', mainFileId);
-      //   formDataToSend.append('file_id', mainFileId);
-      //   console.log('Appending fileId/file_id to formData:', mainFileId);
-      // }
-
-     
-
-      
       const response = await fetch('http://localhost:5000/api/patras', {
         method: 'POST',
         body: formDataToSend,
@@ -646,25 +815,24 @@ const NewLetter = () => {
       }
       
       // Handle success
-      alert(t.letterSubmitted);
+      toast.success(t.letterSubmitted || 'Letter submitted successfully');
       console.log('Reference Number:', data.referenceNumber);
       
       // Reset form
       setFormData({
-        receivedByOffice: '',
-        recipientName: '',
-        letterCategory: '',
-        letterMedium: '',
-        letterType: '',
-        letterStatus: '',
-        mobileNumber: '',
-        remarks: '',
-        subject: '',
         officeSendingLetter: '',
         senderNameAndDesignation: '',
         outwardLetterNumber: '',
+        numberOfCopies: '',
+        mobileNumber: '',
+        letterMedium: '',
         letterClassification: '',
-        dateOfReceiptOfLetter: ''
+        letterType: '',
+        dateOfReceiptOfLetter: '',
+        letterDate: '',
+        remarks: '',
+        subject: '',
+        fileId: '', // ADDED: Reset fileId
       });
       setMainFiles([]);
       setAdditionalFiles([]);
@@ -672,7 +840,7 @@ const NewLetter = () => {
       
     } catch (error) {
       console.error('Error submitting form:', error);
-      alert(error.message || t.submitError);
+      toast.error(error.message || t.submitError || 'Error submitting form');
     }
   };
 
@@ -738,14 +906,26 @@ const NewLetter = () => {
                     <div className="flex items-center gap-2 min-w-0">
                       <FiPaperclip className="text-blue-400 flex-shrink-0" />
                       <span className="text-sm text-blue-900 font-medium truncate max-w-[220px]">{file.name}</span>
-                      <span className="ml-2 px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700 font-semibold">
-                        {t.fileUploaded}
-                      </span>
+                      {/* MODIFIED: Show upload status */}
+                      {formData.fileId || mainFileId ? (
+                        <span className="ml-2 px-2 py-0.5 text-xs rounded bg-green-100 text-green-700 font-semibold">
+                          Uploaded ✓ (ID: {formData.fileId || mainFileId})
+                        </span>
+                      ) : (
+                        <span className="ml-2 px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700 font-semibold">
+                          {t.fileUploaded}
+                        </span>
+                      )}
                     </div>
                     <button
                       type="button"
                       className="ml-4 text-blue-400 hover:text-red-500 bg-blue-50 hover:bg-red-50 rounded-full p-1 transition"
-                      onClick={() => setMainFiles([])}
+                      onClick={() => {
+                        setMainFiles([]);
+                        setMainFileId(null);
+                        // ADDED: Also clear fileId from formData
+                        setFormData(prev => ({ ...prev, fileId: '' }));
+                      }}
                       title={t.remove}
                     >
                       <FiX />
@@ -769,7 +949,6 @@ const NewLetter = () => {
                 value={formData.officeSendingLetter}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition placeholder-gray-400 bg-white hover:border-blue-300"
-
               />
             </div>
             <div className="space-y-2">
@@ -780,7 +959,6 @@ const NewLetter = () => {
                 value={formData.senderNameAndDesignation}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition placeholder-gray-400 bg-white hover:border-blue-300"
-
               />
             </div>
             <div className="space-y-2">
@@ -791,7 +969,6 @@ const NewLetter = () => {
                 value={formData.outwardLetterNumber}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition placeholder-gray-400 bg-white hover:border-blue-300"
-
               />
             </div>
             <div className="space-y-2">
@@ -802,7 +979,6 @@ const NewLetter = () => {
                 value={formData.numberOfCopies}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition placeholder-gray-400 bg-white hover:border-blue-300"
-
               />
             </div>
             <div className="space-y-2">
@@ -813,7 +989,6 @@ const NewLetter = () => {
                 value={formData.mobileNumber}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition placeholder-gray-400 bg-white hover:border-blue-300"
-
               />
             </div>
             <div className="space-y-2">
@@ -823,7 +998,6 @@ const NewLetter = () => {
                 value={formData.letterMedium}
                 onChange={handleChange}
                 className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-300"
-
               >
                 <option value="">{t.selectMedium}</option>
                 <option value="hard_copy">{t.hard_copy}</option>
@@ -831,29 +1005,32 @@ const NewLetter = () => {
                 <option value="soft_copy_and_hard_copy">{t.soft_copy_and_hard_copy}</option>
               </select>
             </div>
+            
+            {/* FIXED: Letter Classification Field */}
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-blue-900">{t.letterCategory}</label>
+              <label className="block text-sm font-semibold text-blue-900">{t.letterClassification}</label>
               <select
-                name="letterCategory"
-                value={formData.letterCategory}
+                name="letterClassification"
+                value={formData.letterClassification ? getClassificationDisplayValue(formData.letterClassification) : ''}
                 onChange={handleChange}
                 className="w-full min-h-[44px] px-4 py-2 border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-400 appearance-auto text-blue-900"
-
               >
                 <option value="" disabled hidden>{t.select_category || 'Select Category'}</option>
-                <option value="senior mail">{t.senior_mail}</option>
-                <option value="a class">{t.a_class}</option>
-                <option value="reference">{t.reference}</option>
-                <option value="c class">{t.c_class}</option>
-                <option value="direct visit">{t.direct_visit}</option>
-                <option value="legal and administrative">{t.legal_and_administrative}</option>
-                <option value="application">{t.application}</option>
-                <option value="cyber technical">{t.cyber_technical}</option>
-                <option value="license and permission">{t.license_and_permission}</option>
-                <option value="portal application">{t.portal_application}</option>
-                <option value="others">{t.others}</option>
+                <option value={letterClassificationMap[currentLanguage]['senior_mail']}>{t.senior_mail}</option>
+                <option value={letterClassificationMap[currentLanguage]['a_class']}>{t.a_class}</option>
+                <option value={letterClassificationMap[currentLanguage]['reference']}>{t.reference}</option>
+                <option value={letterClassificationMap[currentLanguage]['c_class']}>{t.c_class}</option>
+                <option value={letterClassificationMap[currentLanguage]['direct_visit']}>{t.direct_visit}</option>
+                <option value={letterClassificationMap[currentLanguage]['legal_and_administrative']}>{t.legal_and_administrative}</option>
+                <option value={letterClassificationMap[currentLanguage]['application']}>{t.application}</option>
+                <option value={letterClassificationMap[currentLanguage]['cyber_technical']}>{t.cyber_technical}</option>
+                <option value={letterClassificationMap[currentLanguage]['license_and_permission']}>{t.license_and_permission}</option>
+                <option value={letterClassificationMap[currentLanguage]['portal_application']}>{t.portal_application}</option>
+                <option value={letterClassificationMap[currentLanguage]['others']}>{t.others}</option>
               </select>
             </div>
+            
+            {/* FIXED: Letter Type Field */}
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-blue-900">{t.letterType}</label>
               <select
@@ -861,15 +1038,15 @@ const NewLetter = () => {
                 value={formData.letterType}
                 onChange={handleChange}
                 className="w-full min-h-[44px] px-4 py-2 border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-400 appearance-auto text-blue-900"
-
               >
                 <option value="" disabled hidden>{t.selectType || 'Select Type'}</option>
-                {(letterTypeOptionsMap[formData.letterCategory] || []).map(opt => (
+                {(letterTypeOptionsMap[formData.letterClassification] || []).map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
             </div>
-            {/* Swap the date pickers to correct mapping */}
+            
+            {/* Date Fields */}
             <div className="space-y-2 w-full">
               <label className="block text-sm font-semibold text-blue-900">{t.date_of_receipt_of_the_letter}</label>
               <div className="w-full">
@@ -883,11 +1060,9 @@ const NewLetter = () => {
                   })}
                   dateFormat="MMMM d, yyyy"
                   className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-300"
-  
                   showYearDropdown
                   dropdownMode="select"
                   wrapperClassName="w-full"
-                 
                 />
               </div>
             </div>
@@ -904,7 +1079,6 @@ const NewLetter = () => {
                   })}
                   dateFormat="MMMM d, yyyy"
                   className="w-full px-4 py-2 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white hover:border-blue-300"
-  
                   showYearDropdown
                   dropdownMode="select"
                   wrapperClassName="w-full"
@@ -935,4 +1109,5 @@ const NewLetter = () => {
     </div>
   );
 };
+
 export default NewLetter;

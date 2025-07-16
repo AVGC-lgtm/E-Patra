@@ -19,6 +19,8 @@ const InwardStaffLetters = () => {
   const [acknowledgedLetters, setAcknowledgedLetters] = useState(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 10;
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [selectedLetter, setSelectedLetter] = useState(null);
   
   // Status filter options with translations
   const statusOptions = [
@@ -286,6 +288,9 @@ const InwardStaffLetters = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gradient-to-r from-blue-600 to-blue-800">
                 <tr>
+                  <th scope="col" className="px-4 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
+                    {language === 'mr' ? 'अनुक्रमांक' : 'Sr No'}
+                  </th>
                   <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                     {language === 'mr' ? 'संदर्भ क्रमांक' : 'Reference No'}
                   </th>
@@ -294,15 +299,6 @@ const InwardStaffLetters = () => {
                   </th>
                   <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                     {language === 'mr' ? 'मोबाईल नंबर' : 'Mobile'}
-                  </th>
-                  <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap min-w-[280px]">
-                    {language === 'mr' ? 'पाठविणाऱ्याचे नाव व पदनाम' : 'Sender Details'}
-                  </th>
-                  <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap min-w-[300px]">
-                    {language === 'mr' ? 'विषय' : 'Subject'}
-                  </th>
-                  <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
-                    {language === 'mr' ? 'स्थिती' : 'Status'}
                   </th>
                   <th scope="col" className="px-8 py-4 text-right text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                     {language === 'mr' ? 'क्रिया' : 'Actions'}
@@ -315,6 +311,9 @@ const InwardStaffLetters = () => {
                     key={letter._id} 
                     className={`transition-all hover:bg-blue-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
                   >
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                      {(currentPage - 1) * recordsPerPage + idx + 1}
+                    </td>
                     <td className="px-8 py-4 whitespace-nowrap text-sm font-medium text-blue-600 max-w-[200px] truncate">
                       <button 
                         onClick={() => navigate(`/dashboard/track-application/${letter.referenceNumber}`)}
@@ -332,27 +331,18 @@ const InwardStaffLetters = () => {
                     <td className="px-8 py-4 whitespace-nowrap text-sm text-gray-900">
                       {letter.mobileNumber || 'N/A'}
                     </td>
-                    <td className="px-8 py-4 text-sm text-gray-900 max-w-[280px]">
-                      <div className="line-clamp-2">
-                        {letter.senderNameAndDesignation || 'N/A'}
-                      </div>
-                    </td>
-                    <td className="px-8 py-4 text-sm text-gray-900 max-w-[300px]">
-                      <div className="line-clamp-2">
-                        {letter.subject || 'No Subject'}
-                      </div>
-                    </td>
-                    <td className="px-8 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        letter.letterStatus === 'approved' ? 'bg-green-100 text-green-800' :
-                        letter.letterStatus === 'rejected' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {letter.letterStatus || 'pending'}
-                      </span>
-                    </td>
                     <td className="px-8 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
+                        <button
+                          onClick={() => {
+                            setSelectedLetter(letter);
+                            setViewModalOpen(true);
+                          }}
+                          className="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-100 transition-colors"
+                          title={language === 'mr' ? 'पहा' : 'View'}
+                        >
+                          <FiEye className="h-5 w-5" />
+                        </button>
                         {letter.letterFiles && letter.letterFiles.length > 0 ? (
                           <button
                             onClick={(e) => {
@@ -420,6 +410,113 @@ const InwardStaffLetters = () => {
         </div>
       )}
     </div>
+    {/* Modal for viewing letter details */}
+    {viewModalOpen && selectedLetter && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-8 relative max-h-[90vh] overflow-y-auto border border-blue-100">
+          <button
+            className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 bg-gray-100 rounded-full p-1 shadow"
+            onClick={() => setViewModalOpen(false)}
+          >
+            <FiX className="h-6 w-6" />
+          </button>
+          <h2 className="text-2xl font-extrabold mb-8 text-blue-700 text-center tracking-wide drop-shadow">{language === 'mr' ? 'पत्र तपशील' : 'Letter Details'}</h2>
+          <div className="flex flex-col gap-6">
+            {/* 1. पत्र पाठविणारे कार्यालय / Sender Office */}
+            <div>
+              <div className="text-base font-bold text-blue-900 mb-1">{t.officeSendingLetter || (language === 'mr' ? 'पत्र पाठविणारे कार्यालय' : 'Sender Office')}</div>
+              <div className="text-lg text-gray-800 font-medium whitespace-pre-line">{selectedLetter.officeSendingLetter || 'N/A'}</div>
+            </div>
+            <div className="border-b border-blue-100" />
+            {/* 2. पाठविणाऱ्याचे नाव व पदनाम / Sender Name & Designation */}
+            <div>
+              <div className="text-base font-bold text-blue-900 mb-1">{t.senderNameAndDesignation || (language === 'mr' ? 'पाठविणाऱ्याचे नाव व पदनाम' : 'Sender Name & Designation')}</div>
+              <div className="text-lg text-gray-800 font-medium whitespace-pre-line">{selectedLetter.senderNameAndDesignation || 'N/A'}</div>
+            </div>
+            <div className="border-b border-blue-100" />
+            {/* 3. प्राप्त पत्राचा जावक क्रमांक / Outward Letter Number */}
+            <div>
+              <div className="text-base font-bold text-blue-900 mb-1">{t.outward_letter_no || (language === 'mr' ? 'प्राप्त पत्राचा जावक क्रमांक' : 'Outward Letter Number')}</div>
+              <div className="text-lg text-gray-800 font-medium whitespace-pre-line">{selectedLetter.outwardLetterNumber || 'N/A'}</div>
+            </div>
+            <div className="border-b border-blue-100" />
+            {/* 4. सह कागद पत्रांची संख्या / Number of Copies */}
+            <div>
+              <div className="text-base font-bold text-blue-900 mb-1">{t.no_of_documents || (language === 'mr' ? 'सह कागद पत्रांची संख्या' : 'Number of Copies')}</div>
+              <div className="text-lg text-gray-800 font-medium whitespace-pre-line">{selectedLetter.numberOfCopies || 'N/A'}</div>
+            </div>
+            <div className="border-b border-blue-100" />
+            {/* 5. मोबाईल नंबर / टेलीफोन नंबर / Mobile Number */}
+            <div>
+              <div className="text-base font-bold text-blue-900 mb-1">{t.mobileNumber || (language === 'mr' ? 'मोबाईल नंबर / टेलीफोन नंबर' : 'Mobile Number')}</div>
+              <div className="text-lg text-gray-800 font-medium whitespace-pre-line">{selectedLetter.mobileNumber || 'N/A'}</div>
+            </div>
+            <div className="border-b border-blue-100" />
+            {/* 6. पत्राचे माध्यम / Letter Medium */}
+            <div>
+              <div className="text-base font-bold text-blue-900 mb-1">{t.letterMedium || (language === 'mr' ? 'पत्राचे माध्यम' : 'Letter Medium')}</div>
+              <div className="text-lg text-gray-800 font-medium whitespace-pre-line">{t[selectedLetter.letterMedium] || selectedLetter.letterMedium || 'N/A'}</div>
+            </div>
+            <div className="border-b border-blue-100" />
+            {/* 7. पत्र वर्गीकरण / Letter Category */}
+            <div>
+              <div className="text-base font-bold text-blue-900 mb-1">{t.letterCategory || (language === 'mr' ? 'पत्र वर्गीकरण' : 'Letter Category')}</div>
+              <div className="text-lg text-gray-800 font-medium whitespace-pre-line">{t[selectedLetter.letterCategory] || selectedLetter.letterCategory || 'N/A'}</div>
+            </div>
+            <div className="border-b border-blue-100" />
+            {/* 8. पत्राचा प्रकार / Letter Type */}
+            <div>
+              <div className="text-base font-bold text-blue-900 mb-1">{t.letterType || (language === 'mr' ? 'पत्राचा प्रकार' : 'Letter Type')}</div>
+              <div className="text-lg text-gray-800 font-medium whitespace-pre-line">{t[selectedLetter.letterType] || selectedLetter.letterType || 'N/A'}</div>
+            </div>
+            <div className="border-b border-blue-100" />
+            {/* 9. पत्राचे वर्गीकरण / Letter Classification */}
+            <div>
+              <div className="text-base font-bold text-blue-900 mb-1">{t.letterClassification || (language === 'mr' ? 'पत्राचे वर्गीकरण' : 'Letter Classification')}</div>
+              <div className="text-lg text-gray-800 font-medium whitespace-pre-line">{selectedLetter.letterClassification || 'N/A'}</div>
+            </div>
+            <div className="border-b border-blue-100" />
+            {/* 10. पत्र मिळाल्याचा दिनांक / Date of Receipt of Letter */}
+            <div>
+              <div className="text-base font-bold text-blue-900 mb-1">{t.date_of_receipt_of_the_letter || (language === 'mr' ? 'पत्र मिळाल्याचा दिनांक' : 'Date of Receipt of Letter')}</div>
+              <div className="text-lg text-gray-800 font-medium whitespace-pre-line">{selectedLetter.dateOfReceiptOfLetter || selectedLetter.date_of_receipt_of_the_letter || 'N/A'}</div>
+            </div>
+            <div className="border-b border-blue-100" />
+            {/* 11. विषय / Subject */}
+            <div>
+              <div className="text-base font-bold text-blue-900 mb-1">{t.subject || (language === 'mr' ? 'विषय' : 'Subject')}</div>
+              <div className="text-lg text-gray-800 font-medium whitespace-pre-line">{selectedLetter.subject || 'N/A'}</div>
+            </div>
+            {/* Attachments */}
+            {selectedLetter.letterFiles && selectedLetter.letterFiles.length > 0 && (
+              <>
+                <div className="border-b border-blue-100" />
+                <div>
+                  <div className="text-base font-bold text-blue-900 mb-1">{language === 'mr' ? 'संलग्न फाईल्स' : 'Attachments'}</div>
+                  <ul className="list-disc ml-5">
+                    {selectedLetter.letterFiles.map((file, i) => (
+                      <li key={i}>
+                        <a href={`http://localhost:5000/${file.filePath.replace(/\\/g, '/')}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                          {file.originalName || file.filePath.split('/').pop()}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
+          </div>
+          <div className="flex justify-center mt-8">
+            <button
+              className="px-8 py-2 bg-blue-600 text-white rounded-lg font-semibold shadow hover:bg-blue-700 transition-colors text-lg"
+              onClick={() => setViewModalOpen(false)}
+            >
+              {language === 'mr' ? 'बंद करा' : 'Close'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>
   );
 };

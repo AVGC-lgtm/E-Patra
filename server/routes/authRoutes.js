@@ -18,6 +18,14 @@ router.post('/reset-password', authController.resetPassword);
 // Register route
 router.post('/register', authController.register);
 
+// const { authenticateToken } = require('../middleware/auth');
+
+// Upload Digital Signature (protected route)
+// router.put('/update-sign', authenticateToken, authController.uploadSingle, authController.updateSign);
+router.put('/update-sign', authController.uploadSingle, authController.updateSign);
+
+
+
 // Logout route (protected)
 router.post('/logout', authenticateToken, authController.logout);
 

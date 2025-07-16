@@ -1,5 +1,6 @@
 const Patra = require('../models/InwardPatra');
 const User = require('../models/User');
+const File = require('../models/File');
 const { Op } = require('sequelize');
 
 // Function to generate 8-digit reference number
@@ -33,7 +34,8 @@ const createPatra = async (req, res) => {
     subject,
     outwardLetterNumber,
     numberOfCopies,
-    userId
+    userId,
+    fileId // FIXED: Get fileId from request body
   } = req.body;
 
   try {
@@ -42,15 +44,18 @@ const createPatra = async (req, res) => {
       return res.status(400).json({ error: 'User not found' });
     }
 
+    // FIXED: Validate fileId if provided
+    let validatedFileId = null;
+    if (fileId) {
+      const file = await File.findByPk(fileId);
+      if (!file) {
+        return res.status(400).json({ error: 'File not found' });
+      }
+      validatedFileId = fileId;
+    }
+
     // Generate unique reference number
     const referenceNumber = await generateReferenceNumber();
-
-    // Handle uploaded files and assign fileId (if file is uploaded)
-    let fileId = null;
-    if (req.files && req.files.length > 0) {
-      // Assuming files are handled elsewhere and fileId is already assigned
-      fileId = req.files[0].fileId;  // Assuming the first uploaded file is linked with the record
-    }
 
     const newPatra = await Patra.create({
       referenceNumber,
@@ -64,19 +69,19 @@ const createPatra = async (req, res) => {
       letterDate,
       subject,
       outwardLetterNumber,
-      numberOfCopies,
-      fileId, // Added fileId here to associate the uploaded file
+      numberOfCopies: numberOfCopies || 1, // Default to 1 if not provided
+      fileId: validatedFileId, // FIXED: Use validated fileId
       userId: user.id,
     });
 
     return res.status(201).json({
       message: 'Patra created successfully',
       referenceNumber: referenceNumber,
-      patraId: newPatra.id, // Added patraId in response
+      patraId: newPatra.id,
     });
   } catch (error) {
     console.error('Error creating Patra:', error);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
@@ -85,13 +90,24 @@ const getAllPatras = async (req, res) => {
   try {
     const patras = await Patra.findAll({
       include: [
-        { model: User, attributes: ['id', 'email'] },  // Include User to show creator info
+        {
+          model: User,
+          attributes: ['id', 'email'],
+          // FIXED: Use correct foreign key
+          foreignKey: 'userId'
+        },
+        {
+          model: File,
+          as: 'upload', // FIXED: Use the alias defined in the model
+          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+          required: false // Left join to include patras without files
+        }
       ]
     });
     return res.status(200).json(patras);
   } catch (error) {
     console.error('Error fetching all Patras:', error);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
@@ -102,7 +118,17 @@ const getPatraById = async (req, res) => {
   try {
     const patra = await Patra.findByPk(id, {
       include: [
-        { model: User, attributes: ['id', 'email'] },  // Include User to show creator info
+        {
+          model: User,
+          attributes: ['id', 'email'],
+          foreignKey: 'userId'
+        },
+        {
+          model: File,
+          as: 'upload',
+          attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
+          required: false
+        }
       ]
     });
 
@@ -113,7 +139,7 @@ const getPatraById = async (req, res) => {
     return res.status(200).json(patra);
   } catch (error) {
     console.error('Error fetching Patra by ID:', error);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
@@ -125,7 +151,17 @@ const getPatraByReferenceNumber = async (req, res) => {
     const patra = await Patra.findOne({
       where: { referenceNumber },
       include: [
-        { model: User, attributes: ['id', 'email'] },
+        {
+          model: User,
+          attributes: ['id', 'email'],
+          foreignKey: 'userId'
+        },
+        {
+          model: File,
+          as: 'upload',
+          attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
+          required: false
+        }
       ]
     });
 
@@ -136,7 +172,7 @@ const getPatraByReferenceNumber = async (req, res) => {
     return res.status(200).json(patra);
   } catch (error) {
     console.error('Error fetching Patra by reference number:', error);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
@@ -148,7 +184,17 @@ const getPatraByUserId = async (req, res) => {
     const patras = await Patra.findAll({
       where: { userId },
       include: [
-        { model: User, attributes: ['id', 'email'] },
+        {
+          model: User,
+          attributes: ['id', 'email'],
+          foreignKey: 'userId'
+        },
+        {
+          model: File,
+          as: 'upload',
+          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+          required: false
+        }
       ]
     });
 
@@ -159,10 +205,9 @@ const getPatraByUserId = async (req, res) => {
     return res.status(200).json(patras);
   } catch (error) {
     console.error('Error fetching Patras by user ID:', error);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
-
 // Delete a Patra by ID
 const deletePatraById = async (req, res) => {
   const { id } = req.params;
@@ -177,7 +222,7 @@ const deletePatraById = async (req, res) => {
     return res.status(200).json({ message: 'Patra deleted successfully' });
   } catch (error) {
     console.error('Error deleting Patra by ID:', error);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
@@ -196,7 +241,8 @@ const updatePatraById = async (req, res) => {
     subject,
     outwardLetterNumber,
     numberOfCopies,
-    userId
+    userId,
+    fileId // FIXED: Get fileId from request body
   } = req.body;
 
   try {
@@ -208,6 +254,16 @@ const updatePatraById = async (req, res) => {
     const user = await User.findByPk(userId);
     if (!user) {
       return res.status(400).json({ error: 'User not found' });
+    }
+
+    // FIXED: Validate fileId if provided
+    let validatedFileId = patra.fileId; // Keep existing fileId by default
+    if (fileId && fileId !== patra.fileId) {
+      const file = await File.findByPk(fileId);
+      if (!file) {
+        return res.status(400).json({ error: 'File not found' });
+      }
+      validatedFileId = fileId;
     }
 
     const updateData = {
@@ -223,24 +279,30 @@ const updatePatraById = async (req, res) => {
       outwardLetterNumber,
       numberOfCopies,
       userId: user.id,
+      fileId: validatedFileId, // FIXED: Update fileId properly
     };
 
-    // Handle fileId if file is uploaded
-    let fileId = patra.fileId;
-    if (req.files && req.files.length > 0) {
-      fileId = req.files[0].fileId;  // Assuming the first uploaded file is linked with the record
-    }
-
-    await patra.update({
-      ...updateData,
-      fileId, // Update fileId
+    await patra.update(updateData);
+    await patra.reload({
+      include: [
+        {
+          model: User,
+          attributes: ['id', 'email'],
+          foreignKey: 'userId'
+        },
+        {
+          model: File,
+          as: 'upload',
+          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+          required: false
+        }
+      ]
     });
-    await patra.reload();
 
     return res.status(200).json({ message: 'Patra updated successfully', patra });
   } catch (error) {
     console.error('Error updating Patra by ID:', error);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
@@ -252,7 +314,17 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
     const patra = await Patra.findOne({
       where: { id: patraId, userId },
       include: [
-        { model: User, attributes: ['id', 'email'] },
+        {
+          model: User,
+          attributes: ['id', 'email'],
+          foreignKey: 'userId'
+        },
+        {
+          model: File,
+          as: 'upload',
+          attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
+          required: false
+        }
       ]
     });
 
@@ -263,7 +335,7 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
     return res.status(200).json(patra);
   } catch (error) {
     console.error('Error fetching Patra by user ID and Patra ID:', error);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 

@@ -25,6 +25,24 @@ const Login = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // ADDED: Function to decode JWT token
+  const decodeToken = (token) => {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      console.error('Error decoding token:', error);
+      return null;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -53,7 +71,38 @@ const Login = ({ onLogin }) => {
       const data = await response.json();
 
       if (response.ok) {
-        onLogin(data.token);
+        // ADDED: Decode the token to extract user information
+        const decodedToken = decodeToken(data.token);
+        
+        if (decodedToken) {
+          console.log('Decoded token:', decodedToken);
+          
+          // ADDED: Store all user information in localStorage
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('userId', decodedToken.id.toString());
+          localStorage.setItem('userEmail', decodedToken.email);
+          localStorage.setItem('userRole', decodedToken.roleName);
+          localStorage.setItem('userRoleId', decodedToken.roleId.toString());
+          localStorage.setItem('userStation', decodedToken.stationName);
+          
+          // ADDED: Store the complete user object for easy access
+          const userInfo = {
+            id: decodedToken.id,
+            email: decodedToken.email,
+            roleId: decodedToken.roleId,
+            roleName: decodedToken.roleName,
+            stationName: decodedToken.stationName,
+            token: data.token
+          };
+          localStorage.setItem('userInfo', JSON.stringify(userInfo));
+          
+          console.log('User info stored:', userInfo);
+          
+          // Call the onLogin callback with the token
+          onLogin(data.token);
+        } else {
+          setError('Invalid token received. Please try again.');
+        }
       } else {
         setError(data.message || 'Login failed. Please try again.');
       }
@@ -64,8 +113,6 @@ const Login = ({ onLogin }) => {
       setIsLoading(false);
     }
   };
-
-
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">

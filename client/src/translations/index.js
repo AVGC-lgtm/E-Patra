@@ -20,7 +20,7 @@ const translations = {
     receivedByOffice: 'Office sending the letter',
     recipientName: 'Name and designation of the sender',
     designation: 'Designation',
-    letterCategory: 'Letter Category',
+    letterClassification: 'Letter Classification',
     letterType: 'Letter Type',
     letterMedium: 'Letter Medium',
     letterStatus: 'Letter Category',
@@ -52,19 +52,189 @@ const translations = {
     inquiry: 'Inquiry',
     report: 'Report',
     notice_memo: 'Notice Memo',
-    date_of_receipt_of_the_letter:"Date of Receipt of the Letter",
-    no_of_documents:"No of Documents",
+    date_of_receipt_of_the_letter: "Date of Receipt of the Letter",
+    no_of_documents: "No of Documents",
     // Letter Mediums
     hard_copy: 'Hard Copy',
     soft_copy: 'Soft Copy',
-    soft_copy_and_hard_copy:"Soft Copy and Hard Copy",
-    outward_letter_no:"Outward Letter No",
+    soft_copy_and_hard_copy: "Soft Copy and Hard Copy",
+    outward_letter_no: "Outward Letter No",
+
+    // Letter Classifications
+    select_category: "Select Category",
+    senior_mail: "Senior Mail",
+    a_class: "A Class",
+    reference: "Reference",
+    c_class: "C Class",
+    direct_visit: "Direct Visit",
+    legal_and_administrative: "Legal and Administrative",
+    cyber_technical: "Cyber Technical",
+    application: "Application",
+    license_and_permission: "License and Permission",
+    portal_application: "Portal Application",
+    others: "Others",
 
     // Letter Types
     official: 'Official',
     confidential: 'Confidential',
     urgent: 'Urgent',
     standard: 'Standard',
+    
+    // Letter Types in English - Senior Mail
+    senior_post_dgp: 'Senior Mail - Director General of Police',
+    senior_post_govt_maharashtra: 'Senior Mail - Government of Maharashtra',
+    senior_post_igp: 'Senior Mail - Inspector General of Police',
+    senior_post_addl_dgp: 'Senior Mail - Additional Director General of Police',
+    senior_post_accountant_general: 'Senior Mail - Accountant General Office, Nagpur Maharashtra State Mumbai',
+    senior_post_accountant_general_office: 'Senior Mail - Accountant General Office, Maharashtra State Mumbai',
+    senior_post_director_pay_verification: 'Senior Mail - Director, Pay Verification Squad, Nashik',
+    senior_post_police_commissioner: 'Senior Mail - Police Commissioner',
+    senior_post_divisional_commissioner: 'Senior Mail - Divisional Commissioner Semi-Government Reference',
+    senior_post_sp: 'Senior Mail - SP',
+    senior_post_sdpo: 'Senior Mail - SDPO',
+    
+    // Category A
+    category_a_pm: 'A Class - Hon. Prime Minister',
+    category_a_cm: 'A Class - Hon. Chief Minister',
+    category_a_deputy_cm: 'A Class - Hon. Deputy Chief Minister',
+    category_a_home_minister: 'A Class - Hon. Home Minister',
+    category_a_mos_home: 'A Class - Hon. Minister of State for Home',
+    category_a_guardian_minister: 'A Class - Hon. Guardian Minister',
+    category_a_union_minister: 'A Class - Union Minister',
+    category_a_mp: 'A Class - Member of Parliament',
+    category_a_mla: 'A Class - Member of Legislative Assembly',
+    category_a_others: 'A Class - Others',
+    
+    // References
+    your_government_reference: 'Your Government Reference',
+    mla_reference: 'MLA Reference',
+    district_sp_reference: 'District SP Reference',
+    mp_reference: 'MP Reference',
+    district_collector_reference: 'District Collector Reference',
+    payment_reference: 'Payment Reference',
+    judicial_reference: 'Judicial Reference',
+    disposed_reference: 'Disposed Reference',
+    circular: 'Circular',
+    minister_reference: 'Minister Reference',
+    mayor_officer_councilor: 'Mayor Officer/Councilor',
+    human_rights_reference: 'Human Rights Reference',
+    lokayukta_reference: 'Lokayukta/Deputy Lokayukta Reference',
+    democracy_day_reference: 'Democracy Day Reference',
+    assembly_questions: 'Assembly Starred/Unstarred Questions',
+    divisional_commissioner_reference: 'Divisional Commissioner Reference',
+    government_order: 'Government Order',
+    government_reference: 'Government Reference',
+    
+    // Category C (K)
+    category_k_police_commissioner: 'C Class - Police Commissioner',
+    category_k_divisional_commissioner: 'C Class - Divisional Commissioner',
+    category_k_district_collector: 'C Class - District Collector',
+    category_k_sainik_board: 'C Class - Sainik Board',
+    category_k_senior_army_officer: 'C Class - Senior Army Officer',
+    category_k_democracy_day: 'C Class - Democracy Day',
+    category_k_sdpo_nagar_city: 'C Class - S.D.P.O. Nagar City',
+    category_k_sdpo_nagar_taluka: 'C Class - S.D.P.O. Nagar Taluka',
+    category_k_sdpo_sangamner: 'C Class - S.D.P.O. Sangamner',
+    category_k_sdpo_shrirampur: 'C Class - S.D.P.O. Shrirampur',
+    category_k_sdpo_karjat: 'C Class - S.D.P.O. Karjat',
+    category_k_sdpo_shirdi: 'C Class - S.D.P.O. Shirdi',
+    category_k_sdpo_shevgaon: 'C Class - S.D.P.O. Shevgaon',
+    category_k_all_police_stations: 'C Class - All Police Stations',
+    category_k_all_branches: 'C Class - All Branches',
+    
+    // Category V - Direct Meetings
+    category_v_sp_ahmednagar: 'V Class - SP Ahmednagar (Direct Meeting)',
+    category_v_addl_sp_ahmednagar: 'V Class - Additional SP Ahmednagar (Direct Meeting)',
+    
+    // Legal & Administrative
+    approval_crime: 'Crime Approval',
+    error: 'Error',
+    hospital_record: 'Hospital Record',
+    earned_leave_case: 'Earned Leave Case',
+    parole_leave_case: 'Parole Leave Case',
+    weekly_diary: 'Weekly Diary',
+    daily_section: 'Daily Section',
+    fingerprint: 'Fingerprint',
+    medical_bill: 'Medical Bill',
+    tenant_verification: 'Tenant Verification',
+    leave_approval: 'Leave Approval',
+    warrant: 'Warrant',
+    disclosure_absentee: 'Disclosure/Absentee',
+    deceased_summary_approval: 'Deceased Summary Approval',
+    visa: 'Visa',
+    departmental_inquiry_order: 'Departmental Inquiry Order',
+    final_order: 'Final Order',
+    district_police_press_release: 'District Police Press Release',
+    annexure: 'Annexure',
+    office_inspection: 'Office Inspection',
+    vip_visit: 'VIP Visit',
+    bandobast: 'Bandobast',
+    reward_punishment: 'Reward/Punishment',
+    in_charge_officer_order: 'In-charge Officer Order',
+    do_order: 'D.O. Order',
+    
+    // Cyber & Technical
+    cyber: 'Cyber',
+    cdr: 'CDR',
+    caf: 'CAF',
+    sdr: 'SDR',
+    imei: 'IMEI',
+    dump_data: 'Dump Data',
+    it_act: 'IT Act',
+    facebook: 'Facebook',
+    whatsapp: 'WhatsApp',
+    online_fraud: 'Online Fraud',
+    cdr_sdr_caf_ime_ipdr_dump: 'CDR/SDR/CAF/IME/IPDR/Dump',
+    
+    // Applications
+    application_branch_inquiry: 'Application Branch Inquiry Report',
+    appeal: 'Appeal',
+    in_service_training: 'In-service Training',
+    building_branch: 'Building Branch',
+    pension_reference: 'Pension Reference',
+    govt_vehicle_license: 'Government Vehicle License',
+    bills: 'Bills',
+    departmental_inquiry: 'Departmental Inquiry',
+    kasuri_case: 'Kasuri Case',
+    salary_fixation: 'Salary Fixation',
+    transfer: 'Transfer',
+    local_application: 'Local Application',
+    nivvi_application: 'Nivvi Application',
+    district_soldier_application: 'District Soldier Application',
+    loan_application: 'Loan Application',
+    democracy_application: 'Democracy Application',
+    confidential_application: 'Confidential Application',
+    
+    // Licenses & Permissions
+    weapon_license: 'Weapon License',
+    character_verification: 'Character Verification',
+    loudspeaker_license: 'Loudspeaker License',
+    entertainment_noc: 'Entertainment NOC',
+    event_permission: 'Event Permission',
+    business_noc: 'Business NOC',
+    paid_bandobast: 'Paid Bandobast',
+    security_guard_agency: 'Security Guard Agency',
+    explosive_license: 'Explosive License',
+    deity_status_k: 'Deity Status K Class',
+    deity_status_b: 'Deity Status B Class',
+    other_licenses: 'Other Licenses',
+    
+    // Portal Applications
+    portal_pm_pg: 'Portal Application - Prime Minister (P.G.)',
+    portal_your_government: 'Portal Application - Your Government',
+    portal_home_minister: 'Portal Application - HOMD (Home Minister)',
+    
+    // Other Categories
+    other: 'Other',
+    treasury: 'Treasury',
+    assessor: 'Assessor',
+    principal_ptc: 'Principal - Police Training Center',
+    self_immolation: 'Self Immolation',
+    civil_rights_protection: 'Civil Rights Protection',
+    pcr: 'PCR',
+    steno: 'Steno',
+    stenographer: 'Stenographer',
+    
     // Letter Status
     acknowledged: 'Acknowledged',
     received: 'Received',
@@ -113,10 +283,9 @@ const translations = {
     receivedByOffice: 'पत्र पाठविणारे कार्यालय',
     recipientName: 'पत्र पाठविण्याऱ्याचे नाव व पदनाम',
     designation: 'पदनाम',
-    letterCategory: 'पत्राची श्रेणी',
+    letterClassification: 'पत्र वर्गीकरण',
     letterType: 'पत्राचा प्रकार',
     letterMedium: 'पत्राचे माध्यम',
-    letterCategory: 'पत्र वर्गीकरण',
     selectType: 'प्रकार निवडा',
     letterDate: 'पत्राची तारीख',
     officeType: 'कार्यालयाचा प्रकार',
@@ -134,41 +303,41 @@ const translations = {
     submit: 'सबमिट करा',
     reset: 'रीसेट करा',
     remarks: 'टिप्पण्या',
-    Outgoing_Reference_Number_of_the_Received_Letter :"प्राप्त पत्राचा जावक क्रमांक",
-    along_with_the_Number_of_Enclosures :"सह कागद पत्रांची संख्या",
-    date_of_receipt_of_the_letter:"पत्र मिळाल्याचा दिनांक",
-    no_of_documents:"सह कागद पत्रांची संख्या",
+    Outgoing_Reference_Number_of_the_Received_Letter: "प्राप्त पत्राचा जावक क्रमांक",
+    along_with_the_Number_of_Enclosures: "सह कागद पत्रांची संख्या",
+    date_of_receipt_of_the_letter: "पत्र मिळाल्याचा दिनांक",
+    no_of_documents: "सह कागद पत्रांची संख्या",
     subject: 'विषय',
     details: 'तपशील',
     fileUploaded: 'फाईल अपलोड केली',
     remove: 'काढून टाका',
     letterSubmitted: 'पत्र यशस्वीरित्या सबमिट केले!',
     submitError: 'पत्र सबमिट करण्यात अयशस्वी. कृपया पुन्हा प्रयत्न करा.',
-    outward_letter_no:"प्राप्त पत्राचा जावक क्रमांक",
+    outward_letter_no: "प्राप्त पत्राचा जावक क्रमांक",
 
     // Letter Categories
     complaint: 'तक्रार',
     inquiry: 'चौकशी',
     report: 'अहवाल',
     notice_memo: 'नोटीस मेमो',
- 
-    select_category:"वर्गीकरण निवडा",
-    senior_mail:"वरिष्ठ टपाल",
-    a_class:"अ वर्ग",
-    reference:"संदर्भ",
-    c_class:"क वर्ग",
-    direct_visit:"व वर्ग",
-    legal_and_administrative:"कायदेशीर व प्रशासकीय ",
-    cyber_technical:"सायबर आणि तांत्रिक",
-    application:"अर्ज",
-    license_and_permission:"परवाने आणि परवानग्या",
-    portal_application:"पोर्टल अर्ज",
-    others:"इतर ",
-  
+
+    select_category: "वर्गीकरण निवडा",
+    senior_mail: "वरिष्ठ टपाल",
+    a_class: "अ वर्ग",
+    reference: "संदर्भ",
+    c_class: "क वर्ग",
+    direct_visit: "व वर्ग",
+    legal_and_administrative: "कायदेशीर व प्रशासकीय",
+    cyber_technical: "सायबर आणि तांत्रिक",
+    application: "अर्ज",
+    license_and_permission: "परवाने आणि परवानग्या",
+    portal_application: "पोर्टल अर्ज",
+    others: "इतर",
+
     // Letter Mediums
     hard_copy: 'हार्ड कॉपी',
     soft_copy: 'सॉफ्ट कॉपी',
-    soft_copy_and_hard_copy:"सॉफ्ट कॉपी आणि हार्ड कॉपी",
+    soft_copy_and_hard_copy: "सॉफ्ट कॉपी आणि हार्ड कॉपी",
     // Letter Types
     official: 'अधिकृत',
     confidential: 'गोपनीय',
@@ -200,7 +369,7 @@ const translations = {
     dpo_jalgaon: 'जिल्हा पोलीस अधिकारी जळगाव',
     dpo_nandurbar: 'जिल्हा पोलीस अधिकारी नंदुरबार',
     dpo_nashik_rural: 'जिल्हा पोलीस अधिकारी नाशिक ग्रामीण',
-    
+
     // Letter Types in Marathi
     senior_post_dgp: 'वरिष्ठ टपाल - पोलिस महासंचालक',
     senior_post_govt_maharashtra: 'वरिष्ठ टपाल - महाराष्ट्र शासन',
@@ -213,7 +382,7 @@ const translations = {
     senior_post_divisional_commissioner: 'वरिष्ठ टपाल - विभागीय आयुक्त अर्धशासकीय संदर्भ',
     senior_post_sp: 'वरिष्ठ टपाल - एसपी',
     senior_post_sdpo: 'वरिष्ठ टपाल - एसडीपीओ',
-    
+
     // Category A
     category_a_pm: 'अ वर्ग - मा. पंतप्रधान',
     category_a_cm: 'अ वर्ग - मा. मुख्यमंत्री',
@@ -225,7 +394,7 @@ const translations = {
     category_a_mp: 'अ वर्ग - खासदार',
     category_a_mla: 'अ वर्ग - आमदार',
     category_a_others: 'अ वर्ग - इतर',
-    
+
     // References
     your_government_reference: 'आपले सरकार संदर्भ',
     mla_reference: 'आमदार संदर्भ',
@@ -245,7 +414,7 @@ const translations = {
     divisional_commissioner_reference: 'विभागीय आयुक्त संदर्भ',
     government_order: 'शासन पत्र',
     government_reference: 'शासन संदर्भ',
-    
+
     // Category K
     category_k_police_commissioner: 'क वर्ग - पोलिस आयुक्त',
     category_k_divisional_commissioner: 'क वर्ग - विभागीय आयुक्त',
@@ -262,13 +431,12 @@ const translations = {
     category_k_sdpo_shevgaon: 'क वर्ग - एस. डी. पी. ओ. शेवगांव',
     category_k_all_police_stations: 'क वर्ग - सर्व पोलिस स्टेशन',
     category_k_all_branches: 'क वर्ग - सर्व शाखा',
-    
+
     // Category V - Direct Meetings
     category_v_sp_ahmednagar: 'व वर्ग - मा.पो. अ.सो अहमदनगर (प्रत्यक्ष भेट)',
     category_v_addl_sp_ahmednagar: 'व वर्ग - मा. अप्पर पो.अ. अहमदनगर (प्रत्यक्ष भेट)',
-    
+
     // Legal & Administrative
-    confidential: 'गोपनीय',
     approval_crime: 'मंजुरी गुन्हा',
     error: 'त्रुटी',
     hospital_record: 'दवाखाना नोंद',
@@ -294,7 +462,7 @@ const translations = {
     reward_punishment: 'बक्षिस /शिक्षा',
     in_charge_officer_order: 'प्रभारी अधिकारी आदेश',
     do_order: 'डी. ओ.',
-    
+
     // Cyber & Technical
     cyber: 'सायबर',
     cdr: 'सीडीआर',
@@ -307,7 +475,7 @@ const translations = {
     whatsapp: 'व्हॉट्सअॅप',
     online_fraud: 'ऑनलाईन फसवणूक',
     cdr_sdr_caf_ime_ipdr_dump: 'सीडीआर/एसडीआर/सीएएफ/आयएमई/आयपीडीआर/डंप',
-    
+
     // Applications
     application_branch_inquiry: 'अर्ज शाखा चौकशी अहवाल',
     appeal: 'अपील',
@@ -326,7 +494,7 @@ const translations = {
     loan_application: 'सावकारी संदर्भात अर्ज',
     democracy_application: 'लोकशाही संदर्भातील अर्ज',
     confidential_application: 'गोपनीय अर्ज',
-    
+
     // Licenses & Permissions
     weapon_license: 'शस्त्र परवाना',
     character_verification: 'चारित्र्य पडताळणी',
@@ -340,12 +508,12 @@ const translations = {
     deity_status_k: 'देवस्थान दर्जा क वर्ग',
     deity_status_b: 'देवस्थान दर्जा ब वर्ग',
     other_licenses: 'इतर परवाने',
-    
+
     // Portal Applications
     portal_pm_pg: 'पोर्टल अर्ज वर्ग-पंतप्रधान (पी.जी.)',
     portal_your_government: 'पोर्टल अर्ज वर्ग-आपले सरकार',
     portal_home_minister: 'पोर्टल अर्ज वर्ग-एच ओ एम डी (गृहराज्यमंत्री)',
-    
+
     // Other Categories
     other: 'इतर',
     treasury: 'कोषागार',
@@ -359,12 +527,12 @@ const translations = {
   },
   branch_data: {
     // Office Types
-    igp:'आयजीपी',
+    igp: 'आयजीपी',
     sp: 'एसपी',
     sdpo: 'एसडीपीओ',
     police_station: 'पोलीस स्टेशन',
     district_police_officer: 'जिल्हा पोलीस अधिकारी अहमदनगर',
-    
+
     // SP Branches
     economic_crime_branch: 'आर्थिक गुन्हा शाखा',
     registration_branch: 'नोंदणी शाखा',
@@ -392,7 +560,7 @@ const translations = {
     addl_sp_shrirampur: 'अतिरिक्त एसपी श्रीरामपूर',
     north_mobile_cell: 'नॉर्थ मोबाईल सेल',
     shirdi_traffic_branch: 'शिर्डी ट्रॅफिक शाखा',
-    
+
     // SDPO Branches
     shevgaon_inward: 'शेवगाव इनवर्ड शाखा',
     shikrapur_inward: 'शिक्रापूर इनवर्ड शाखा',
@@ -401,7 +569,7 @@ const translations = {
     karjat_inward: 'करजत इनवर्ड शाखा',
     rural_inward: 'ग्रामीण इनवर्ड शाखा',
     shirdi_inward: 'शिर्डी इनवर्ड शाखा',
-    
+
     // Police Stations
     nevasak_ps: 'नेवासा पोलीस स्टेशन',
     sonai_ps: 'सोनाई पोलीस स्टेशन',
@@ -447,7 +615,7 @@ const translations = {
     kohokade_city_ps: 'कोहोकाडे सिटी पोलीस स्टेशन',
     kohokade_rural_2_ps: 'कोहोकाडे ग्रामीण २ पोलीस स्टेशन',
     kohokade_city_2_ps: 'कोहोकाडे सिटी २ पोलीस स्टेशन',
-  
+
   },
 };
 

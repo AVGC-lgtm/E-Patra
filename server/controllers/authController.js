@@ -5,6 +5,48 @@ const User = require('../models/User');
 const Role = require('../models/Role');
 const authResponses = require('../responses/authResponses'); // Importing response module
 const { getPasswordResetOTPTemplate, getWelcomeEmailTemplate, getPasswordChangedTemplate } = require('../utils/emailTemplates');
+const multer = require('multer');
+const multerS3 = require('multer-s3');
+const { S3Client } = require('@aws-sdk/client-s3');
+require('dotenv').config();
+
+
+// AWS S3 Configuration
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY,
+    secretAccessKey: process.env.AWS_SECRET_KEY,
+  },
+});
+
+// Setup multer to upload the signature to S3
+const upload = multer({
+  storage: multerS3({
+    s3: s3Client,
+    bucket: process.env.AWS_BUCKET_NAME,
+    contentType: multerS3.AUTO_CONTENT_TYPE,
+    key: (req, file, cb) => {
+      const fileName = `signatures/${Date.now()}-${file.originalname}`;
+      cb(null, fileName);
+    },
+  }),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+    files: 1, // Only allow one file at a time
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || file.mimetype === 'image/png' || file.mimetype === 'image/jpeg') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF, PNG, or JPEG files are allowed'), false);
+    }
+  },
+});
+
+// Create upload middleware for handling digital signature uploads
+const uploadSingle = upload.single('sign'); // 'sign' is the field name used in the form
+
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -88,19 +130,19 @@ const login = async (req, res) => {
 
   try {
     const user = await User.findOne({ where: { email }, include: Role });
-    
+
     const valid = user && await bcrypt.compare(password, user.password);
     if (!valid) {
       return res.status(401).json(authResponses.error('Invalid email or password'));
     }
 
     const token = jwt.sign(
-      { 
-        id: user.id, 
-        email, 
-        roleId: user.roleId, 
-        roleName: user.Role.roleName, 
-        stationName: user.stationName 
+      {
+        id: user.id,
+        email,
+        roleId: user.roleId,
+        roleName: user.Role.roleName,
+        stationName: user.stationName
       },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
@@ -150,7 +192,7 @@ const forgotPassword = async (req, res) => {
     if (user) {
       user.otpHash = null;
       user.otpExpiration = null;
-      await user.save().catch(() => {});
+      await user.save().catch(() => { });
     }
     return res.status(500).json(authResponses.error('Server error'));
   }
@@ -228,6 +270,46 @@ const resetPassword = async (req, res) => {
   }
 };
 
+
+const updateSign = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  const { userId } = req.body;  // Get userId from the request body
+
+  if (!userId) {
+    return res.status(400).json({ error: 'User ID is required' });
+  }
+
+  try {
+    // Find the user by userId
+    const user = await User.findByPk(userId); // Assuming userId is passed as a number or string
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get the file URL from S3
+    const signUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${req.file.key}`;
+
+    // Update the user with the digital signature URL
+    user.sign = signUrl;
+    await user.save();
+
+    // Return success response with the user ID and the new signature URL
+    return res.status(200).json({
+      success: 'Digital signature updated successfully',
+      userId: user.id,  // Include user ID in response
+      sign: signUrl,
+    });
+  } catch (error) {
+    console.error('Error updating digital signature:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+
 // Logout
 const logout = (req, res) => {
   return res.json(authResponses.logout());
@@ -239,5 +321,7 @@ module.exports = {
   forgotPassword,
   verifyOtp,
   resetPassword,
-  logout
+  logout,
+  updateSign,
+  uploadSingle,
 };

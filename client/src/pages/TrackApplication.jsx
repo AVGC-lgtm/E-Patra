@@ -171,15 +171,15 @@ const TrackApplication = () => {
                     {language === 'mr' ? 'विषय' : 'Subject'}
                   </p>
                   <p className="font-medium">
-                    {application.subjectAndDetails?.split(':')[0] || 'N/A'}
+                    {application.subject?.split(':')[0] || 'N/A'}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">
-                    {language === 'mr' ? 'स्थिती' : 'Status'}
+                    {language === 'mr' ? 'पत्र पाठविण्याऱ्याचे नाव व पदनाम' : 'Name and designation of the sender'}
                   </p>
                   <p className="font-medium capitalize">
-                    {application.letterStatus?.toLowerCase() || 'N/A'}
+                    {application.senderNameAndDesignation?.toLowerCase() || 'N/A'}
                   </p>
                 </div>
               </div>
