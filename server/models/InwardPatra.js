@@ -1,104 +1,74 @@
-// models/InwardPatra.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
-const File    = require('./File');
-const User    = require('./User');
+const File = require('./File');
+const User = require('./User');
 
 const InwardPatra = sequelize.define('InwardPatra', {
-  // 0. Auto-generated 8-digit reference number
   referenceNumber: {
     type: DataTypes.STRING(8),
     allowNull: false,
     unique: true,
   },
-
-  // 1. Date of Receipt of the Letter
   dateOfReceiptOfLetter: {
     type: DataTypes.TEXT,
-    allowNull: false,
+    allowNull: true,
   },
-
-  // 2. Office Sending the Letter
   officeSendingLetter: {
     type: DataTypes.TEXT,
-    allowNull: false,
+    allowNull: true,
   },
-
-  // 3. Name and Designation of the Sender
   senderNameAndDesignation: {
     type: DataTypes.TEXT,
-    allowNull: false,
+    allowNull: true,
   },
-
-  // 4. Mobile Number
   mobileNumber: {
     type: DataTypes.TEXT,
     allowNull: true,
   },
-
-  // 5. Letter Medium
   letterMedium: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
   },
-
-  // 6. Letter Classification
   letterClassification: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
   },
-
-  // 7. Letter Type
   letterType: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
   },
-
-  // 8. Date of the Letter
   letterDate: {
     type: DataTypes.DATEONLY,
-    allowNull: false,
+    allowNull: true,
   },
-
-  // 9. Subject
   subject: {
     type: DataTypes.TEXT,
-    allowNull: false,
+    allowNull: true,
   },
-
-  // 10. Outward Letter Number
   outwardLetterNumber: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
   },
-
-  // 11. Number of Copies
   numberOfCopies: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     defaultValue: 1,
   },
-
-  // reference to uploaded file
   fileId: {
     type: DataTypes.INTEGER,
-    allowNull: true,
+    allowNull: false,
     references: { model: File, key: 'id' },
   },
-
-  // who created it
   userId: {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: { model: User, key: 'id' },
   },
-
 }, {
   underscored: true,
   timestamps: true,
 });
 
-// Associations
 InwardPatra.belongsTo(File, { as: 'upload', foreignKey: 'file_id' });
 InwardPatra.belongsTo(User, { foreignKey: 'user_id' });
 

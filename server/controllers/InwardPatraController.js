@@ -31,12 +31,17 @@ const createPatra = async (req, res) => {
     letterClassification,
     letterType,
     letterDate,
-    subject,
+    subject,  // Ensure subject is passed in request body
     outwardLetterNumber,
     numberOfCopies,
     userId,
-    fileId // FIXED: Get fileId from request body
+    fileId
   } = req.body;
+
+  // Ensure subject is provided
+  if (!subject) {
+    return res.status(400).json({ error: 'subject is required' });
+  }
 
   try {
     const user = await User.findByPk(userId);
@@ -44,7 +49,6 @@ const createPatra = async (req, res) => {
       return res.status(400).json({ error: 'User not found' });
     }
 
-    // FIXED: Validate fileId if provided
     let validatedFileId = null;
     if (fileId) {
       const file = await File.findByPk(fileId);
@@ -54,7 +58,6 @@ const createPatra = async (req, res) => {
       validatedFileId = fileId;
     }
 
-    // Generate unique reference number
     const referenceNumber = await generateReferenceNumber();
 
     const newPatra = await Patra.create({
@@ -67,10 +70,10 @@ const createPatra = async (req, res) => {
       letterClassification,
       letterType,
       letterDate,
-      subject,
+      subject,  // Pass subject to the model
       outwardLetterNumber,
-      numberOfCopies: numberOfCopies || 1, // Default to 1 if not provided
-      fileId: validatedFileId, // FIXED: Use validated fileId
+      numberOfCopies: numberOfCopies || 1,  // Default to 1 if not provided
+      fileId: validatedFileId,
       userId: user.id,
     });
 
@@ -84,6 +87,7 @@ const createPatra = async (req, res) => {
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
+
 
 // Get all Patras
 const getAllPatras = async (req, res) => {
@@ -99,7 +103,7 @@ const getAllPatras = async (req, res) => {
         {
           model: File,
           as: 'upload', // FIXED: Use the alias defined in the model
-          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+          attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
           required: false // Left join to include patras without files
         }
       ]
