@@ -1,4 +1,4 @@
-// models/File.js
+// models/File.js - Clean version without associations
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
@@ -31,15 +31,16 @@ const File = sequelize.define('File', {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW
   },
-  extractData: { // FIXED: Changed from extractData to extractedData for consistency
+  extractData: {
     type: DataTypes.JSON,
-    allowNull: true
+    allowNull: true,
+    comment: 'Extracted text and metadata from PDF'
   },
   solution: {
     type: DataTypes.TEXT,
     allowNull: true
   },
-  problemStatement: { // FIXED: Corrected typo from problemStatemet
+  problemStatement: {
     type: DataTypes.TEXT,
     allowNull: true
   }
@@ -49,13 +50,6 @@ const File = sequelize.define('File', {
   underscored: true
 });
 
-// FIXED: Add association method
-File.associate = function(models) {
-  // A file can be associated with multiple patras
-  File.hasMany(models.InwardPatra, {
-    foreignKey: 'fileId',
-    as: 'patras'
-  });
-};
+// No associations defined here - they will be in associations.js
 
 module.exports = File;

@@ -13,6 +13,7 @@ const PoliceStation = require('./models/PoliceStation');  // Import PoliceStatio
 const acknowledgmentRoutes = require('./routes/acknowledgmentRoutes');
 const policeStationRoutes = require('./routes/policeStationRoutes');  // Import PoliceStation routes
 const fileRoutes = require('./routes/fileRoutes');
+const coveringLetters = require('./routes/coveringLetterRoutes');
 
 const app = express();
 
@@ -76,6 +77,7 @@ app.use('/api/patras', InwardPatraRoutes);
 app.use('/api/acknowledgments', acknowledgmentRoutes);
 app.use('/api', policeStationRoutes); 
 app.use('/api/files', fileRoutes);
+app.use('/api/letters', coveringLetters);
 
 // Sync the database and then create the default roles and stations before starting the server
 sequelize.sync({ force: false, alter: true })  // Automatically update the tables without dropping them

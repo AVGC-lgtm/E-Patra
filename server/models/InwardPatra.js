@@ -1,7 +1,6 @@
+// models/InwardPatra.js - Fixed with proper associations
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
-const File = require('./File');
-const User = require('./User');
 
 const InwardPatra = sequelize.define('InwardPatra', {
   referenceNumber: {
@@ -71,19 +70,19 @@ const InwardPatra = sequelize.define('InwardPatra', {
   fileId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: File, key: 'id' },
+    references: { model: 'files', key: 'id' },
   },
   userId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: User, key: 'id' },
+    references: { model: 'users', key: 'id' },
   },
 }, {
   underscored: true,
   timestamps: true,
+  tableName: 'inward_patras'
 });
 
-InwardPatra.belongsTo(File, { as: 'upload', foreignKey: 'file_id' });
-InwardPatra.belongsTo(User, { foreignKey: 'user_id' });
+// Remove any associations from here - they will be defined in associations.js
 
 module.exports = InwardPatra;

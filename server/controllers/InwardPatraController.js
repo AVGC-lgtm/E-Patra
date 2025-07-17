@@ -1,6 +1,13 @@
+// controllers/InwardPatraController.js - Fixed with proper model imports
 const Patra = require('../models/InwardPatra');
 const User = require('../models/User');
 const File = require('../models/File');
+const CoveringLetter = require('../models/CoveringLetter');
+
+// Import associations to ensure they're loaded
+require('../models/associations');
+
+const coveringLetterController = require('./coveringLetterController');
 const { Op } = require('sequelize');
 
 // Function to generate 8-digit reference number
@@ -20,7 +27,7 @@ const generateReferenceNumber = async () => {
   return referenceNumber;
 };
 
-// Create a new Patra (InwardPatra)
+// Create a new Patra (InwardPatra) with auto-generated covering letter
 const createPatra = async (req, res) => {
   const {
     dateOfReceiptOfLetter,
@@ -76,26 +83,52 @@ const createPatra = async (req, res) => {
       subject,
       outwardLetterNumber,
       numberOfCopies: numberOfCopies || 1,
-      letterStatus: letterStatus || 'sending for head sign', // Default status when patra is submitted
+      letterStatus: letterStatus || 'sending for head sign',
       NA: NA || false,
       NAR: NAR || false,
       fileId: validatedFileId,
       userId: user.id,
     });
 
-    return res.status(201).json({
-      message: 'Patra created successfully',
-      referenceNumber: referenceNumber,
-      patraId: newPatra.id,
-      letterStatus: newPatra.letterStatus,
-    });
+    // AUTO-GENERATE COVERING LETTER
+    try {
+      const coveringLetter = await coveringLetterController.autoGenerateCoveringLetter(
+        newPatra.id, 
+        user.id
+      );
+      
+      console.log('Covering letter generated automatically:', coveringLetter.id);
+      
+      return res.status(201).json({
+        message: 'Patra created successfully with covering letter',
+        referenceNumber: referenceNumber,
+        patraId: newPatra.id,
+        letterStatus: newPatra.letterStatus,
+        coveringLetterId: coveringLetter.id,
+        coveringLetterGenerated: true
+      });
+
+    } catch (coveringLetterError) {
+      console.error('Error generating covering letter:', coveringLetterError);
+      
+      // Still return success for Patra creation, but note covering letter failed
+      return res.status(201).json({
+        message: 'Patra created successfully, but covering letter generation failed',
+        referenceNumber: referenceNumber,
+        patraId: newPatra.id,
+        letterStatus: newPatra.letterStatus,
+        coveringLetterGenerated: false,
+        coveringLetterError: coveringLetterError.message
+      });
+    }
+
   } catch (error) {
     console.error('Error creating Patra:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
-// Get all Patras
+// Get all Patras with their covering letters
 const getAllPatras = async (req, res) => {
   try {
     const patras = await Patra.findAll({
@@ -107,20 +140,36 @@ const getAllPatras = async (req, res) => {
         },
         {
           model: File,
-          as: 'upload',
+          as: 'uploadedFile',
           attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
           required: false
         }
       ]
     });
-    return res.status(200).json(patras);
+
+    // Add covering letter info to each patra
+    const patrasWithCoveringLetters = await Promise.all(
+      patras.map(async (patra) => {
+        const coveringLetter = await CoveringLetter.findOne({
+          where: { patraId: patra.id },
+          attributes: ['id', 'letterType', 'status', 'letterNumber', 'generatedAt']
+        });
+
+        return {
+          ...patra.toJSON(),
+          coveringLetter: coveringLetter || null
+        };
+      })
+    );
+
+    return res.status(200).json(patrasWithCoveringLetters);
   } catch (error) {
     console.error('Error fetching all Patras:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
-// Get a Patra by ID
+// Get a Patra by ID with covering letter
 const getPatraById = async (req, res) => {
   const { id } = req.params;
 
@@ -134,7 +183,7 @@ const getPatraById = async (req, res) => {
         },
         {
           model: File,
-          as: 'upload',
+          as: 'uploadedFile',
           attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
           required: false
         }
@@ -145,7 +194,15 @@ const getPatraById = async (req, res) => {
       return res.status(404).json({ error: 'Patra not found' });
     }
 
-    return res.status(200).json(patra);
+    // Get covering letter
+    const coveringLetter = await CoveringLetter.findOne({
+      where: { patraId: id }
+    });
+
+    return res.status(200).json({
+      ...patra.toJSON(),
+      coveringLetter: coveringLetter || null
+    });
   } catch (error) {
     console.error('Error fetching Patra by ID:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
@@ -167,7 +224,7 @@ const getPatraByReferenceNumber = async (req, res) => {
         },
         {
           model: File,
-          as: 'upload',
+          as: 'uploadedFile',
           attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
           required: false
         }
@@ -200,7 +257,7 @@ const getPatraByUserId = async (req, res) => {
         },
         {
           model: File,
-          as: 'upload',
+          as: 'uploadedFile',
           attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
           required: false
         }
@@ -228,8 +285,11 @@ const deletePatraById = async (req, res) => {
       return res.status(404).json({ error: 'Patra not found' });
     }
 
+    // Delete associated covering letter first
+    await CoveringLetter.destroy({ where: { patraId: id } });
+
     await patra.destroy();
-    return res.status(200).json({ message: 'Patra deleted successfully' });
+    return res.status(200).json({ message: 'Patra and associated covering letter deleted successfully' });
   } catch (error) {
     console.error('Error deleting Patra by ID:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
@@ -270,7 +330,7 @@ const updatePatraById = async (req, res) => {
     }
 
     // Validate fileId if provided
-    let validatedFileId = patra.fileId; // Keep existing fileId by default
+    let validatedFileId = patra.fileId;
     if (fileId && fileId !== patra.fileId) {
       const file = await File.findByPk(fileId);
       if (!file) {
@@ -355,7 +415,7 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
   }
 };
 
-// Update letter status specifically (useful for workflow management)
+// Update letter status specifically
 const updateLetterStatus = async (req, res) => {
   const { id } = req.params;
   const { letterStatus } = req.body;
@@ -391,5 +451,5 @@ module.exports = {
   deletePatraById,
   updatePatraById,
   getPatraByUserIdAndPatraId,
-  updateLetterStatus, // New function for updating status
+  updateLetterStatus,
 };
