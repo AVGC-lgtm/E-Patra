@@ -15,7 +15,7 @@ import HODLetters from './pages/letters/HODLetters';
 import PoliceLetters from './pages/letters/PoliceLetters';
 import NewLetter from './pages/NewLetter';
 import TrackApplication from './pages/TrackApplication';
-
+import InboxLetter from './pages/InboxLetter';
 // Create a wrapper component that will use the useNavigate hook
 const AppContent = () => {
   const navigate = useNavigate();
@@ -129,10 +129,10 @@ const AppContent = () => {
         } />
         <Route path="/login" element={
           isLoggedIn ? (
-            <Navigate to={userRole === 'sp' ? '/sp' : 
-              userRole === 'head' ? '/head' :
-              userRole === 'outside_police_station' ? '/police-station' : 
-              userRole === 'inward_user' ? '/inward' :
+            <Navigate to={userRole === 'sp' ? '/dashboard/letters' : 
+              userRole === 'head' ? '/dashboard/letters' :
+              userRole === 'outside_police_station' ? '/dashboard/letters' : 
+              userRole === 'inward_user' ? '/dashboard/all-letters' :
               '/dashboard'} 
             replace />
           ) : (
@@ -161,6 +161,7 @@ const AppContent = () => {
               <Route path="track-application" element={<TrackApplication />}>
                 <Route path=":referenceNumber" element={<TrackApplication />} />
               </Route>
+              <Route path = "inbox" element={<InboxLetter/>}></Route>
             </>
           )}
           

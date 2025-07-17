@@ -343,7 +343,7 @@ const SimpleDashboardLayout = ({ basePath = '', onLogout, children }) => {
 
         {/* Page Content */}
         <main className="flex-1 p-6 overflow-y-auto bg-gradient-to-br from-gray-50 to-gray-100">
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-8xl mx-auto">
             <div className="bg-white rounded-xl shadow-sm p-6">
               {children || <Outlet />}
             </div>
