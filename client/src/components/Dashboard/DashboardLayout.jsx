@@ -43,6 +43,7 @@ const DashboardLayout = ({ children, onLogout }) => {
     if (path.includes('new-letter')) return 'new-letter';
     if (path.includes('all-letters')) return 'all-letters';
     if (path.includes('track-application')) return 'track-application';
+    if (path.includes("inbox")) return "inbox"
     return 'dashboard';
   };
 
@@ -83,6 +84,8 @@ const DashboardLayout = ({ children, onLogout }) => {
     { path: '/dashboard/new-letter', icon: '✉️', label: t.newLetter, key: 'new-letter' },
     { path: '/dashboard/all-letters', icon: '📑', label: t.allLetters, key: 'all-letters' },
     { path: '/dashboard/track-application', icon: '🔍', label: t.trackApplication, key: 'track-application' },
+    {path:"/dashboard/inbox" , icon:'✉️',label:t.inbox, key:"inbox"}
+
   ];
 
   // Get user initials for avatar
