@@ -297,6 +297,7 @@ const deletePatraById = async (req, res) => {
 };
 
 // Update a Patra by ID
+// Update a Patra by ID - FIXED VERSION
 const updatePatraById = async (req, res) => {
   const { id } = req.params;
   const {
@@ -315,7 +316,14 @@ const updatePatraById = async (req, res) => {
     NA,
     NAR,
     userId,
-    fileId
+    fileId,
+    // Add support for the new fields from frontend
+    sentTo,
+    sentAt,
+    updatedBy,
+    updatedByEmail,
+    updatedByName,
+    userRole
   } = req.body;
 
   try {
@@ -324,9 +332,12 @@ const updatePatraById = async (req, res) => {
       return res.status(404).json({ error: 'Patra not found' });
     }
 
-    const user = await User.findByPk(userId);
-    if (!user) {
-      return res.status(400).json({ error: 'User not found' });
+    // If userId is provided, validate it
+    if (userId) {
+      const user = await User.findByPk(userId);
+      if (!user) {
+        return res.status(400).json({ error: 'User not found' });
+      }
     }
 
     // Validate fileId if provided
@@ -339,26 +350,38 @@ const updatePatraById = async (req, res) => {
       validatedFileId = fileId;
     }
 
-    const updateData = {
-      dateOfReceiptOfLetter,
-      officeSendingLetter,
-      senderNameAndDesignation,
-      mobileNumber,
-      letterMedium,
-      letterClassification,
-      letterType,
-      letterDate,
-      subject,
-      outwardLetterNumber,
-      numberOfCopies,
-      letterStatus: letterStatus !== undefined ? letterStatus : patra.letterStatus,
-      NA: NA !== undefined ? NA : patra.NA,
-      NAR: NAR !== undefined ? NAR : patra.NAR,
-      userId: user.id,
-      fileId: validatedFileId,
-    };
+    // Build update data object with only provided fields
+    const updateData = {};
+    
+    // Only update fields that were actually sent in the request
+    if (dateOfReceiptOfLetter !== undefined) updateData.dateOfReceiptOfLetter = dateOfReceiptOfLetter;
+    if (officeSendingLetter !== undefined) updateData.officeSendingLetter = officeSendingLetter;
+    if (senderNameAndDesignation !== undefined) updateData.senderNameAndDesignation = senderNameAndDesignation;
+    if (mobileNumber !== undefined) updateData.mobileNumber = mobileNumber;
+    if (letterMedium !== undefined) updateData.letterMedium = letterMedium;
+    if (letterClassification !== undefined) updateData.letterClassification = letterClassification;
+    if (letterType !== undefined) updateData.letterType = letterType;
+    if (letterDate !== undefined) updateData.letterDate = letterDate;
+    if (subject !== undefined) updateData.subject = subject;
+    if (outwardLetterNumber !== undefined) updateData.outwardLetterNumber = outwardLetterNumber;
+    if (numberOfCopies !== undefined) updateData.numberOfCopies = numberOfCopies;
+    if (letterStatus !== undefined) updateData.letterStatus = letterStatus;
+    if (NA !== undefined) updateData.NA = NA;
+    if (NAR !== undefined) updateData.NAR = NAR;
+    if (userId !== undefined) updateData.userId = userId;
+    if (fileId !== undefined) updateData.fileId = validatedFileId;
+    
+    // Add new fields for tracking who sent the letter and where
+    if (sentTo !== undefined) updateData.sentTo = JSON.stringify(sentTo); // Store as JSON string
+    if (sentAt !== undefined) updateData.sentAt = sentAt;
+    if (updatedBy !== undefined) updateData.updatedBy = updatedBy;
+    if (updatedByEmail !== undefined) updateData.updatedByEmail = updatedByEmail;
+    if (updatedByName !== undefined) updateData.updatedByName = updatedByName;
+    if (userRole !== undefined) updateData.userRole = userRole;
 
     await patra.update(updateData);
+    
+    // FIXED: Changed from 'upload' to 'uploadedFile' to match the association
     await patra.reload({
       include: [
         {
@@ -368,7 +391,7 @@ const updatePatraById = async (req, res) => {
         },
         {
           model: File,
-          as: 'upload',
+          as: 'uploadedFile', // FIXED: This was 'upload' before, causing the error
           attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
           required: false
         }

@@ -20,13 +20,12 @@ const HODLetters = () => {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [selectedLetter, setSelectedLetter] = useState(null);
 
-  // Status filter options with translations
+  // Status filter options with translations - REMOVED "sending for head sign"
   const statusOptions = [
     { value: 'All', label: language === 'mr' ? 'सर्व स्थिती' : 'All Status' },
     { value: 'pending', label: language === 'mr' ? 'प्रलंबित' : 'Pending' },
     { value: 'approved', label: language === 'mr' ? 'मंजूर' : 'Approved' },
-    { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' },
-    { value: 'sending for head sign', label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी पाठवत आहे' : 'Sending for Head Sign' }
+    { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' }
   ];
 
   // Field labels for the view modal
@@ -47,7 +46,8 @@ const HODLetters = () => {
     NAR: { en: 'NAR', mr: 'NAR' },
     userId: { en: 'User ID', mr: 'वापरकर्ता आयडी' },
     fileId: { en: 'File ID', mr: 'फाइल आयडी' },
-    referenceNumber: { en: 'Reference Number', mr: 'संदर्भ क्रमांक' }
+    referenceNumber: { en: 'Reference Number', mr: 'संदर्भ क्रमांक' },
+    sentTo: { en: 'Sent To', mr: 'पाठवले' }
   };
 
   // Fields to exclude from the view modal
@@ -56,11 +56,60 @@ const HODLetters = () => {
     'fileId', 'userId', 'upload', 'extractedData'
   ];
 
+  // Helper function to get user data
+  const getUserData = () => {
+    const token = localStorage.getItem('token');
+    const userInfo = localStorage.getItem('userInfo') || localStorage.getItem('user');
+    
+    let userData = null;
+    
+    // Try to parse user info from localStorage
+    if (userInfo) {
+      try {
+        userData = JSON.parse(userInfo);
+      } catch (e) {
+        console.error('Error parsing user info:', e);
+      }
+    }
+    
+    // If no user data in localStorage, decode from JWT token
+    if (!userData && token) {
+      try {
+        const tokenParts = token.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          userData = {
+            id: payload.id || payload.userId || payload.sub,
+            email: payload.email,
+            name: payload.name || payload.username,
+            role: payload.role || payload.roleId
+          };
+        }
+      } catch (e) {
+        console.error('Error decoding token:', e);
+      }
+    }
+    
+    return userData;
+  };
+
   // Helper function to safely render values
   const renderFieldValue = (key, value) => {
     // Handle null, undefined, or empty values
     if (value === null || value === undefined || value === '') {
       return 'N/A';
+    }
+
+    // Handle sentTo object specially
+    if (key === 'sentTo' && typeof value === 'object') {
+      const sentToList = [];
+      if (value.igp) sentToList.push('IGP');
+      if (value.sp) sentToList.push('SP');
+      if (value.sdpo) sentToList.push('SDPO');
+      if (value.policeStation && value.selectedDistrict) {
+        sentToList.push(`Police Station (${value.selectedDistrict})`);
+      }
+      return sentToList.length > 0 ? sentToList.join(', ') : 'N/A';
     }
 
     // Handle objects
@@ -93,7 +142,7 @@ const HODLetters = () => {
     }
 
     // For dates
-    if (key.includes('Date') || key.includes('date')) {
+    if (key.includes('Date') || key.includes('date') || key === 'sentAt') {
       return formatDate(value);
     }
 
@@ -127,24 +176,46 @@ const HODLetters = () => {
     setLoading(true);
     setError('');
     try {
+      const token = localStorage.getItem('token');
+      
       const response = await axios.get('http://localhost:5000/api/patras', {
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
         },
         timeout: 10000
       });
       
       if (response.data && Array.isArray(response.data)) {
-        console.log('Letters received:', response.data);
+        console.log('HOD Letters - All letters received:', response.data);
+        console.log('HOD Letters - Letter statuses:', response.data.map(l => ({ 
+          id: l.referenceNumber, 
+          status: l.letterStatus 
+        })));
         setLetters(response.data);
       } else {
         throw new Error('Invalid data format received from server');
       }
     } catch (err) {
       const errorMessage = err.response?.data?.message || 
+                         err.response?.data?.error ||
                          err.message || 
                          'Failed to fetch letters. Please check your connection and try again.';
+      
+      // Handle authentication errors
+      if (err.response?.status === 401 || err.response?.data?.error === 'User not found') {
+        console.error('Authentication error:', err);
+        alert(language === 'mr' ? 
+          'आपली सत्र संपली आहे. कृपया पुन्हा लॉगिन करा.' : 
+          'Your session has expired. Please login again.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('userInfo');
+        localStorage.removeItem('user');
+        navigate('/login');
+        return;
+      }
+      
       setError(errorMessage);
       console.error('Error fetching letters:', err);
       setLetters([]);
@@ -155,11 +226,58 @@ const HODLetters = () => {
 
   // Fetch data on component mount
   useEffect(() => {
+    // Check if user is authenticated
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert(language === 'mr' ? 
+        'कृपया प्रथम लॉगिन करा!' : 
+        'Please login first!');
+      navigate('/login');
+      return;
+    }
+    
     handleRefresh();
-  }, []);
+  }, [navigate, language]);
+
+  // Helper function to check if status is "sending for head sign" in any language
+  const isSendingForHeadSign = (status) => {
+    if (!status) return false;
+    const statusLower = status.toLowerCase();
+    const sendingForHeadSignVariations = [
+      'sending for head sign',
+      'प्रमुख स्वाक्षरीसाठी पाठवत आहे',
+      'प्रमुख स्वाक्षरीसाठी'
+    ];
+    
+    return sendingForHeadSignVariations.some(variation => 
+      statusLower === variation.toLowerCase() || status === variation
+    );
+  };
 
   // Filter letters based on search term and status
+  // Only show letters that have been sent to HOD (pending, approved, rejected)
   const filteredLetters = letters.filter(letter => {
+    const letterStatus = letter.letterStatus || letter.letter_status || letter.status || '';
+    
+    // Debug logging
+    console.log('HOD Filter - Letter:', letter.referenceNumber, 'Status:', letterStatus);
+    
+    // Exclude letters with "sending for head sign" status
+    if (isSendingForHeadSign(letterStatus)) {
+      console.log('HOD Filter - Excluding letter:', letter.referenceNumber, 'Status is sending for head sign');
+      return false;
+    }
+    
+    // Only include letters with pending, approved, or rejected status
+    const statusLower = letterStatus.toLowerCase();
+    const allowedStatuses = ['pending', 'approved', 'rejected', 'प्रलंबित', 'मंजूर', 'नाकारले'];
+    const hasAllowedStatus = allowedStatuses.some(s => statusLower === s.toLowerCase() || letterStatus === s);
+    
+    if (!hasAllowedStatus && letterStatus !== '') {
+      console.log('HOD Filter - Excluding letter:', letter.referenceNumber, 'Status not allowed:', letterStatus);
+      return false;
+    }
+
     const searchableFields = [
       letter.referenceNumber,
       letter.senderNameAndDesignation,
@@ -171,10 +289,17 @@ const HODLetters = () => {
       searchableFields.includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === 'All' || 
-      letter.letterStatus === statusFilter.toLowerCase() ||
-      (statusFilter === 'sending for head sign' && letter.letterStatus === 'sending for head sign');
+      statusLower === statusFilter.toLowerCase() ||
+      (statusFilter === 'pending' && (statusLower === 'pending' || letterStatus === 'प्रलंबित')) ||
+      (statusFilter === 'approved' && (statusLower === 'approved' || letterStatus === 'मंजूर')) ||
+      (statusFilter === 'rejected' && (statusLower === 'rejected' || letterStatus === 'नाकारले'));
 
-    return matchesSearch && matchesStatus;
+    const shouldInclude = matchesSearch && matchesStatus && hasAllowedStatus;
+    if (shouldInclude) {
+      console.log('HOD Filter - Including letter:', letter.referenceNumber, 'Status:', letterStatus);
+    }
+    
+    return shouldInclude;
   });
 
   const totalPages = Math.ceil(filteredLetters.length / recordsPerPage);
@@ -190,7 +315,17 @@ const HODLetters = () => {
         text: 'text-yellow-800',
         label: language === 'mr' ? 'प्रलंबित' : 'Pending'
       },
+      'प्रलंबित': {
+        bg: 'bg-yellow-100',
+        text: 'text-yellow-800',
+        label: language === 'mr' ? 'प्रलंबित' : 'Pending'
+      },
       approved: {
+        bg: 'bg-green-100',
+        text: 'text-green-800',
+        label: language === 'mr' ? 'मंजूर' : 'Approved'
+      },
+      'मंजूर': {
         bg: 'bg-green-100',
         text: 'text-green-800',
         label: language === 'mr' ? 'मंजूर' : 'Approved'
@@ -200,13 +335,33 @@ const HODLetters = () => {
         text: 'text-red-800',
         label: language === 'mr' ? 'नाकारले' : 'Rejected'
       },
+      'नाकारले': {
+        bg: 'bg-red-100',
+        text: 'text-red-800',
+        label: language === 'mr' ? 'नाकारले' : 'Rejected'
+      },
       'sending for head sign': {
+        bg: 'bg-blue-100',
+        text: 'text-blue-800',
+        label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी' : 'For Head Sign'
+      },
+      'प्रमुख स्वाक्षरीसाठी': {
         bg: 'bg-blue-100',
         text: 'text-blue-800',
         label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी' : 'For Head Sign'
       }
     };
 
+    // Check for exact match first
+    if (statusConfig[status]) {
+      return (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig[status].bg} ${statusConfig[status].text}`}>
+          {statusConfig[status].label}
+        </span>
+      );
+    }
+
+    // Then check lowercase
     const config = statusConfig[statusLower] || statusConfig.pending;
     
     return (
@@ -219,13 +374,59 @@ const HODLetters = () => {
   // Handle approve action
   const handleApprove = async (letterId) => {
     try {
-      // API call to approve letter
-      console.log('Approving letter:', letterId);
-      // await axios.put(`http://localhost:5000/api/patras/${letterId}/approve`);
-      alert(language === 'mr' ? 'पत्र मंजूर केले!' : 'Letter approved!');
-      handleRefresh();
+      const token = localStorage.getItem('token');
+      const userData = getUserData();
+      
+      if (!token) {
+        alert(language === 'mr' ? 'कृपया पुन्हा लॉगिन करा!' : 'Please login again!');
+        navigate('/login');
+        return;
+      }
+      
+      const updateData = {
+        letterStatus: 'approved',
+        approvedAt: new Date().toISOString(),
+        approvedBy: userData?.id || userData?.userId,
+        approvedByEmail: userData?.email,
+        approvedByName: userData?.name || userData?.username,
+        userId: userData?.id || userData?.userId,
+        userRole: userData?.role || userData?.roleId
+      };
+      
+      // Remove undefined/null fields
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined || updateData[key] === null) {
+          delete updateData[key];
+        }
+      });
+      
+      console.log('Approving letter:', letterId, updateData);
+      
+      const response = await axios.put(`http://localhost:5000/api/patras/${letterId}`, updateData, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.status === 200 || response.status === 201) {
+        alert(language === 'mr' ? 'पत्र मंजूर केले!' : 'Letter approved!');
+        handleRefresh();
+      }
     } catch (error) {
       console.error('Error approving letter:', error);
+      
+      if (error.response?.data?.error === 'User not found' || error.response?.status === 401) {
+        alert(language === 'mr' ? 
+          'वापरकर्ता सत्यापन अयशस्वी. कृपया पुन्हा लॉगिन करा.' : 
+          'User authentication failed. Please login again.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('userInfo');
+        localStorage.removeItem('user');
+        navigate('/login');
+        return;
+      }
+      
       alert(language === 'mr' ? 'पत्र मंजूर करण्यात त्रुटी!' : 'Error approving letter!');
     }
   };
@@ -233,13 +434,59 @@ const HODLetters = () => {
   // Handle reject action
   const handleReject = async (letterId) => {
     try {
-      // API call to reject letter
-      console.log('Rejecting letter:', letterId);
-      // await axios.put(`http://localhost:5000/api/patras/${letterId}/reject`);
-      alert(language === 'mr' ? 'पत्र नाकारले!' : 'Letter rejected!');
-      handleRefresh();
+      const token = localStorage.getItem('token');
+      const userData = getUserData();
+      
+      if (!token) {
+        alert(language === 'mr' ? 'कृपया पुन्हा लॉगिन करा!' : 'Please login again!');
+        navigate('/login');
+        return;
+      }
+      
+      const updateData = {
+        letterStatus: 'rejected',
+        rejectedAt: new Date().toISOString(),
+        rejectedBy: userData?.id || userData?.userId,
+        rejectedByEmail: userData?.email,
+        rejectedByName: userData?.name || userData?.username,
+        userId: userData?.id || userData?.userId,
+        userRole: userData?.role || userData?.roleId
+      };
+      
+      // Remove undefined/null fields
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined || updateData[key] === null) {
+          delete updateData[key];
+        }
+      });
+      
+      console.log('Rejecting letter:', letterId, updateData);
+      
+      const response = await axios.put(`http://localhost:5000/api/patras/${letterId}`, updateData, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.status === 200 || response.status === 201) {
+        alert(language === 'mr' ? 'पत्र नाकारले!' : 'Letter rejected!');
+        handleRefresh();
+      }
     } catch (error) {
       console.error('Error rejecting letter:', error);
+      
+      if (error.response?.data?.error === 'User not found' || error.response?.status === 401) {
+        alert(language === 'mr' ? 
+          'वापरकर्ता सत्यापन अयशस्वी. कृपया पुन्हा लॉगिन करा.' : 
+          'User authentication failed. Please login again.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('userInfo');
+        localStorage.removeItem('user');
+        navigate('/login');
+        return;
+      }
+      
       alert(language === 'mr' ? 'पत्र नाकारण्यात त्रुटी!' : 'Error rejecting letter!');
     }
   };
@@ -248,8 +495,8 @@ const HODLetters = () => {
   const handleAttachSign = async (letterId) => {
     try {
       console.log('Attaching sign to letter:', letterId);
-      // Navigate to upload sign page or open a modal
-      navigate('/dashboard/upload-sign');
+      // Navigate to upload sign page with letter ID
+      navigate(`/dashboard/upload-sign/${letterId}`);
     } catch (error) {
       console.error('Error attaching sign:', error);
       alert(language === 'mr' ? 'स्वाक्षरी जोडण्यात त्रुटी!' : 'Error attaching sign!');
@@ -268,17 +515,24 @@ const HODLetters = () => {
     }
   };
 
+  // Helper function to check if letter status is pending
+  const isPending = (status) => {
+    if (!status) return false;
+    const statusLower = status.toLowerCase();
+    return statusLower === 'pending' || status === 'प्रलंबित';
+  };
+
   return (
     <div className="p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {language === 'mr' ? 'HOD पत्रे' : 'HOD Letters'}
+            {language === 'mr' ? 'HOD मंजुरीसाठी पत्रे' : 'Letters for HOD Approval'}
           </h1>
           <p className="text-gray-500">
             {language === 'mr' 
-              ? 'सर्व पत्रे पहा आणि व्यवस्थापित करा' 
-              : 'View and manage all letters'}
+              ? 'मंजुरी किंवा नाकारण्यासाठी पत्रे पहा' 
+              : 'View letters for approval or rejection'}
           </p>
         </div>
         <div className="mt-4 md:mt-0 flex space-x-2">
@@ -413,7 +667,7 @@ const HODLetters = () => {
                             <FiEdit className="h-5 w-5" />
                           </button>
                           
-                          {letter.letterStatus?.toLowerCase() === 'pending' && (
+                          {isPending(letter.letterStatus) && (
                             <>
                               <button
                                 onClick={() => handleApprove(letter.id || letter._id)}
@@ -470,8 +724,8 @@ const HODLetters = () => {
             </h3>
             <p className="mt-1 text-sm text-gray-500">
               {language === 'mr' 
-                ? 'कोणतीही पत्रे आढळली नाहीत. कृपया आपली शोध बदला.' 
-                : 'No letters found. Please try changing your search.'}
+                ? 'HOD मंजुरीसाठी कोणतीही पत्रे आढळली नाहीत.' 
+                : 'No letters found for HOD approval.'}
             </p>
           </div>
         )}
@@ -553,10 +807,7 @@ const HODLetters = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <FiFileText className="text-blue-600 h-5 w-5" />
-                    <span className="text-blue-700 font-medium">
-                      {selectedLetter.upload?.originalName || 
-                       `File_${selectedLetter.fileId || 'unknown'}.pdf`}
-                    </span>
+                 
                   </div>
                   <button
                     onClick={() => previewFile(selectedLetter)}
