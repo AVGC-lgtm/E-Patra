@@ -1,4 +1,4 @@
-// controllers/coveringLetterController.js - Fixed with proper model imports
+// controllers/coveringLetterController.js - Enhanced with edit functionality
 const CoveringLetter = require('../models/CoveringLetter');
 const InwardPatra = require('../models/InwardPatra');
 const User = require('../models/User');
@@ -11,7 +11,7 @@ const openaiService = require('../services/openaiService');
 const s3Service = require('../services/s3Service');
 
 class CoveringLetterController {
-  
+
   // Auto-generate covering letter after Patra creation
   async autoGenerateCoveringLetter(patraId, userId, transaction = null) {
     try {
@@ -49,7 +49,7 @@ class CoveringLetterController {
 
       // Determine letter type based on Patra status
       let letterType = 'ACKNOWLEDGMENT';
-      
+
       if (patra.NAR) {
         letterType = 'NAR';
       } else if (patra.NA) {
@@ -105,7 +105,7 @@ class CoveringLetterController {
 
     } catch (error) {
       console.error('Error auto-generating covering letter:', error);
-      
+
       // Provide more specific error messages
       if (error.message.includes('OpenAI')) {
         throw new Error(`OpenAI service error: ${error.message}`);
@@ -119,11 +119,158 @@ class CoveringLetterController {
     }
   }
 
+  // NEW: Get covering letter for editing - returns editable HTML template
+  async getCoveringLetterForEdit(req, res) {
+    try {
+      const { id } = req.params;
+
+      const coveringLetter = await CoveringLetter.findByPk(id, {
+        include: [
+          {
+            model: InwardPatra,
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation']
+          },
+          {
+            model: User,
+            attributes: ['id', 'email']
+          },
+          {
+            model: File,
+            as: 'attachedFile',
+            attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+            required: false
+          }
+        ]
+      });
+
+      if (!coveringLetter) {
+        return res.status(404).json({ error: 'Covering letter not found' });
+      }
+
+      // Generate editable HTML template
+      const editableHTML = await s3Service.generateEditableHTML(coveringLetter.letterContent, {
+        letterNumber: coveringLetter.letterNumber,
+        patraId: coveringLetter.patraId,
+        letterType: coveringLetter.letterType,
+        extractedText: coveringLetter.letterContent
+      });
+
+      return res.status(200).json({
+        message: 'Covering letter retrieved successfully',
+        coveringLetter: {
+          id: coveringLetter.id,
+          letterContent: coveringLetter.letterContent,
+          letterType: coveringLetter.letterType,
+          letterNumber: coveringLetter.letterNumber,
+          letterDate: coveringLetter.letterDate,
+          status: coveringLetter.status,
+          pdfUrl: coveringLetter.pdfUrl,
+          htmlUrl: coveringLetter.htmlUrl,
+          recipientOffice: coveringLetter.recipientOffice,
+          recipientDesignation: coveringLetter.recipientDesignation,
+          patra: coveringLetter.InwardPatra,
+          user: coveringLetter.User,
+          attachedFile: coveringLetter.attachedFile
+        },
+        editableHTML: editableHTML
+      });
+
+    } catch (error) {
+      console.error('Error fetching covering letter for edit:', error);
+      return res.status(500).json({ error: 'Server error', details: error.message });
+    }
+  }
+
+  // NEW: Update covering letter with new content and regenerate PDF
+  async updateCoveringLetterContent(req, res) {
+    try {
+      const { id } = req.params;
+      const { letterContent, status, recipientOffice, recipientDesignation } = req.body;
+
+      if (!letterContent || letterContent.trim() === '') {
+        return res.status(400).json({ error: 'Letter content is required' });
+      }
+
+      const coveringLetter = await CoveringLetter.findByPk(id, {
+        include: [
+          {
+            model: InwardPatra,
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter']
+          }
+        ]
+      });
+
+      if (!coveringLetter) {
+        return res.status(404).json({ error: 'Covering letter not found' });
+      }
+
+      console.log('Updating covering letter content and regenerating PDF...');
+
+      // Prepare letter data for PDF generation
+      const letterData = {
+        letterNumber: coveringLetter.letterNumber,
+        patraId: coveringLetter.patraId,
+        letterType: coveringLetter.letterType,
+        extractedText: letterContent,
+        complainantName: s3Service.extractComplainantName({ extractedText: letterContent }),
+        senderName: s3Service.extractComplainantName({ extractedText: letterContent })
+      };
+
+      // Regenerate PDF with updated content
+      const uploadResult = await s3Service.generateAndUploadCoveringLetter(
+        letterContent,
+        letterData
+      );
+
+      // Update the covering letter in database
+      const updateData = {
+        letterContent: letterContent,
+        pdfUrl: uploadResult.pdfUrl,
+        htmlUrl: uploadResult.htmlUrl,
+        s3FileName: uploadResult.fileName,
+        updatedAt: new Date()
+      };
+
+      if (status !== undefined) updateData.status = status;
+      if (recipientOffice !== undefined) updateData.recipientOffice = recipientOffice;
+      if (recipientDesignation !== undefined) updateData.recipientDesignation = recipientDesignation;
+
+      await coveringLetter.update(updateData);
+
+      // Fetch updated covering letter with associations
+      const updatedCoveringLetter = await CoveringLetter.findByPk(id, {
+        include: [
+          {
+            model: InwardPatra,
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter']
+          },
+          {
+            model: User,
+            attributes: ['id', 'email']
+          }
+        ]
+      });
+
+      console.log('Covering letter updated successfully and PDF regenerated');
+
+      return res.status(200).json({
+        message: 'Covering letter updated successfully and PDF regenerated',
+        coveringLetter: updatedCoveringLetter,
+        pdfUrl: uploadResult.pdfUrl,
+        htmlUrl: uploadResult.htmlUrl
+      });
+
+    } catch (error) {
+      console.error('Error updating covering letter:', error);
+      return res.status(500).json({ error: 'Server error', details: error.message });
+    }
+  }
+
   // Download covering letter as PDF from S3
   async downloadCoveringLetter(req, res) {
     try {
       const { id } = req.params;
-      
+
       const coveringLetter = await CoveringLetter.findByPk(id);
 
       if (!coveringLetter) {
@@ -147,7 +294,7 @@ class CoveringLetterController {
   async viewCoveringLetterHTML(req, res) {
     try {
       const { id } = req.params;
-      
+
       const coveringLetter = await CoveringLetter.findByPk(id);
 
       if (!coveringLetter) {
@@ -171,7 +318,7 @@ class CoveringLetterController {
   async getCoveringLetterByPatraId(req, res) {
     try {
       const { patraId } = req.params;
-      
+
       const coveringLetter = await CoveringLetter.findOne({
         where: { patraId },
         include: [
@@ -236,46 +383,6 @@ class CoveringLetterController {
     }
   }
 
-  // Update covering letter
-  async updateCoveringLetter(req, res) {
-    try {
-      const { id } = req.params;
-      const { letterContent, status, recipientOffice, recipientDesignation, fileId } = req.body;
-
-      const coveringLetter = await CoveringLetter.findByPk(id);
-      
-      if (!coveringLetter) {
-        return res.status(404).json({ error: 'Covering letter not found' });
-      }
-
-      // Validate file if provided
-      if (fileId) {
-        const file = await File.findByPk(fileId);
-        if (!file) {
-          return res.status(400).json({ error: 'File not found' });
-        }
-      }
-
-      const updateData = {};
-      if (letterContent !== undefined) updateData.letterContent = letterContent;
-      if (status !== undefined) updateData.status = status;
-      if (recipientOffice !== undefined) updateData.recipientOffice = recipientOffice;
-      if (recipientDesignation !== undefined) updateData.recipientDesignation = recipientDesignation;
-      if (fileId !== undefined) updateData.fileId = fileId;
-
-      await coveringLetter.update(updateData);
-      
-      return res.status(200).json({
-        message: 'Covering letter updated successfully',
-        coveringLetter
-      });
-
-    } catch (error) {
-      console.error('Error updating covering letter:', error);
-      return res.status(500).json({ error: 'Server error', details: error.message });
-    }
-  }
-
   // Get all covering letters
   async getAllCoveringLetters(req, res) {
     try {
@@ -311,7 +418,7 @@ class CoveringLetterController {
   async getCoveringLetterById(req, res) {
     try {
       const { id } = req.params;
-      
+
       const coveringLetter = await CoveringLetter.findByPk(id, {
         include: [
           {
@@ -349,13 +456,13 @@ class CoveringLetterController {
       const { id } = req.params;
 
       const coveringLetter = await CoveringLetter.findByPk(id);
-      
+
       if (!coveringLetter) {
         return res.status(404).json({ error: 'Covering letter not found' });
       }
 
       await coveringLetter.destroy();
-      
+
       return res.status(200).json({ message: 'Covering letter deleted successfully' });
 
     } catch (error) {
@@ -363,6 +470,75 @@ class CoveringLetterController {
       return res.status(500).json({ error: 'Server error', details: error.message });
     }
   }
+
+  // View covering letter PDF preview
+  async previewCoveringLetter(req, res) {
+    try {
+      const { id } = req.params;
+
+      // Fetch the covering letter details from the database
+      const coveringLetter = await CoveringLetter.findByPk(id);
+
+      if (!coveringLetter) {
+        return res.status(404).json({ error: 'Covering letter not found' });
+      }
+
+      if (!coveringLetter.pdfUrl) {
+        return res.status(404).json({ error: 'PDF not available for this covering letter' });
+      }
+
+      // Send the PDF URL to frontend for preview
+      res.status(200).json({
+        message: 'Covering letter found',
+        pdfUrl: coveringLetter.pdfUrl,  // This is the S3 URL for the PDF
+      });
+
+    } catch (error) {
+      console.error('Error fetching covering letter PDF preview:', error);
+      return res.status(500).json({ error: 'Server error', details: error.message });
+    }
+  }
+
+  // LEGACY: Update covering letter (maintained for backward compatibility)
+  async updateCoveringLetter(req, res) {
+    try {
+      const { id } = req.params;
+      const { letterContent, status, recipientOffice, recipientDesignation, fileId } = req.body;
+
+      const coveringLetter = await CoveringLetter.findByPk(id);
+
+      if (!coveringLetter) {
+        return res.status(404).json({ error: 'Covering letter not found' });
+      }
+
+      // Validate file if provided
+      if (fileId) {
+        const file = await File.findByPk(fileId);
+        if (!file) {
+          return res.status(400).json({ error: 'File not found' });
+        }
+      }
+
+      const updateData = {};
+      if (letterContent !== undefined) updateData.letterContent = letterContent;
+      if (status !== undefined) updateData.status = status;
+      if (recipientOffice !== undefined) updateData.recipientOffice = recipientOffice;
+      if (recipientDesignation !== undefined) updateData.recipientDesignation = recipientDesignation;
+      if (fileId !== undefined) updateData.fileId = fileId;
+
+      await coveringLetter.update(updateData);
+
+      return res.status(200).json({
+        message: 'Covering letter updated successfully',
+        coveringLetter
+      });
+
+    } catch (error) {
+      console.error('Error updating covering letter:', error);
+      return res.status(500).json({ error: 'Server error', details: error.message });
+    }
+  }
+
 }
 
 module.exports = new CoveringLetterController();
