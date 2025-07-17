@@ -1,11 +1,9 @@
-// routes/InwardPatraRoutes.js
 const express = require('express');
 const patraController = require('../controllers/InwardPatraController');
-const { uploadMultiple, handleUploadError } = require('../middleware/upload');
 const router = express.Router();
 
-// Create a new Patra with file upload
-router.post('/', uploadMultiple, handleUploadError, patraController.createPatra);
+// Create a new Patra (expects raw JSON)
+router.post('/', patraController.createPatra);
 
 // Get all Patras
 router.get('/', patraController.getAllPatras);
@@ -22,8 +20,11 @@ router.get('/user/:userId', patraController.getPatraByUserId);
 // Get Patra by user ID and Patra ID
 router.get('/user/:userId/patra/:patraId', patraController.getPatraByUserIdAndPatraId);
 
-// Update a Patra by ID with complete file management
-router.put('/:id', uploadMultiple, handleUploadError, patraController.updatePatraById);
+// Update letter status only (ADD THIS BEFORE THE GENERAL UPDATE ROUTE)
+router.put('/:id/status', patraController.updateLetterStatus);
+
+// Update a Patra by ID
+router.put('/:id', patraController.updatePatraById);
 
 // Delete a Patra by ID
 router.delete('/:id', patraController.deletePatraById);

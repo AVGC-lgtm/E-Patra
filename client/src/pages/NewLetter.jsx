@@ -747,22 +747,22 @@ const NewLetter = () => {
       
       // Create JSON payload instead of FormData
       const jsonPayload = {
+        dateOfReceiptOfLetter: formData.dateOfReceiptOfLetter,
         officeSendingLetter: formData.officeSendingLetter,
         senderNameAndDesignation: formData.senderNameAndDesignation,
-        outwardLetterNumber: formData.outwardLetterNumber,
-        dateOfReceiptOfLetter: formData.dateOfReceiptOfLetter,
-        letterClassification: getSubmissionValue('letterClassification', formData.letterClassification),
+        mobileNumber: formData.mobileNumber,
         letterMedium: getSubmissionValue('letterMedium', formData.letterMedium),
+        letterClassification: getSubmissionValue('letterClassification', formData.letterClassification),
         letterType: formData.letterType,
         letterDate: formData.letterDate,
-        mobileNumber: formData.mobileNumber,
-        numberOfCopies: formData.numberOfCopies,
         subject: formData.subject,
-        na: formData.na,
-        nar: formData.nar,
+        outwardLetterNumber: formData.outwardLetterNumber,
+        numberOfCopies: parseInt(formData.numberOfCopies) || 0,
+        letterStatus: 'sending for head sign',  // Updated status to match expected format
+        NA: formData.na,
+        NAR: formData.nar,
         userId: userId,
-        fileId: fileIdToUse,
-        letterStatus: 'send_to_hod'  // Set status to 'send to hod' when form is submitted
+        fileId: fileIdToUse
       };
       
       console.log('Submitting with userId:', userId, 'and fileId:', fileIdToUse);

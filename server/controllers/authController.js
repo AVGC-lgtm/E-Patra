@@ -129,25 +129,30 @@ const login = async (req, res) => {
   }
 
   try {
+    // Find user by email and include Role model
     const user = await User.findOne({ where: { email }, include: Role });
 
+    // Validate the password
     const valid = user && await bcrypt.compare(password, user.password);
     if (!valid) {
       return res.status(401).json(authResponses.error('Invalid email or password'));
     }
 
+    // Generate JWT token and include user details including the DSC sign URL
     const token = jwt.sign(
       {
         id: user.id,
         email,
         roleId: user.roleId,
         roleName: user.Role.roleName,
-        stationName: user.stationName
+        stationName: user.stationName,
+        sign: user.sign,  // Include the user's digital signature URL in the token
       },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
+    // Return the success response with the token
     return res.json(authResponses.loginSuccessful(token));
   } catch (error) {
     console.error('Login error:', error);
