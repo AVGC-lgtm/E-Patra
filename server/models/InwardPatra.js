@@ -54,6 +54,20 @@ const InwardPatra = sequelize.define('InwardPatra', {
     allowNull: true,
     defaultValue: 1,
   },
+  letterStatus: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  NA: {
+    type: DataTypes.BOOLEAN,
+    allowNull: true,
+    defaultValue: false,
+  },
+  NAR: {
+    type: DataTypes.BOOLEAN,
+    allowNull: true,
+    defaultValue: false,
+  },
   fileId: {
     type: DataTypes.INTEGER,
     allowNull: false,

@@ -20,6 +20,9 @@ router.get('/user/:userId', patraController.getPatraByUserId);
 // Get Patra by user ID and Patra ID
 router.get('/user/:userId/patra/:patraId', patraController.getPatraByUserIdAndPatraId);
 
+// Update letter status only (ADD THIS BEFORE THE GENERAL UPDATE ROUTE)
+router.put('/:id/status', patraController.updateLetterStatus);
+
 // Update a Patra by ID
 router.put('/:id', patraController.updatePatraById);
 

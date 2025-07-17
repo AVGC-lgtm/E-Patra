@@ -31,9 +31,12 @@ const createPatra = async (req, res) => {
     letterClassification,
     letterType,
     letterDate,
-    subject,  // Ensure subject is passed in request body
+    subject,
     outwardLetterNumber,
     numberOfCopies,
+    letterStatus,
+    NA,
+    NAR,
     userId,
     fileId
   } = req.body;
@@ -70,9 +73,12 @@ const createPatra = async (req, res) => {
       letterClassification,
       letterType,
       letterDate,
-      subject,  // Pass subject to the model
+      subject,
       outwardLetterNumber,
-      numberOfCopies: numberOfCopies || 1,  // Default to 1 if not provided
+      numberOfCopies: numberOfCopies || 1,
+      letterStatus: letterStatus || 'sending for head sign', // Default status when patra is submitted
+      NA: NA || false,
+      NAR: NAR || false,
       fileId: validatedFileId,
       userId: user.id,
     });
@@ -81,13 +87,13 @@ const createPatra = async (req, res) => {
       message: 'Patra created successfully',
       referenceNumber: referenceNumber,
       patraId: newPatra.id,
+      letterStatus: newPatra.letterStatus,
     });
   } catch (error) {
     console.error('Error creating Patra:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
-
 
 // Get all Patras
 const getAllPatras = async (req, res) => {
@@ -97,14 +103,13 @@ const getAllPatras = async (req, res) => {
         {
           model: User,
           attributes: ['id', 'email'],
-          // FIXED: Use correct foreign key
           foreignKey: 'userId'
         },
         {
           model: File,
-          as: 'upload', // FIXED: Use the alias defined in the model
+          as: 'upload',
           attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
-          required: false // Left join to include patras without files
+          required: false
         }
       ]
     });
@@ -212,6 +217,7 @@ const getPatraByUserId = async (req, res) => {
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
+
 // Delete a Patra by ID
 const deletePatraById = async (req, res) => {
   const { id } = req.params;
@@ -245,8 +251,11 @@ const updatePatraById = async (req, res) => {
     subject,
     outwardLetterNumber,
     numberOfCopies,
+    letterStatus,
+    NA,
+    NAR,
     userId,
-    fileId // FIXED: Get fileId from request body
+    fileId
   } = req.body;
 
   try {
@@ -260,7 +269,7 @@ const updatePatraById = async (req, res) => {
       return res.status(400).json({ error: 'User not found' });
     }
 
-    // FIXED: Validate fileId if provided
+    // Validate fileId if provided
     let validatedFileId = patra.fileId; // Keep existing fileId by default
     if (fileId && fileId !== patra.fileId) {
       const file = await File.findByPk(fileId);
@@ -282,8 +291,11 @@ const updatePatraById = async (req, res) => {
       subject,
       outwardLetterNumber,
       numberOfCopies,
+      letterStatus: letterStatus !== undefined ? letterStatus : patra.letterStatus,
+      NA: NA !== undefined ? NA : patra.NA,
+      NAR: NAR !== undefined ? NAR : patra.NAR,
       userId: user.id,
-      fileId: validatedFileId, // FIXED: Update fileId properly
+      fileId: validatedFileId,
     };
 
     await patra.update(updateData);
@@ -343,6 +355,33 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
   }
 };
 
+// Update letter status specifically (useful for workflow management)
+const updateLetterStatus = async (req, res) => {
+  const { id } = req.params;
+  const { letterStatus } = req.body;
+
+  try {
+    const patra = await Patra.findByPk(id);
+    if (!patra) {
+      return res.status(404).json({ error: 'Patra not found' });
+    }
+
+    if (letterStatus === undefined) {
+      return res.status(400).json({ error: 'letterStatus is required' });
+    }
+
+    await patra.update({ letterStatus });
+
+    return res.status(200).json({ 
+      message: 'Letter status updated successfully', 
+      letterStatus: patra.letterStatus
+    });
+  } catch (error) {
+    console.error('Error updating letter status:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
+  }
+};
+
 module.exports = {
   createPatra,
   getAllPatras,
@@ -352,4 +391,5 @@ module.exports = {
   deletePatraById,
   updatePatraById,
   getPatraByUserIdAndPatraId,
+  updateLetterStatus, // New function for updating status
 };
