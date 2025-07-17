@@ -16,6 +16,7 @@ import PoliceLetters from './pages/letters/PoliceLetters';
 import NewLetter from './pages/NewLetter';
 import TrackApplication from './pages/TrackApplication';
 import InboxLetter from './pages/InboxLetter';
+import UploadSign from './pages/UploadSign';
 // Create a wrapper component that will use the useNavigate hook
 const AppContent = () => {
   const navigate = useNavigate();
@@ -175,15 +176,24 @@ const AppContent = () => {
           
           {/* Role-specific letter routes */}
           {userRole === 'sp' && (
-            <Route path="letters" element={<SPLetters />} />
+            <>
+              <Route path="letters" element={<SPLetters />} />
+              <Route path="upload-sign" element={<UploadSign />} />
+            </>
           )}
           
           {userRole === 'head' && (
-            <Route path="letters" element={<HODLetters />} />
+            <>
+              <Route path="letters" element={<HODLetters />} />
+              <Route path="upload-sign" element={<UploadSign />} />
+            </>
           )}
           
           {userRole === 'outside_police_station' && (
-            <Route path="letters" element={<PoliceLetters />} />
+            <>
+              <Route path="letters" element={<PoliceLetters />} />
+              <Route path="upload-sign" element={<UploadSign />} />
+            </>
           )}
         </Route>
 

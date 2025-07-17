@@ -73,12 +73,14 @@ const SimpleDashboardLayout = ({ basePath = '', onLogout, children }) => {
   const navItems = [
     { path: '.', icon: '📊', label: t.dashboard || 'Dashboard', key: 'dashboard' },
     { path: 'letters', icon: '📑', label: t.receivedLetters || 'Received Letters', key: 'letters' },
+    { path: 'upload-sign', icon: '✍️', label: language === 'mr' ? 'स्वाक्षरी अपलोड करा' : 'Upload Sign', key: 'upload-sign' },
   ];
 
   // Determine active tab based on current route
   const getActiveTab = () => {
     const path = location.pathname;
     if (path.endsWith('/letters') || path.endsWith('/letters/')) return 'letters';
+    if (path.endsWith('/upload-sign') || path.endsWith('/upload-sign/')) return 'upload-sign';
     return 'dashboard';
   };
 

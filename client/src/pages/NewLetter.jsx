@@ -526,6 +526,24 @@ const NewLetter = () => {
       { value: t.government_letter, label: t.government_letter },
       { value: t.government_reference, label: t.government_reference },
     ],
+    'other_mail': [
+      { value: t.other_mail_confidential, label: t.other_mail_confidential },
+      { value: t.other_mail_sanction_offence, label: t.other_mail_sanction_offence },
+      { value: t.other_mail_deficiency, label: t.other_mail_deficiency },
+      { value: t.other_mail_hospital_record, label: t.other_mail_hospital_record },
+      { value: t.other_mail_accumulated_leave, label: t.other_mail_accumulated_leave },
+      { value: t.other_mail_parole_leave, label: t.other_mail_parole_leave },
+      { value: t.other_mail_weekly_diary, label: t.other_mail_weekly_diary },
+      { value: t.other_mail_daily_check, label: t.other_mail_daily_check },
+      { value: t.other_mail_fingerprint, label: t.other_mail_fingerprint },
+      { value: t.other_mail_medical_bill, label: t.other_mail_medical_bill },
+      { value: t.other_mail_tenant_verification, label: t.other_mail_tenant_verification },
+      { value: t.other_mail_leave_sanction, label: t.other_mail_leave_sanction },
+      { value: t.other_mail_warrant, label: t.other_mail_warrant },
+      { value: t.other_mail_explanation_absence, label: t.other_mail_explanation_absence },
+      { value: t.other_mail_death_summary_approval, label: t.other_mail_death_summary_approval },
+      { value: t.other_mail_viscera, label: t.other_mail_viscera },
+    ],
     'right_to_public_services_act_2015': [
       { value: t.right_to_public_services_act_2015_arms_license, label: t.right_to_public_services_act_2015_arms_license },
       { value: t.right_to_public_services_act_2015_character_verification, label: t.right_to_public_services_act_2015_character_verification },
@@ -540,7 +558,24 @@ const NewLetter = () => {
       { value: t.right_to_public_services_act_2015_devsthan_b_class, label: t.right_to_public_services_act_2015_devsthan_b_class },
       { value: t.right_to_public_services_act_2015_other_licenses, label: t.right_to_public_services_act_2015_other_licenses },
     ],
+    'portal_application': [
+      { value: t.portal_application_pm_pg, label: t.portal_application_pm_pg },
+      { value: t.portal_application_aaple_sarkar, label: t.portal_application_aaple_sarkar },
+      { value: t.portal_application_homd, label: t.portal_application_homd },
+    ],
+    'other_application': [
+      { value: t.other_application_local, label: t.other_application_local },
+      { value: t.other_application_anonymous, label: t.other_application_anonymous },
+      { value: t.other_application_district_serviceman, label: t.other_application_district_serviceman },
+      { value: t.other_application_moneylending_related, label: t.other_application_moneylending_related },
+      { value: t.other_application_lokshahi_related, label: t.other_application_lokshahi_related },
+      { value: t.other_application_confidential, label: t.other_application_confidential },
+    ],
+    'right_to_information': [
+      { value: t.right_to_information, label: t.right_to_information },
+    ],
   };
+  
 
   // Function to get branch name in current language
   const getBranchName = (branchKey) => {
