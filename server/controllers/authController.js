@@ -129,30 +129,25 @@ const login = async (req, res) => {
   }
 
   try {
-    // Find user by email and include Role model
     const user = await User.findOne({ where: { email }, include: Role });
 
-    // Validate the password
     const valid = user && await bcrypt.compare(password, user.password);
     if (!valid) {
       return res.status(401).json(authResponses.error('Invalid email or password'));
     }
 
-    // Generate JWT token and include user details including the DSC sign URL
     const token = jwt.sign(
       {
         id: user.id,
         email,
         roleId: user.roleId,
         roleName: user.Role.roleName,
-        stationName: user.stationName,
-        sign: user.sign,  // Include the user's digital signature URL in the token
+        stationName: user.stationName
       },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    // Return the success response with the token
     return res.json(authResponses.loginSuccessful(token));
   } catch (error) {
     console.error('Login error:', error);
@@ -162,26 +157,46 @@ const login = async (req, res) => {
 
 // Forgot password
 const forgotPassword = async (req, res) => {
+  console.log('Forgot password request received for email:', req.body.email);
   const { email } = req.body;
   if (!email) {
+    console.log('No email provided in request');
     return res.status(400).json(authResponses.error('Email required'));
   }
 
   let user;
   try {
+    console.log('Looking for user with email:', email);
     user = await User.findOne({ where: { email } });
     if (!user) {
+      console.log('User not found for email:', email);
       return res.status(404).json(authResponses.error('User not found'));
     }
 
+    console.log('User found. Generating OTP...');
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiration = new Date(Date.now() + 10 * 60 * 1000);
+    const otpExpiration = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
     const otpHash = await bcrypt.hash(otp, 10);
 
-    user.otpHash = otpHash;
-    user.otpExpiration = otpExpiration;
-    await user.save();
+    console.log('Saving OTP to user record...', {
+      userId: user.id,
+      otpHash: !!otpHash,
+      otpExpiration
+    });
 
+    // Update user with the new OTP
+    const updatedUser = await user.update({
+      otpHash,
+      otpExpiration
+    });
+
+    console.log('User record after save:', {
+      id: updatedUser.id,
+      otpHash: !!updatedUser.otpHash,
+      otpExpiration: updatedUser.otpExpiration
+    });
+
+    console.log('Sending OTP email to:', email);
     const { subject, html, text } = getPasswordResetOTPTemplate(otp);
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
@@ -190,6 +205,7 @@ const forgotPassword = async (req, res) => {
       html,
       text
     });
+    console.log('OTP email sent successfully');
 
     return res.json(authResponses.otpSentToEmail());
   } catch (error) {
@@ -205,24 +221,57 @@ const forgotPassword = async (req, res) => {
 
 // Verify OTP
 const verifyOtp = async (req, res) => {
+  console.log('OTP Verification Request:', {
+    body: req.body,
+    headers: req.headers
+  });
+
   const { email, otp } = req.body;
+  
   if (!email || !otp) {
+    console.log('Missing email or OTP in request');
     return res.status(400).json(authResponses.error('Email and OTP required'));
   }
 
   try {
+    console.log('Looking for user with email:', email);
     const user = await User.findOne({ where: { email } });
-    const now = new Date();
-    const validOtp = user &&
-      user.otpHash &&
-      user.otpExpiration &&
-      now <= user.otpExpiration &&
-      await bcrypt.compare(otp, user.otpHash);
-
-    if (!validOtp) {
-      return res.status(400).json(authResponses.error('Invalid or expired OTP'));
+    
+    if (!user) {
+      console.log('User not found');
+      return res.status(400).json(authResponses.error('User not found'));
     }
 
+    console.log('User found. Checking OTP...', {
+      hasOtpHash: !!user.otpHash,
+      otpExpiration: user.otpExpiration,
+      currentTime: new Date(),
+      isOtpExpired: user.otpExpiration && new Date() > user.otpExpiration
+    });
+
+    const now = new Date();
+    const isOtpExpired = user.otpExpiration && now > user.otpExpiration;
+    
+    if (isOtpExpired) {
+      console.log('OTP has expired');
+      return res.status(400).json(authResponses.error('OTP has expired'));
+    }
+
+    if (!user.otpHash) {
+      console.log('No OTP found for this user');
+      return res.status(400).json(authResponses.error('No OTP found'));
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, user.otpHash);
+    console.log('OTP comparison result:', isOtpValid);
+
+    if (!isOtpValid) {
+      console.log('Invalid OTP provided');
+      return res.status(400).json(authResponses.error('Invalid OTP'));
+    }
+
+    // If we get here, OTP is valid
+    console.log('OTP verified successfully');
     user.otpHash = null;
     user.otpExpiration = null;
     await user.save();
@@ -230,7 +279,7 @@ const verifyOtp = async (req, res) => {
     return res.json(authResponses.otpVerified());
   } catch (error) {
     console.error('Verify OTP error:', error);
-    return res.status(500).json(authResponses.error('Server error'));
+    return res.status(500).json(authResponses.error('Server error: ' + error.message));
   }
 };
 
@@ -314,6 +363,47 @@ const updateSign = async (req, res) => {
   }
 };
 
+const deleteSign = async (req, res) => {
+  const { userId } = req.body;  // Get userId from the request body
+
+  if (!userId) {
+    return res.status(400).json({ error: 'User ID is required' });
+  }
+
+  try {
+    // Find the user by userId
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.sign) {
+      return res.status(400).json({ error: 'No signature found to delete' });
+    }
+
+    // TODO: Optionally delete the file from S3 here
+    // const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
+    // const key = user.sign.split('/').pop(); // Extract key from URL
+    // await s3Client.send(new DeleteObjectCommand({
+    //   Bucket: process.env.AWS_BUCKET_NAME,
+    //   Key: `signatures/${key}`
+    // }));
+
+    // Remove the signature URL from the user
+    user.sign = null;
+    await user.save();
+
+    // Return success response
+    return res.status(200).json({
+      success: 'Digital signature deleted successfully',
+      userId: user.id
+    });
+  } catch (error) {
+    console.error('Error deleting digital signature:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
 
 // Logout
 const logout = (req, res) => {
@@ -328,5 +418,6 @@ module.exports = {
   resetPassword,
   logout,
   updateSign,
+  deleteSign,
   uploadSingle,
 };

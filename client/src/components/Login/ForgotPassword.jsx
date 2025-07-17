@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Eye, EyeOff } from 'lucide-react';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const ForgotPassword = () => {
   // Form steps: 1 = Email, 2 = OTP, 3 = New Password
@@ -21,19 +23,22 @@ const ForgotPassword = () => {
 
   // Handle OTP input change
   const handleOtpChange = (index, value) => {
-    if (isNaN(value)) return;
+    // Only allow single digit numbers or empty string
+    if (value !== '' && !/^\d?$/.test(value)) return;
     
+    // Update the OTP array with the new value
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
     
-    // Move to next input
-    if (value && index < 5) {
+    // Move to next input if a digit was entered
+    if (value !== '' && index < 5) {
       otpInputs.current[index + 1]?.focus();
     }
     
     // Auto-submit when all digits are entered
-    if (newOtp.every(digit => digit) && index === 5) {
+    const isComplete = newOtp.every(digit => digit && digit.length === 1);
+    if (isComplete && index === 5) {
       handleOtpSubmit();
     }
   };
@@ -58,7 +63,7 @@ const ForgotPassword = () => {
   };
 
   // Handle email submission
-  const handleEmailSubmit = (e) => {
+  const handleEmailSubmit = async (e) => {
     e.preventDefault();
     if (!email) {
       setError('Please enter your email');
@@ -72,33 +77,154 @@ const ForgotPassword = () => {
     setIsLoading(true);
     setError('');
     
-    // Simulate API call to send OTP
-    setTimeout(() => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success('OTP has been sent to your email', {
+          position: 'top-right',
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+        setStep(2); // Move to OTP step
+        startResendTimer();
+      } else {
+        setError(data.message || 'Failed to send OTP');
+        toast.error(data.message || 'Failed to send OTP', {
+          position: 'top-right',
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Error sending OTP:', error);
+      setError('An error occurred. Please try again.');
+      toast.error('An error occurred. Please try again.', {
+        position: 'top-right',
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    } finally {
       setIsLoading(false);
-      setStep(2); // Move to OTP step
-      startResendTimer();
-    }, 1500);
+    }
   };
 
   // Handle OTP submission
-  const handleOtpSubmit = () => {
-    if (otp.some(digit => !digit)) {
-      setError('Please enter the 6-digit OTP');
+  const handleOtpSubmit = async () => {
+    // Validate all OTP digits are filled
+    const isComplete = otp.length === 6 && otp.every(digit => 
+      digit && digit.length === 1
+    );
+    
+    if (!isComplete) {
+      setError('Please enter all 6 digits of the OTP');
       return;
     }
     
+    // Validate OTP length first
+    if (otp.length !== 6 || otp.some(digit => !digit || digit.trim() === '')) {
+      setError('Please enter all 6 digits of the OTP');
+      toast.error('Please enter all 6 digits of the OTP', {
+        position: 'top-right',
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+      return;
+    }
+
     setIsLoading(true);
     setError('');
     
-    // Simulate OTP verification
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const otpCode = otp.join('');
+      const apiUrl = window.env?.VITE_API_URL || 'http://localhost:5000';
+      const emailToSend = email.trim().toLowerCase();
+      
+      const requestBody = { 
+        email: emailToSend,
+        otp: otpCode
+      };
+      
+      console.log('Sending OTP verification request:', {
+        url: `${apiUrl}/api/auth/verify-otp`,
+        method: 'POST',
+        body: requestBody
+      });
+      
+      const response = await fetch(`${apiUrl}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(requestBody),
+      });
+
+      const responseText = await response.text();
+      let data = {};
+      
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch (error) {
+        console.error('Error parsing response:', error);
+        throw new Error('Invalid response from server');
+      }
+
+      if (!response.ok) {
+        const errorMessage = data.message || 'Failed to verify OTP';
+        console.error('OTP verification failed:', errorMessage);
+        throw new Error(errorMessage);
+      }
+      
+      // If we get here, OTP was verified successfully
       setStep(3); // Move to password reset step
-    }, 1000);
+      toast.success('OTP verified successfully!', {
+        position: 'top-right',
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      setError('An error occurred. Please try again.');
+      toast.error('An error occurred. Please try again.', {
+        position: 'top-right',
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Handle password reset
-  const handlePasswordSubmit = (e) => {
+  const handlePasswordSubmit = async (e) => {
     e.preventDefault();
     
     if (!newPassword || !confirmPassword) {
@@ -119,26 +245,113 @@ const ForgotPassword = () => {
     setIsLoading(true);
     setError('');
     
-    // Simulate password reset API call
-    setTimeout(() => {
+    try {
+      const otpCode = otp.join('');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          email,
+          otp: otpCode,
+          newPassword,
+          confirmPassword
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success('Password has been reset successfully', {
+          position: 'top-right',
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+        setStep(4); // Success step
+      } else {
+        setError(data.message || 'Failed to reset password');
+        toast.error(data.message || 'Failed to reset password', {
+          position: 'top-right',
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      setError('An error occurred. Please try again.');
+      toast.error('An error occurred. Please try again.', {
+        position: 'top-right',
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    } finally {
       setIsLoading(false);
-      // Show success message or redirect to login
-      setStep(4); // Success step
-    }, 1500);
+    }
   };
 
   // Resend OTP functionality
-  const handleResendOtp = () => {
+  const handleResendOtp = async () => {
     if (isResending || resendTimer > 0) return;
     
     setIsResending(true);
     
-    // Simulate resend OTP API call
-    setTimeout(() => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success('New OTP has been sent to your email', {
+          position: 'top-right',
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+        setResendTimer(30);
+        startResendTimer();
+      } else {
+        toast.error(data.message || 'Failed to resend OTP', {
+          position: 'top-right',
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Error resending OTP:', error);
+      toast.error('An error occurred. Please try again.', {
+        position: 'top-right',
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    } finally {
       setIsResending(false);
-      setResendTimer(30);
-      startResendTimer();
-    }, 1000);
+    }
   };
 
   // Start resend timer
@@ -260,8 +473,8 @@ const ForgotPassword = () => {
             <button
               type="button"
               onClick={handleOtpSubmit}
-              disabled={otp.some(digit => !digit) || isLoading}
-              className={`w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${(otp.some(digit => !digit) || isLoading) ? 'opacity-70 cursor-not-allowed' : ''}`}
+              disabled={otp.length !== 6 || otp.some(digit => digit === '' || digit === null || digit === undefined) || isLoading}
+              className={`w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${(otp.length !== 6 || otp.some(digit => digit === '' || digit === null || digit === undefined) || isLoading) ? 'opacity-70 cursor-not-allowed' : ''}`}
             >
               {isLoading ? 'Verifying...' : 'Verify OTP'}
             </button>

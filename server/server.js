@@ -13,6 +13,9 @@ const PoliceStation = require('./models/PoliceStation');  // Import PoliceStatio
 const acknowledgmentRoutes = require('./routes/acknowledgmentRoutes');
 const policeStationRoutes = require('./routes/policeStationRoutes');  // Import PoliceStation routes
 const fileRoutes = require('./routes/fileRoutes');
+const emailRoutes = require('./routes/emailRoutes');
+const emailSenderReceiverRoutes = require('./routes/emailSenderReceiverRoutes');
+const dynamicEmailRoutes = require('./routes/dynamicEmailRoutes');
 
 const app = express();
 
@@ -58,6 +61,7 @@ const createDefaultPoliceStations = async () => {
   }
 };
 
+
 // Middleware
 const corsOptions = {
   origin: '*',  
@@ -67,7 +71,14 @@ const corsOptions = {
 
 app.use(cors(corsOptions)); 
 app.use(express.json()); 
-// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Create uploads directory for CSV imports if it doesn't exist
+const fs = require('fs');
+const tempDir = path.join(__dirname, 'temp');
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir);
+  console.log('Created temp directory for file uploads');
+}
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -76,11 +87,70 @@ app.use('/api/patras', InwardPatraRoutes);
 app.use('/api/acknowledgments', acknowledgmentRoutes);
 app.use('/api', policeStationRoutes); 
 app.use('/api/files', fileRoutes);
+app.use('/api/email', emailRoutes);
+app.use('/api', emailSenderReceiverRoutes);
+app.use('/api/dynamic-email', dynamicEmailRoutes);
 
-// Sync the database and then create the default roles and stations before starting the server
+// Email configuration verification on startup
+const { verifyEmailConfig } = require('./config/email');
+
+// Initialize email configuration
+const initializeEmailService = async () => {
+  try {
+    console.log('Initializing email service...');
+    await verifyEmailConfig();
+    console.log('✓ Email service initialized successfully');
+    
+    // Create default email contacts after email service is initialized
+  
+  } catch (error) {
+    console.error('✗ Email service initialization failed:', error);
+    console.log('Email functionality will be disabled');
+  }
+};
+
+// Define model associations
+const defineAssociations = () => {
+  try {
+    const User = require('./models/User');
+    const Role = require('./models/Role');
+
+    // User-Role association (if not already defined)
+    if (!User.associations.Role) {
+      User.belongsTo(Role, { foreignKey: 'roleId' });
+    }
+    
+    console.log('✓ Model associations defined successfully');
+  } catch (error) {
+    console.error('Error defining associations:', error);
+  }
+};
+
+// Add error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  
+  res.status(500).json({
+    error: 'Internal server error',
+    message: err.message
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Not found',
+    message: `Cannot ${req.method} ${req.url}`
+  });
+});
+
+// Sync the database and then create the default data before starting the server
 sequelize.sync({ force: false, alter: true })  // Automatically update the tables without dropping them
   .then(async () => {
     console.log('Database connected successfully!');
+
+    // Define model associations
+    defineAssociations();
 
     // Create default roles
     await createDefaultRoles();
@@ -88,9 +158,25 @@ sequelize.sync({ force: false, alter: true })  // Automatically update the table
     // Create default Police Stations if not already present
     await createDefaultPoliceStations();
 
-    // Start the server after roles and police stations are created
-    app.listen(process.env.PORT || 5000, () => {
+    // Start the server after initial setup
+    app.listen(process.env.PORT || 5000, async () => {
       console.log(`Server running on port ${process.env.PORT || 5000}`);
+      
+      // Initialize email service and create default email contacts
+      await initializeEmailService();
+      
+      console.log('✓ Application initialized successfully');
+      console.log('Available API endpoints:');
+      console.log('  - Auth: /api/auth');
+      console.log('  - Roles: /api/roles');
+      console.log('  - Patras: /api/patras');
+      console.log('  - Acknowledgments: /api/acknowledgments');
+      console.log('  - Police Stations: /api/police-stations');
+      console.log('  - Files: /api/files');
+      console.log('  - Email: /api/email');
+      console.log('  - Email Senders: /api/senders');
+      console.log('  - Email Receivers: /api/receivers');
+      console.log('  - Dynamic Email: /api/dynamic-email');
     });
   })
   .catch((err) => {

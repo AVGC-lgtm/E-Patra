@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const Login = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
@@ -11,6 +13,7 @@ const Login = ({ onLogin }) => {
   
   const handleForgotPassword = (e) => {
     e.preventDefault();
+    // Navigate to the ForgotPassword page
     navigate('/forgot-password');
   };
 
@@ -56,7 +59,7 @@ const Login = ({ onLogin }) => {
     
     try {
       // Define the API URL - use the environment variable if it exists, otherwise use the default
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const apiUrl = window.env?.VITE_API_URL || 'http://localhost:5000';
       const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
         headers: {

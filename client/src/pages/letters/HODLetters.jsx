@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiFileText } from 'react-icons/fi';
+import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiFileText, FiEdit } from 'react-icons/fi';
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
@@ -25,8 +25,102 @@ const HODLetters = () => {
     { value: 'All', label: language === 'mr' ? 'सर्व स्थिती' : 'All Status' },
     { value: 'pending', label: language === 'mr' ? 'प्रलंबित' : 'Pending' },
     { value: 'approved', label: language === 'mr' ? 'मंजूर' : 'Approved' },
-    { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' }
+    { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' },
+    { value: 'sending for head sign', label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी पाठवत आहे' : 'Sending for Head Sign' }
   ];
+
+  // Field labels for the view modal
+  const fieldLabels = {
+    dateOfReceiptOfLetter: { en: 'Date of Receipt', mr: 'प्राप्तीची तारीख' },
+    officeSendingLetter: { en: 'Sender Office', mr: 'पत्र पाठविणारे कार्यालय' },
+    senderNameAndDesignation: { en: 'Sender Name & Designation', mr: 'प्रेषकाचे नाव व पदनाम' },
+    mobileNumber: { en: 'Mobile Number', mr: 'मोबाईल नंबर' },
+    letterMedium: { en: 'Letter Medium', mr: 'पत्र माध्यम' },
+    letterClassification: { en: 'Classification', mr: 'वर्गीकरण' },
+    letterType: { en: 'Letter Type', mr: 'पत्र प्रकार' },
+    letterDate: { en: 'Letter Date', mr: 'पत्राची तारीख' },
+    subject: { en: 'Subject', mr: 'विषय' },
+    outwardLetterNumber: { en: 'Outward Letter Number', mr: 'बाह्य पत्र क्रमांक' },
+    numberOfCopies: { en: 'Number of Copies', mr: 'प्रतींची संख्या' },
+    letterStatus: { en: 'Status', mr: 'स्थिती' },
+    NA: { en: 'NA', mr: 'NA' },
+    NAR: { en: 'NAR', mr: 'NAR' },
+    userId: { en: 'User ID', mr: 'वापरकर्ता आयडी' },
+    fileId: { en: 'File ID', mr: 'फाइल आयडी' },
+    referenceNumber: { en: 'Reference Number', mr: 'संदर्भ क्रमांक' }
+  };
+
+  // Fields to exclude from the view modal
+  const excludedFields = [
+    '_id', '__v', 'id', 'createdAt', 'updatedAt', 
+    'fileId', 'userId', 'upload', 'extractedData'
+  ];
+
+  // Helper function to safely render values
+  const renderFieldValue = (key, value) => {
+    // Handle null, undefined, or empty values
+    if (value === null || value === undefined || value === '') {
+      return 'N/A';
+    }
+
+    // Handle objects
+    if (typeof value === 'object') {
+      // If it's an array, join the elements
+      if (Array.isArray(value)) {
+        return value.length > 0 ? value.join(', ') : 'N/A';
+      }
+      
+      // If it's an object, try to extract meaningful information
+      if (value.id && value.email) {
+        return `${value.email} (ID: ${value.id})`;
+      }
+      
+      if (value.name) {
+        return value.name;
+      }
+      
+      // For other objects, stringify them safely
+      try {
+        return JSON.stringify(value);
+      } catch (e) {
+        return '[Object]';
+      }
+    }
+
+    // Handle boolean values
+    if (typeof value === 'boolean') {
+      return value ? (language === 'mr' ? 'होय' : 'Yes') : (language === 'mr' ? 'नाही' : 'No');
+    }
+
+    // For dates
+    if (key.includes('Date') || key.includes('date')) {
+      return formatDate(value);
+    }
+
+    // For regular strings/numbers
+    return String(value);
+  };
+
+  // Function to get file URL and preview
+  const getFileUrl = (letter) => {
+    if (letter.upload && letter.upload.fileUrl) {
+      return letter.upload.fileUrl;
+    }
+    if (letter.fileId) {
+      return `http://localhost:5000/uploads/${letter.fileId}`;
+    }
+    return null;
+  };
+
+  // Function to preview file
+  const previewFile = (letter) => {
+    const fileUrl = getFileUrl(letter);
+    if (fileUrl) {
+      window.open(fileUrl, '_blank');
+    } else {
+      alert(language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available');
+    }
+  };
 
   // Fetch letters from API
   const handleRefresh = async () => {
@@ -77,7 +171,8 @@ const HODLetters = () => {
       searchableFields.includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === 'All' || 
-      letter.letterStatus === statusFilter.toLowerCase();
+      letter.letterStatus === statusFilter.toLowerCase() ||
+      (statusFilter === 'sending for head sign' && letter.letterStatus === 'sending for head sign');
 
     return matchesSearch && matchesStatus;
   });
@@ -104,6 +199,11 @@ const HODLetters = () => {
         bg: 'bg-red-100',
         text: 'text-red-800',
         label: language === 'mr' ? 'नाकारले' : 'Rejected'
+      },
+      'sending for head sign': {
+        bg: 'bg-blue-100',
+        text: 'text-blue-800',
+        label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी' : 'For Head Sign'
       }
     };
 
@@ -141,6 +241,30 @@ const HODLetters = () => {
     } catch (error) {
       console.error('Error rejecting letter:', error);
       alert(language === 'mr' ? 'पत्र नाकारण्यात त्रुटी!' : 'Error rejecting letter!');
+    }
+  };
+
+  // Handle attach sign action
+  const handleAttachSign = async (letterId) => {
+    try {
+      console.log('Attaching sign to letter:', letterId);
+      // Navigate to upload sign page or open a modal
+      navigate('/dashboard/upload-sign');
+    } catch (error) {
+      console.error('Error attaching sign:', error);
+      alert(language === 'mr' ? 'स्वाक्षरी जोडण्यात त्रुटी!' : 'Error attaching sign!');
+    }
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid Date';
+      return date.toLocaleDateString(language === 'mr' ? 'mr-IN' : 'en-US');
+    } catch (e) {
+      return 'Invalid Date';
     }
   };
 
@@ -272,6 +396,22 @@ const HODLetters = () => {
                           >
                             <FiEye className="h-5 w-5" />
                           </button>
+
+                          <button
+                            onClick={() => previewFile(letter)}
+                            className="text-indigo-600 hover:text-indigo-900 p-1 rounded-md hover:bg-indigo-100 transition-colors"
+                            title={language === 'mr' ? 'फाइल पहा' : 'View File'}
+                          >
+                            <FiFileText className="h-5 w-5" />
+                          </button>
+                          
+                          <button
+                            onClick={() => handleAttachSign(letter.id || letter._id)}
+                            className="text-purple-600 hover:text-purple-900 p-1 rounded-md hover:bg-purple-100 transition-colors"
+                            title={language === 'mr' ? 'स्वाक्षरी जोडा' : 'Attach Sign'}
+                          >
+                            <FiEdit className="h-5 w-5" />
+                          </button>
                           
                           {letter.letterStatus?.toLowerCase() === 'pending' && (
                             <>
@@ -350,46 +490,84 @@ const HODLetters = () => {
             <h2 className="text-2xl font-extrabold mb-8 text-blue-700 text-center tracking-wide drop-shadow">
               {language === 'mr' ? 'पत्र तपशील' : 'Letter Details'}
             </h2>
-            <div className="flex flex-col gap-6">
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {language === 'mr' ? 'संदर्भ क्रमांक' : 'Reference Number'}
-                </div>
-                <div className="text-lg text-gray-800 font-medium">
-                  {selectedLetter.referenceNumber || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {language === 'mr' ? 'अर्जदाराचे नाव व पदनाम' : 'Applicant Name & Designation'}
-                </div>
-                <div className="text-lg text-gray-800 font-medium">
-                  {selectedLetter.senderNameAndDesignation || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {language === 'mr' ? 'पत्र पाठविणारे कार्यालय' : 'Sender Office'}
-                </div>
-                <div className="text-lg text-gray-800 font-medium">
-                  {selectedLetter.officeSendingLetter || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {language === 'mr' ? 'विषय' : 'Subject'}
-                </div>
-                <div className="text-lg text-gray-800 font-medium">
-                  {selectedLetter.subject || 'N/A'}
-                </div>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Dynamically render all fields with safe rendering, excluding technical fields */}
+              {Object.entries(selectedLetter)
+                .filter(([key]) => {
+                  // Convert key to lowercase for case-insensitive comparison
+                  const keyLower = key.toLowerCase();
+                  
+                  // Check if key is in excluded fields (case-insensitive)
+                  const isExcluded = excludedFields.some(excludedField => 
+                    excludedField.toLowerCase() === keyLower
+                  );
+                  
+                  // Additional patterns to exclude
+                  const containsFileId = keyLower.includes('file') && keyLower.includes('id');
+                  const containsUserId = keyLower.includes('user') && keyLower.includes('id');
+                  
+                  return !isExcluded && !containsFileId && !containsUserId;
+                })
+                .map(([key, value]) => {
+                // Get the label for this field
+                const label = fieldLabels[key] 
+                  ? fieldLabels[key][language === 'mr' ? 'mr' : 'en']
+                  : key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+                
+                // Special formatting for status
+                if (key === 'letterStatus') {
+                  return (
+                    <div key={key} className="col-span-1">
+                      <div className="text-base font-bold text-blue-900 mb-1">
+                        {label}
+                      </div>
+                      <div className="text-lg text-gray-800 font-medium">
+                        {getStatusBadge(value)}
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // Use the safe render function for all other fields
+                const displayValue = renderFieldValue(key, value);
+                
+                return (
+                  <div key={key} className="col-span-1">
+                    <div className="text-base font-bold text-blue-900 mb-1">
+                      {label}
+                    </div>
+                    <div className="text-lg text-gray-800 font-medium">
+                      {displayValue}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+            
+            {/* File Preview Section */}
+            {getFileUrl(selectedLetter) && (
+              <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <h3 className="text-lg font-bold text-blue-800 mb-4">
+                  {language === 'mr' ? 'अपलोड केलेली फाइल' : 'Uploaded File'}
+                </h3>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FiFileText className="text-blue-600 h-5 w-5" />
+                    <span className="text-blue-700 font-medium">
+                      {selectedLetter.upload?.originalName || 
+                       `File_${selectedLetter.fileId || 'unknown'}.pdf`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => previewFile(selectedLetter)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  >
+                    <FiEye className="h-4 w-4" />
+                    {language === 'mr' ? 'फाइल पहा' : 'View File'}
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="flex justify-center mt-8">
               <button
                 className="px-8 py-2 bg-blue-600 text-white rounded-lg font-semibold shadow hover:bg-blue-700 transition-colors text-lg"

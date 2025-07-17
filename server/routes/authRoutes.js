@@ -24,7 +24,8 @@ router.post('/register', authController.register);
 // router.put('/update-sign', authenticateToken, authController.uploadSingle, authController.updateSign);
 router.put('/update-sign', authController.uploadSingle, authController.updateSign);
 
-
+// Delete Digital Signature (protected route)
+router.delete('/delete-sign', authController.deleteSign);
 
 // Logout route (protected)
 router.post('/logout', authenticateToken, authController.logout);
