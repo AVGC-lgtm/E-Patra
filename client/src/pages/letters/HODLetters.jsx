@@ -53,7 +53,14 @@ const HODLetters = () => {
   // Fields to exclude from the view modal
   const excludedFields = [
     '_id', '__v', 'id', 'createdAt', 'updatedAt', 
-    'fileId', 'userId', 'upload', 'extractedData'
+    'fileId', 'userId', 'upload', 'extractedData',
+    'extractedText', 'ocrData', 'text', 'rawText',
+    'parsedData', 'ocrText', 'documentText',
+    'extractedContent', 'textContent', 'fileContent',
+    'content', 'data', 'fileData', 'documentData',
+    'extractedFields', 'parsedText', 'processedData',
+    'uploadedFile', 'coveringLetter', 'pdfData',
+    'documentContent', 'scannedData', 'ocrResult'
   ];
 
   // Helper function to get user data
@@ -152,22 +159,73 @@ const HODLetters = () => {
 
   // Function to get file URL and preview
   const getFileUrl = (letter) => {
+    // Check for upload object with fileUrl
     if (letter.upload && letter.upload.fileUrl) {
       return letter.upload.fileUrl;
     }
-    if (letter.fileId) {
-      return `http://localhost:5000/uploads/${letter.fileId}`;
+    
+    // Check for fileUrl directly on the letter
+    if (letter.fileUrl) {
+      return letter.fileUrl;
     }
+    
+    // Check for fileId and construct URL
+    if (letter.fileId) {
+      // Convert to string if it's not already
+      const fileIdStr = String(letter.fileId);
+      
+      // If fileId looks like a complete URL, return it
+      if (fileIdStr.startsWith('http')) {
+        return fileIdStr;
+      }
+      // Otherwise construct the URL
+      return `http://localhost:5000/api/patras/file/${fileIdStr}`;
+    }
+    
+    // Check for _id as fallback
+    if (letter._id || letter.id) {
+      const id = letter._id || letter.id;
+      return `http://localhost:5000/api/patras/file/${id}`;
+    }
+    
     return null;
   };
 
   // Function to preview file
-  const previewFile = (letter) => {
+  const previewFile = async (letter) => {
     const fileUrl = getFileUrl(letter);
-    if (fileUrl) {
-      window.open(fileUrl, '_blank');
-    } else {
+    if (!fileUrl) {
       alert(language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available');
+      return;
+    }
+
+    try {
+      // If it's an API endpoint, fetch with authentication
+      if (fileUrl.includes('/api/')) {
+        const token = localStorage.getItem('token');
+        const response = await fetch(fileUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+        
+        // Clean up the blob URL after a delay
+        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 100);
+      } else {
+        // For direct URLs, just open them
+        window.open(fileUrl, '_blank');
+      }
+    } catch (error) {
+      console.error('Error previewing file:', error);
+      alert(language === 'mr' ? 'फाइल पाहण्यात त्रुटी' : 'Error viewing file');
     }
   };
 
@@ -430,6 +488,8 @@ const HODLetters = () => {
       alert(language === 'mr' ? 'पत्र मंजूर करण्यात त्रुटी!' : 'Error approving letter!');
     }
   };
+
+  
 
   // Handle reject action
   const handleReject = async (letterId) => {
@@ -747,7 +807,7 @@ const HODLetters = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Dynamically render all fields with safe rendering, excluding technical fields */}
               {Object.entries(selectedLetter)
-                .filter(([key]) => {
+                .filter(([key, value]) => {
                   // Convert key to lowercase for case-insensitive comparison
                   const keyLower = key.toLowerCase();
                   
@@ -760,7 +820,41 @@ const HODLetters = () => {
                   const containsFileId = keyLower.includes('file') && keyLower.includes('id');
                   const containsUserId = keyLower.includes('user') && keyLower.includes('id');
                   
-                  return !isExcluded && !containsFileId && !containsUserId;
+                  // Exclude fields with specific names that contain file data
+                  const isFileDataField = keyLower === 'uploadedfile' || 
+                                        keyLower === 'uploaded file' ||
+                                        keyLower === 'coveringletter' ||
+                                        keyLower === 'covering letter' ||
+                                        key === 'Uploaded File' ||
+                                        key === 'Covering Letter';
+                  
+                  // Exclude fields that are likely extracted/OCR data
+                  const isExtractedData = keyLower.includes('extracted') || 
+                                        keyLower.includes('ocr') || 
+                                        keyLower.includes('parsed') ||
+                                        keyLower === 'text' ||
+                                        keyLower === 'rawtext' ||
+                                        keyLower === 'content' ||
+                                        keyLower === 'data';
+                  
+                  // Exclude very long string values that look like OCR output or PDF metadata
+                  const isLongText = typeof value === 'string' && 
+                                   (value.length > 200 || 
+                                    value.includes('"id"') || 
+                                    value.includes('{"') || 
+                                    value.includes('status":"success"') ||
+                                    value.includes('\\n') ||
+                                    value.includes('"text"') ||
+                                    value.includes('Printer Information') ||
+                                    value.includes('Product Name') ||
+                                    value.includes('Printing Date') ||
+                                    value.includes('LaserJet') ||
+                                    value.includes('extractData') ||
+                                    value.includes('.pdf') ||
+                                    value.includes('originalName') ||
+                                    value.includes('fileName'));
+                  
+                  return !isExcluded && !containsFileId && !containsUserId && !isExtractedData && !isLongText && !isFileDataField;
                 })
                 .map(([key, value]) => {
                 // Get the label for this field

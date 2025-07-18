@@ -8,7 +8,11 @@ const File = require('./File');
 // InwardPatra associations
 InwardPatra.belongsTo(User, { foreignKey: 'userId' });
 InwardPatra.belongsTo(File, { as: 'uploadedFile', foreignKey: 'fileId' });
-InwardPatra.hasMany(CoveringLetter, { foreignKey: 'patraId' });
+
+// One-to-One relationship: InwardPatra has one CoveringLetter
+InwardPatra.hasOne(CoveringLetter, { foreignKey: 'patraId', as: 'coveringLetter' });
+// Also add the direct reference through coveringLetterId
+InwardPatra.belongsTo(CoveringLetter, { foreignKey: 'coveringLetterId', as: 'directCoveringLetter' });
 
 // CoveringLetter associations
 CoveringLetter.belongsTo(InwardPatra, { foreignKey: 'patraId' });
