@@ -15,7 +15,6 @@ const User = sequelize.define('User', {
     references: { model: 'roles', key: 'id' }, 
     allowNull: false 
   }
-  // roleId: { type: DataTypes.INTEGER, references: { model: Role, key: 'id' }, allowNull: false }
 }, { 
   timestamps: true, 
   underscored: true  
