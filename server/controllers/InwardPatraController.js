@@ -1,8 +1,9 @@
-// controllers/InwardPatraController.js - Fixed with proper model imports
+// controllers/InwardPatraController.js - Fixed version with proper column references
 const Patra = require('../models/InwardPatra');
 const User = require('../models/User');
 const File = require('../models/File');
 const CoveringLetter = require('../models/CoveringLetter');
+const sequelize = require('../config/database');
 
 // Import associations to ensure they're loaded
 require('../models/associations');
@@ -26,6 +27,36 @@ const generateReferenceNumber = async () => {
 
   return referenceNumber;
 };
+
+// Common include configuration for covering letter
+const getCoveringLetterInclude = () => ({
+  model: CoveringLetter,
+  as: 'coveringLetter',
+  required: false,
+  include: [
+    {
+      model: File,
+      as: 'attachedFile',
+      attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+      required: false
+    }
+  ]
+});
+
+// Common include configuration for user - ONLY include fields that exist
+const getUserInclude = () => ({
+  model: User,
+  attributes: ['id', 'email'], // Only include existing fields
+  required: false
+});
+
+// Common include configuration for uploaded file
+const getUploadedFileInclude = () => ({
+  model: File,
+  as: 'uploadedFile',
+  attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
+  required: false
+});
 
 // Create a new Patra (InwardPatra) with auto-generated covering letter
 const createPatra = async (req, res) => {
@@ -53,9 +84,13 @@ const createPatra = async (req, res) => {
     return res.status(400).json({ error: 'subject is required' });
   }
 
+  // Start a database transaction for data consistency
+  const transaction = await sequelize.transaction();
+
   try {
     const user = await User.findByPk(userId);
     if (!user) {
+      await transaction.rollback();
       return res.status(400).json({ error: 'User not found' });
     }
 
@@ -63,6 +98,7 @@ const createPatra = async (req, res) => {
     if (fileId) {
       const file = await File.findByPk(fileId);
       if (!file) {
+        await transaction.rollback();
         return res.status(400).json({ error: 'File not found' });
       }
       validatedFileId = fileId;
@@ -70,6 +106,7 @@ const createPatra = async (req, res) => {
 
     const referenceNumber = await generateReferenceNumber();
 
+    // Create Patra within transaction
     const newPatra = await Patra.create({
       referenceNumber,
       dateOfReceiptOfLetter,
@@ -88,16 +125,35 @@ const createPatra = async (req, res) => {
       NAR: NAR || false,
       fileId: validatedFileId,
       userId: user.id,
-    });
+      coveringLetterId: null // Initially null
+    }, { transaction });
 
     // AUTO-GENERATE COVERING LETTER
     try {
       const coveringLetter = await coveringLetterController.autoGenerateCoveringLetter(
         newPatra.id, 
-        user.id
+        user.id,
+        transaction
       );
       
       console.log('Covering letter generated automatically:', coveringLetter.id);
+      
+      // UPDATE THE PATRA WITH COVERING LETTER ID
+      await newPatra.update({
+        coveringLetterId: coveringLetter.id
+      }, { transaction });
+      
+      // Commit transaction if everything succeeds
+      await transaction.commit();
+      
+      // Fetch the complete created Patra with all covering letter data
+      const completePatra = await Patra.findByPk(newPatra.id, {
+        include: [
+          getUserInclude(),
+          getUploadedFileInclude(),
+          getCoveringLetterInclude()
+        ]
+      });
       
       return res.status(201).json({
         message: 'Patra created successfully with covering letter',
@@ -105,88 +161,63 @@ const createPatra = async (req, res) => {
         patraId: newPatra.id,
         letterStatus: newPatra.letterStatus,
         coveringLetterId: coveringLetter.id,
-        coveringLetterGenerated: true
+        coveringLetterGenerated: true,
+        patra: completePatra
       });
 
     } catch (coveringLetterError) {
       console.error('Error generating covering letter:', coveringLetterError);
       
-      // Still return success for Patra creation, but note covering letter failed
-      return res.status(201).json({
-        message: 'Patra created successfully, but covering letter generation failed',
-        referenceNumber: referenceNumber,
-        patraId: newPatra.id,
-        letterStatus: newPatra.letterStatus,
-        coveringLetterGenerated: false,
-        coveringLetterError: coveringLetterError.message
+      // Rollback transaction if covering letter creation fails
+      await transaction.rollback();
+      
+      return res.status(500).json({
+        message: 'Failed to create Patra due to covering letter generation error',
+        error: coveringLetterError.message,
+        coveringLetterGenerated: false
       });
     }
 
   } catch (error) {
     console.error('Error creating Patra:', error);
+    await transaction.rollback();
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
-// Get all Patras with their covering letters
+// Get all Patras with their complete covering letters data
 const getAllPatras = async (req, res) => {
   try {
     const patras = await Patra.findAll({
       include: [
-        {
-          model: User,
-          attributes: ['id', 'email'],
-          foreignKey: 'userId'
-        },
-        {
-          model: File,
-          as: 'uploadedFile',
-          attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
-          required: false
-        }
-      ]
+        getUserInclude(),
+        getUploadedFileInclude(),
+        getCoveringLetterInclude()
+      ],
+      order: [['createdAt', 'DESC']]
     });
 
-    // Add covering letter info to each patra
-    const patrasWithCoveringLetters = await Promise.all(
-      patras.map(async (patra) => {
-        const coveringLetter = await CoveringLetter.findOne({
-          where: { patraId: patra.id },
-          attributes: ['id', 'letterType', 'status', 'letterNumber', 'generatedAt']
-        });
-
-        return {
-          ...patra.toJSON(),
-          coveringLetter: coveringLetter || null
-        };
-      })
-    );
-
-    return res.status(200).json(patrasWithCoveringLetters);
+    return res.status(200).json({
+      message: 'Patras retrieved successfully',
+      count: patras.length,
+      patras: patras
+    });
   } catch (error) {
     console.error('Error fetching all Patras:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
-// Get a Patra by ID with covering letter
+// Get a Patra by ID with complete covering letter data
 const getPatraById = async (req, res) => {
   const { id } = req.params;
 
   try {
     const patra = await Patra.findByPk(id, {
       include: [
-        {
-          model: User,
-          attributes: ['id', 'email'],
-          foreignKey: 'userId'
-        },
-        {
-          model: File,
-          as: 'uploadedFile',
-          attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
-          required: false
-        }
+        getUserInclude(),
+        getUploadedFileInclude(),
+        getCoveringLetterInclude()
       ]
     });
 
@@ -194,14 +225,9 @@ const getPatraById = async (req, res) => {
       return res.status(404).json({ error: 'Patra not found' });
     }
 
-    // Get covering letter
-    const coveringLetter = await CoveringLetter.findOne({
-      where: { patraId: id }
-    });
-
     return res.status(200).json({
-      ...patra.toJSON(),
-      coveringLetter: coveringLetter || null
+      message: 'Patra retrieved successfully',
+      patra: patra
     });
   } catch (error) {
     console.error('Error fetching Patra by ID:', error);
@@ -209,7 +235,7 @@ const getPatraById = async (req, res) => {
   }
 };
 
-// Get Patra by reference number
+// Get Patra by reference number with complete covering letter data
 const getPatraByReferenceNumber = async (req, res) => {
   const { referenceNumber } = req.params;
 
@@ -217,17 +243,9 @@ const getPatraByReferenceNumber = async (req, res) => {
     const patra = await Patra.findOne({
       where: { referenceNumber },
       include: [
-        {
-          model: User,
-          attributes: ['id', 'email'],
-          foreignKey: 'userId'
-        },
-        {
-          model: File,
-          as: 'uploadedFile',
-          attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
-          required: false
-        }
+        getUserInclude(),
+        getUploadedFileInclude(),
+        getCoveringLetterInclude()
       ]
     });
 
@@ -235,14 +253,17 @@ const getPatraByReferenceNumber = async (req, res) => {
       return res.status(404).json({ error: 'Patra not found with this reference number' });
     }
 
-    return res.status(200).json(patra);
+    return res.status(200).json({
+      message: 'Patra retrieved successfully',
+      patra: patra
+    });
   } catch (error) {
     console.error('Error fetching Patra by reference number:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
-// Get Patra by user ID
+// Get Patra by user ID with complete covering letter data
 const getPatraByUserId = async (req, res) => {
   const { userId } = req.params;
 
@@ -250,25 +271,22 @@ const getPatraByUserId = async (req, res) => {
     const patras = await Patra.findAll({
       where: { userId },
       include: [
-        {
-          model: User,
-          attributes: ['id', 'email'],
-          foreignKey: 'userId'
-        },
-        {
-          model: File,
-          as: 'uploadedFile',
-          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
-          required: false
-        }
-      ]
+        getUserInclude(),
+        getUploadedFileInclude(),
+        getCoveringLetterInclude()
+      ],
+      order: [['createdAt', 'DESC']]
     });
 
     if (patras.length === 0) {
       return res.status(404).json({ error: 'No Patra found for this user' });
     }
 
-    return res.status(200).json(patras);
+    return res.status(200).json({
+      message: 'Patras retrieved successfully',
+      count: patras.length,
+      patras: patras
+    });
   } catch (error) {
     console.error('Error fetching Patras by user ID:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
@@ -279,18 +297,31 @@ const getPatraByUserId = async (req, res) => {
 const deletePatraById = async (req, res) => {
   const { id } = req.params;
 
+  // Use transaction for deletion to ensure data consistency
+  const transaction = await sequelize.transaction();
+
   try {
-    const patra = await Patra.findByPk(id);
+    const patra = await Patra.findByPk(id, { transaction });
     if (!patra) {
+      await transaction.rollback();
       return res.status(404).json({ error: 'Patra not found' });
     }
 
     // Delete associated covering letter first
-    await CoveringLetter.destroy({ where: { patraId: id } });
+    await CoveringLetter.destroy({ 
+      where: { patraId: id },
+      transaction 
+    });
 
-    await patra.destroy();
+    // Delete the patra
+    await patra.destroy({ transaction });
+    
+    // Commit transaction
+    await transaction.commit();
+    
     return res.status(200).json({ message: 'Patra and associated covering letter deleted successfully' });
   } catch (error) {
+    await transaction.rollback();
     console.error('Error deleting Patra by ID:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
@@ -359,30 +390,27 @@ const updatePatraById = async (req, res) => {
     };
 
     await patra.update(updateData);
+    
+    // Reload with complete covering letter data
     await patra.reload({
       include: [
-        {
-          model: User,
-          attributes: ['id', 'email'],
-          foreignKey: 'userId'
-        },
-        {
-          model: File,
-          as: 'upload',
-          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
-          required: false
-        }
+        getUserInclude(),
+        getUploadedFileInclude(),
+        getCoveringLetterInclude()
       ]
     });
 
-    return res.status(200).json({ message: 'Patra updated successfully', patra });
+    return res.status(200).json({ 
+      message: 'Patra updated successfully', 
+      patra: patra 
+    });
   } catch (error) {
     console.error('Error updating Patra by ID:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
-// Get Patra by user ID and Patra ID
+// Get Patra by user ID and Patra ID with complete covering letter data
 const getPatraByUserIdAndPatraId = async (req, res) => {
   const { userId, patraId } = req.params;
 
@@ -390,17 +418,9 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
     const patra = await Patra.findOne({
       where: { id: patraId, userId },
       include: [
-        {
-          model: User,
-          attributes: ['id', 'email'],
-          foreignKey: 'userId'
-        },
-        {
-          model: File,
-          as: 'upload',
-          attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
-          required: false
-        }
+        getUserInclude(),
+        getUploadedFileInclude(),
+        getCoveringLetterInclude()
       ]
     });
 
@@ -408,7 +428,10 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
       return res.status(404).json({ error: 'Patra not found for this user' });
     }
 
-    return res.status(200).json(patra);
+    return res.status(200).json({
+      message: 'Patra retrieved successfully',
+      patra: patra
+    });
   } catch (error) {
     console.error('Error fetching Patra by user ID and Patra ID:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
@@ -432,12 +455,88 @@ const updateLetterStatus = async (req, res) => {
 
     await patra.update({ letterStatus });
 
+    // Return updated patra with complete covering letter data
+    await patra.reload({
+      include: [
+        getUserInclude(),
+        getUploadedFileInclude(),
+        getCoveringLetterInclude()
+      ]
+    });
+
     return res.status(200).json({ 
       message: 'Letter status updated successfully', 
-      letterStatus: patra.letterStatus
+      letterStatus: patra.letterStatus,
+      patra: patra
     });
   } catch (error) {
     console.error('Error updating letter status:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
+  }
+};
+
+// NEW: Get only covering letters with complete data
+const getAllCoveringLetters = async (req, res) => {
+  try {
+    const coveringLetters = await CoveringLetter.findAll({
+      include: [
+        {
+          model: Patra, // Changed from InwardPatra to Patra
+          attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation']
+        },
+        getUserInclude(),
+        {
+          model: File,
+          as: 'attachedFile',
+          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+          required: false
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    return res.status(200).json({
+      message: 'Covering letters retrieved successfully',
+      count: coveringLetters.length,
+      coveringLetters: coveringLetters
+    });
+  } catch (error) {
+    console.error('Error fetching covering letters:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
+  }
+};
+
+// NEW: Get covering letter by ID with complete data
+const getCoveringLetterById = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const coveringLetter = await CoveringLetter.findByPk(id, {
+      include: [
+        {
+          model: Patra, // Changed from InwardPatra to Patra
+          attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation']
+        },
+        getUserInclude(),
+        {
+          model: File,
+          as: 'attachedFile',
+          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+          required: false
+        }
+      ]
+    });
+
+    if (!coveringLetter) {
+      return res.status(404).json({ error: 'Covering letter not found' });
+    }
+
+    return res.status(200).json({
+      message: 'Covering letter retrieved successfully',
+      coveringLetter: coveringLetter
+    });
+  } catch (error) {
+    console.error('Error fetching covering letter by ID:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
@@ -452,4 +551,6 @@ module.exports = {
   updatePatraById,
   getPatraByUserIdAndPatraId,
   updateLetterStatus,
+  getAllCoveringLetters,
+  getCoveringLetterById,
 };

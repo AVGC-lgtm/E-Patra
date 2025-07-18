@@ -77,6 +77,11 @@ const InwardPatra = sequelize.define('InwardPatra', {
     allowNull: false,
     references: { model: 'users', key: 'id' },
   },
+  coveringLetterId: {
+    type: DataTypes.INTEGER,
+    allowNull: true, // Nullable initially, will be set after covering letter creation
+    references: { model: 'covering_letters', key: 'id' },
+  },
 }, {
   underscored: true,
   timestamps: true,
