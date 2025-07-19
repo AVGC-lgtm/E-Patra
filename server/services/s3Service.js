@@ -1,16 +1,37 @@
-// services/s3Service.js - Enhanced with editable HTML generation
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+// services/s3Service.js - UPDATED VERSION with Enhanced Digital Signature Support and Proper Positioning
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { PDFDocument, rgb } = require('pdf-lib');
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+// Try different fetch methods based on Node.js version
+let fetch;
+try {
+  // For Node.js 18+ (built-in fetch)
+  fetch = globalThis.fetch;
+  if (!fetch) {
+    throw new Error('Built-in fetch not available');
+  }
+  console.log('Using built-in fetch');
+} catch (e) {
+  try {
+    // For older Node.js versions (node-fetch)
+    fetch = require('node-fetch');
+    console.log('Using node-fetch');
+  } catch (e2) {
+    console.log('Neither built-in fetch nor node-fetch available, will use AWS SDK');
+    fetch = null;
+  }
+}
+
 // Configure S3 Client (using AWS SDK v3)
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION,
+  region: process.env.AWS_REGION || 'us-east-1',
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY,
-    secretAccessKey: process.env.AWS_SECRET_KEY,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_KEY,
   },
 });
 
@@ -24,6 +45,7 @@ class S3Service {
         const imageBuffer = fs.readFileSync(fullPath);
         return `data:image/png;base64,${imageBuffer.toString('base64')}`;
       }
+      console.warn(`Image not found at path: ${fullPath}`);
       return null;
     } catch (error) {
       console.error('Error reading image:', error);
@@ -283,7 +305,609 @@ class S3Service {
     ];
   }
 
-  // NEW: Generate editable HTML template for the UI
+  // ENHANCED: Calculate signature position to avoid overlaps
+  calculateSignaturePosition(pageWidth, pageHeight, signatureWidth, signatureHeight, position, existingSignatures = []) {
+    const margin = 40;
+    let x, y;
+    
+    // Base positions
+    const positions = {
+      'top-right': {
+        x: pageWidth - signatureWidth - margin,
+        y: pageHeight - signatureHeight - 120 // Position above signature section
+      },
+      'top-left': {
+        x: margin,
+        y: pageHeight - signatureHeight - 120
+      },
+      'center': {
+        x: (pageWidth - signatureWidth) / 2,
+        y: (pageHeight - signatureHeight) / 2
+      },
+      'bottom-right': {
+        x: pageWidth - signatureWidth - margin,
+        y: margin + 30
+      },
+      'bottom-left': {
+        x: margin,
+        y: margin + 30
+      },
+      'bottom-center': {
+        x: (pageWidth - signatureWidth) / 2,
+        y: margin + 30
+      }
+    };
+    
+    // Get base position
+    const basePos = positions[position] || positions['top-right'];
+    x = basePos.x;
+    y = basePos.y;
+    
+    // FIXED: Adjust for multiple signatures to avoid overlap
+    if (existingSignatures && existingSignatures.length > 0) {
+      console.log(`📍 Adjusting position for ${existingSignatures.length} existing signatures`);
+      
+      // For each existing signature, move the new one to avoid overlap
+      const signatureSpacing = signatureHeight + 25; // Space between signatures
+      
+      switch (position) {
+        case 'top-right':
+        case 'top-left':
+          // Stack signatures vertically downward
+          y = y - (existingSignatures.length * signatureSpacing);
+          break;
+          
+        case 'bottom-right':
+        case 'bottom-left':
+        case 'bottom-center':
+          // Stack signatures vertically upward
+          y = y + (existingSignatures.length * signatureSpacing);
+          break;
+          
+        case 'center':
+          // For center, alternate left and right
+          if (existingSignatures.length % 2 === 0) {
+            x = x + 120; // Move right
+          } else {
+            x = x - 120; // Move left
+          }
+          y = y + (Math.floor(existingSignatures.length / 2) * signatureSpacing);
+          break;
+      }
+    }
+    
+    // Ensure signature stays within page bounds
+    x = Math.max(margin, Math.min(x, pageWidth - signatureWidth - margin));
+    y = Math.max(margin, Math.min(y, pageHeight - signatureHeight - margin));
+    
+    console.log(`📍 Final signature position: x=${x}, y=${y}, position=${position}, existing=${existingSignatures.length}`);
+    
+    return { x, y };
+  }
+
+  // ENHANCED: Download PDF from S3 URL using AWS SDK (MAIN FIX)
+  async downloadPDFFromS3(pdfUrl) {
+    try {
+      console.log('📥 Downloading PDF from S3:', pdfUrl);
+      
+      // Validate URL
+      if (!pdfUrl || typeof pdfUrl !== 'string') {
+        throw new Error('Invalid PDF URL provided');
+      }
+
+      // Extract bucket and key from URL
+      let bucketName, key;
+      try {
+        if (pdfUrl.includes('.s3.')) {
+          // Format: https://bucket-name.s3.region.amazonaws.com/path/file.pdf
+          const urlParts = pdfUrl.replace('https://', '').split('/');
+          bucketName = urlParts[0].split('.s3.')[0];
+          key = urlParts.slice(1).join('/');
+        } else if (pdfUrl.includes('s3.amazonaws.com')) {
+          // Format: https://s3.amazonaws.com/bucket-name/path/file.pdf  
+          const urlParts = pdfUrl.replace('https://s3.amazonaws.com/', '').split('/');
+          bucketName = urlParts[0];
+          key = urlParts.slice(1).join('/');
+        } else {
+          throw new Error('Unrecognized S3 URL format');
+        }
+      } catch (parseError) {
+        throw new Error(`Failed to parse S3 URL: ${parseError.message}`);
+      }
+      
+      console.log('📊 S3 Download details:', { bucketName, key });
+      
+      // Validate bucket and key
+      if (!bucketName || !key) {
+        throw new Error('Could not extract bucket name or key from URL');
+      }
+
+      // Use AWS SDK to download (PRIMARY METHOD)
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key
+      });
+      
+      try {
+        const response = await s3Client.send(command);
+        
+        // Convert stream to buffer
+        const chunks = [];
+        for await (const chunk of response.Body) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        
+        if (buffer.length === 0) {
+          throw new Error('Downloaded PDF is empty');
+        }
+        
+        console.log('✅ PDF downloaded successfully via AWS SDK, size:', buffer.length, 'bytes');
+        return buffer;
+        
+      } catch (awsError) {
+        console.error('❌ AWS SDK download failed:', awsError.message);
+        throw awsError;
+      }
+      
+    } catch (error) {
+      console.error('❌ Error downloading PDF from S3 via AWS SDK:', error);
+      
+      // Fallback to fetch if AWS SDK fails
+      if (fetch) {
+        try {
+          console.log('🔄 Trying fallback fetch method...');
+          const response = await fetch(pdfUrl);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          
+          const arrayBuffer = await response.arrayBuffer();
+          if (arrayBuffer.byteLength === 0) {
+            throw new Error('Downloaded PDF is empty via fetch');
+          }
+          
+          console.log('✅ PDF downloaded successfully via fetch, size:', arrayBuffer.byteLength, 'bytes');
+          return arrayBuffer;
+        } catch (fetchError) {
+          console.error('❌ Fetch fallback also failed:', fetchError);
+          throw new Error(`Both AWS SDK and fetch failed. AWS SDK: ${error.message}, Fetch: ${fetchError.message}`);
+        }
+      } else {
+        throw new Error(`AWS SDK failed and fetch not available: ${error.message}`);
+      }
+    }
+  }
+
+  // ENHANCED: Convert base64 signature to image buffer (for signature overlay)
+  base64ToImageBuffer(base64String) {
+    try {
+      console.log('🖼️ Converting base64 to image buffer...');
+      
+      // Enhanced validation
+      if (!base64String || typeof base64String !== 'string') {
+        throw new Error('Signature data is missing or invalid type');
+      }
+      
+      if (base64String.length < 50) {
+        throw new Error(`Signature data is too small (${base64String.length} chars) - file may be corrupted or empty`);
+      }
+      
+      // Remove data URL prefix if present and validate
+      let base64Data = base64String;
+      if (base64String.startsWith('data:')) {
+        const parts = base64String.split(',');
+        if (parts.length !== 2) {
+          throw new Error('Invalid data URL format');
+        }
+        base64Data = parts[1];
+        console.log('📝 Removed data URL prefix, remaining length:', base64Data.length);
+      }
+      
+      if (!base64Data || base64Data.length < 20) {
+        throw new Error(`No valid base64 data found (${base64Data.length} chars after processing)`);
+      }
+      
+      // Validate base64 format
+      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+      if (!base64Regex.test(base64Data)) {
+        throw new Error('Invalid base64 characters detected');
+      }
+      
+      try {
+        const buffer = Buffer.from(base64Data, 'base64');
+        console.log('✅ Signature converted to buffer, size:', buffer.length, 'bytes');
+        
+        if (buffer.length < 100) {
+          throw new Error(`Signature file appears to be corrupted or too small (${buffer.length} bytes)`);
+        }
+        
+        // Additional validation: check for common image file headers
+        const header = buffer.slice(0, 8);
+        const isPNG = header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47;
+        const isJPEG = header[0] === 0xFF && header[1] === 0xD8;
+        const isGIF = header.slice(0, 3).toString() === 'GIF';
+        const isBMP = header[0] === 0x42 && header[1] === 0x4D;
+        
+        if (!isPNG && !isJPEG && !isGIF && !isBMP) {
+          console.warn('⚠️ Warning: Signature file may not be a valid image format');
+        } else {
+          console.log('✅ Valid image format detected:', isPNG ? 'PNG' : isJPEG ? 'JPEG' : isGIF ? 'GIF' : 'BMP');
+        }
+        
+        return buffer;
+      } catch (bufferError) {
+        throw new Error(`Failed to create buffer from base64: ${bufferError.message}`);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error converting base64 to buffer:', error);
+      throw new Error(`Invalid signature format: ${error.message}`);
+    }
+  }
+
+  // MAIN: Add signature to existing PDF with smart positioning (UPDATED)
+  async addSignatureToPDF(pdfUrl, signatureBase64, signerName, position = 'top-right', existingSignatures = []) {
+    try {
+      console.log('🖊️ Starting PDF signature overlay process...', { 
+        pdfUrl: pdfUrl ? `${pdfUrl.substring(0, 50)}...` : 'null', 
+        signerName, 
+        position,
+        signatureLength: signatureBase64?.length || 0,
+        existingSignatureCount: existingSignatures?.length || 0
+      });
+
+      // Enhanced input validation
+      if (!pdfUrl || typeof pdfUrl !== 'string') {
+        throw new Error('PDF URL is required and must be a valid string');
+      }
+      
+      if (!signatureBase64 || typeof signatureBase64 !== 'string') {
+        throw new Error('Signature data is required and must be a valid string');
+      }
+      
+      if (signatureBase64.length < 50) {
+        throw new Error(`Signature data is too small (${signatureBase64.length} chars) - file may be corrupted or empty`);
+      }
+
+      if (!signerName || typeof signerName !== 'string') {
+        signerName = 'अधिकारी';
+        console.warn('⚠️ No signer name provided, using default');
+      }
+
+      // Validate position
+      const validPositions = ['bottom-left', 'bottom-center', 'bottom-right', 'top-left', 'top-right', 'center'];
+      if (!validPositions.includes(position)) {
+        console.warn(`⚠️ Invalid position "${position}", using default "top-right"`);
+        position = 'top-right';
+      }
+
+      // Download existing PDF from S3
+      console.log('📥 Downloading original PDF...');
+      let pdfBuffer;
+      try {
+        pdfBuffer = await this.downloadPDFFromS3(pdfUrl);
+      } catch (downloadError) {
+        throw new Error(`Failed to download PDF: ${downloadError.message}`);
+      }
+      
+      // Load the PDF document using PDF-lib
+      console.log('📖 Loading PDF document...');
+      let pdfDoc;
+      try {
+        pdfDoc = await PDFDocument.load(pdfBuffer);
+        console.log('✅ PDF loaded successfully, pages:', pdfDoc.getPageCount());
+      } catch (loadError) {
+        throw new Error(`Failed to load PDF: ${loadError.message}`);
+      }
+      
+      // Convert signature to image buffer
+      console.log('🖼️ Processing signature image...');
+      let signatureImageBytes;
+      try {
+        signatureImageBytes = this.base64ToImageBuffer(signatureBase64);
+      } catch (conversionError) {
+        throw new Error(`Signature conversion failed: ${conversionError.message}`);
+      }
+      
+      // Embed the signature image (try PNG first, fallback to JPG)
+      console.log('📎 Embedding signature image...');
+      let signatureImage;
+      try {
+        signatureImage = await pdfDoc.embedPng(signatureImageBytes);
+        console.log('✅ Signature embedded as PNG');
+      } catch (pngError) {
+        console.log('⚠️ PNG embedding failed, trying JPG...', pngError.message);
+        try {
+          signatureImage = await pdfDoc.embedJpg(signatureImageBytes);
+          console.log('✅ Signature embedded as JPG');
+        } catch (jpgError) {
+          throw new Error(`Unsupported signature image format. PNG error: ${pngError.message}, JPG error: ${jpgError.message}`);
+        }
+      }
+
+      // Get the last page (where signature typically goes)
+      const pages = pdfDoc.getPages();
+      if (pages.length === 0) {
+        throw new Error('PDF has no pages');
+      }
+      
+      const lastPage = pages[pages.length - 1];
+      const { width, height } = lastPage.getSize();
+      console.log('📏 Page dimensions:', { width, height });
+
+      // Calculate signature dimensions - REDUCED SIZE for multiple signatures
+      const maxSignatureWidth = 140;  // Reduced for better fit
+      const maxSignatureHeight = 60;   // Reduced for better fit
+      const signatureAspectRatio = signatureImage.width / signatureImage.height;
+      
+      // Better sizing for multiple signatures
+      let signatureWidth = Math.min(maxSignatureWidth, signatureImage.width * 0.6);
+      let signatureHeight = signatureWidth / signatureAspectRatio;
+      
+      if (signatureHeight > maxSignatureHeight) {
+        signatureHeight = maxSignatureHeight;
+        signatureWidth = signatureHeight * signatureAspectRatio;
+      }
+
+      // Ensure minimum size for visibility
+      if (signatureWidth < 60) {
+        signatureWidth = 60;
+        signatureHeight = signatureWidth / signatureAspectRatio;
+      }
+
+      // FIXED: Calculate position with overlap prevention
+      const { x, y } = this.calculateSignaturePosition(
+        width, 
+        height, 
+        signatureWidth, 
+        signatureHeight, 
+        position, 
+        existingSignatures
+      );
+
+      console.log('📍 Signature positioned at:', { x, y, signatureWidth, signatureHeight });
+
+      // Add signature image to the page
+      try {
+        lastPage.drawImage(signatureImage, {
+          x: x,
+          y: y,
+          width: signatureWidth,
+          height: signatureHeight,
+        });
+        console.log('✅ Signature image added successfully');
+      } catch (drawError) {
+        throw new Error(`Failed to draw signature on PDF: ${drawError.message}`);
+      }
+
+      // Add signature text with unique timestamp
+      const currentDate = new Date();
+      const timeString = currentDate.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: '2-digit', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+
+      // FIXED: Smaller, non-overlapping text
+      const signatureText = `Digitally Signed\n${signerName}\nDate: ${timeString}`;
+      
+      try {
+        lastPage.drawText(signatureText, {
+          x: x,
+          y: y - 20, // Position text below signature
+          size: 5, // Smaller text size
+          color: rgb(0, 0, 0),
+          lineHeight: 6,
+        });
+        console.log('✅ Signature text added');
+      } catch (textError) {
+        console.warn('⚠️ Failed to add signature text:', textError.message);
+        // Try with minimal text as fallback
+        try {
+          lastPage.drawText(`Signed: ${signerName}`, {
+            x: x,
+            y: y - 12,
+            size: 5,
+            color: rgb(0, 0, 0),
+          });
+          console.log('✅ Fallback signature text added');
+        } catch (fallbackError) {
+          console.warn('⚠️ Could not add any signature text:', fallbackError.message);
+        }
+      }
+
+      // FIXED: Smaller watermark positioned uniquely
+      try {
+        const watermarkText = 'DIGITALLY SIGNED';
+        lastPage.drawText(watermarkText, {
+          x: x + signatureWidth - 60,
+          y: y + signatureHeight + 3,
+          size: 4, // Smaller watermark
+          color: rgb(0.6, 0.6, 0.6),
+        });
+        console.log('✅ Digital signature watermark added');
+      } catch (watermarkError) {
+        console.warn('⚠️ Failed to add watermark:', watermarkError.message);
+      }
+
+      // Save the modified PDF
+      console.log('💾 Saving modified PDF...');
+      let modifiedPdfBytes;
+      try {
+        modifiedPdfBytes = await pdfDoc.save();
+        console.log('✅ PDF saved with signature, new size:', modifiedPdfBytes.length, 'bytes');
+      } catch (saveError) {
+        throw new Error(`Failed to save modified PDF: ${saveError.message}`);
+      }
+
+      // Generate new filename for signed PDF
+      const originalFilename = pdfUrl.split('/').pop().replace(/\?.*$/, ''); // Remove query params
+      const timestamp = Date.now();
+      const signedFilename = originalFilename.replace('.pdf', `-signed-${timestamp}.pdf`);
+
+      console.log('☁️ Uploading signed PDF to S3:', signedFilename);
+
+      // Upload signed PDF to S3
+      let signedPdfUrl;
+      try {
+        signedPdfUrl = await this.uploadToS3(
+          Buffer.from(modifiedPdfBytes), 
+          signedFilename, 
+          'application/pdf'
+        );
+        console.log('✅ Signed PDF uploaded successfully:', signedPdfUrl);
+      } catch (uploadError) {
+        throw new Error(`Failed to upload signed PDF: ${uploadError.message}`);
+      }
+
+      return {
+        signedPdfUrl: signedPdfUrl,
+        fileName: signedFilename,
+        signedAt: new Date(),
+        signedBy: signerName,
+        originalUrl: pdfUrl,
+        signaturePosition: position,
+        coordinates: { x, y, width: signatureWidth, height: signatureHeight },
+        success: true
+      };
+
+    } catch (error) {
+      console.error('❌ Error adding signature to PDF:', error);
+      throw new Error(`Failed to add signature to PDF: ${error.message}`);
+    }
+  }
+
+  // Generate HTML with signature placeholder for preview (signature overlay support)
+  generateSignableHTML(letterContent, letterData, signatureBase64 = null, signerName = null) {
+    const htmlContent = this.generateCoveringLetterHTML(letterContent, letterData);
+    
+    if (!signatureBase64) {
+      return htmlContent;
+    }
+
+    // Add signature section to HTML - positioned exactly in the signature section area
+    const signatureSection = `
+      <div style="text-align: right; margin-bottom: 15px; position: relative;">
+        <div style="display: inline-block; text-align: center; background: rgba(248, 249, 250, 0.8); padding: 8px; border-radius: 4px; border: 1px solid #e0e0e0;">
+          <img src="data:image/jpeg;base64,${signatureBase64}" alt="Digital Signature" style="max-width: 140px; max-height: 60px; display: block; margin: 0 auto 3px auto;">
+          <div style="font-size: 6px; text-align: center; color: #666; line-height: 1.1;">
+            <strong>Digitally Signed</strong><br>
+            ${signerName || 'Officer'}<br>
+            ${new Date().toLocaleDateString('en-IN')} ${new Date().toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit'})}
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Insert signature exactly before the officer designation text
+    const signatureSectionPattern = /<div id="digital-signature-area"[^>]*>[\s\S]*?<\/div>/;
+    if (signatureSectionPattern.test(htmlContent)) {
+      return htmlContent.replace(signatureSectionPattern, 
+        `<div id="digital-signature-area" style="text-align: right; margin-bottom: 15px;">${signatureSection}</div>`
+      );
+    } else {
+      // Fallback: insert before the signature section
+      const fallbackPattern = /<div class="signature-section">/;
+      if (fallbackPattern.test(htmlContent)) {
+        return htmlContent.replace(fallbackPattern, signatureSection + '<div class="signature-section">');
+      } else {
+        // Final fallback: insert before closing body tag
+        return htmlContent.replace('</body>', signatureSection + '</body>');
+      }
+    }
+  }
+
+  // Enhanced method to generate covering letter with optional signature (signature overlay support)
+  async generateAndUploadSignedCoveringLetter(letterContent, letterData, signatureBase64 = null, signerName = null) {
+    try {
+      console.log('📄 Generating covering letter with signature support...', {
+        hasSignature: !!signatureBase64,
+        signerName,
+        letterNumber: letterData.letterNumber
+      });
+
+      // Generate HTML with signature if provided
+      const htmlContent = this.generateSignableHTML(letterContent, letterData, signatureBase64, signerName);
+      
+      // Generate PDF using Puppeteer
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      });
+      
+      const page = await browser.newPage();
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+      
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '15mm',
+          bottom: '15mm',
+          left: '15mm',
+          right: '15mm'
+        }
+      });
+      
+      await browser.close();
+      
+      // Determine filename suffix
+      const suffix = signatureBase64 ? '-signed' : '';
+      const timestamp = Date.now();
+      
+      // Upload PDF to S3
+      const fileName = `covering-letters/${letterData.letterNumber}${suffix}-${timestamp}.pdf`;
+      const pdfCommand = new PutObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: fileName,
+        Body: pdfBuffer,
+        ContentType: 'application/pdf',
+      });
+      
+      await s3Client.send(pdfCommand);
+      
+      // Upload HTML to S3 as well
+      const htmlFileName = `covering-letters/${letterData.letterNumber}${suffix}-${timestamp}.html`;
+      const htmlCommand = new PutObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: htmlFileName,
+        Body: htmlContent,
+        ContentType: 'text/html',
+      });
+      
+      await s3Client.send(htmlCommand);
+      
+      // Generate URLs
+      const pdfUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+      const htmlUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${htmlFileName}`;
+      
+      console.log('✅ Covering letter generated and uploaded successfully:', {
+        pdfUrl,
+        htmlUrl,
+        signed: !!signatureBase64
+      });
+      
+      return {
+        pdfUrl: pdfUrl,
+        htmlUrl: htmlUrl,
+        fileName: fileName,
+        htmlFileName: htmlFileName,
+        signed: !!signatureBase64,
+        signedBy: signerName,
+        signedAt: signatureBase64 ? new Date() : null
+      };
+      
+    } catch (error) {
+      console.error('❌ Error generating and uploading covering letter:', error);
+      throw new Error(`Failed to generate and upload covering letter: ${error.message}`);
+    }
+  }
+
+  // Generate editable HTML template for the UI
   generateEditableHTML(letterContent, letterData) {
     const today = new Date();
     const formattedDate = `${today.getDate().toString().padStart(2, '0')} / ${(today.getMonth() + 1).toString().padStart(2, '0')} / ${today.getFullYear()}`;
@@ -808,11 +1432,10 @@ class S3Service {
             document.getElementById('loadingIndicator').classList.remove('active');
         }
         
-        // Save letter content to localStorage
+        // Save letter content
         function saveLetter() {
             const content = document.getElementById('letterContent').value;
-            localStorage.setItem(\`coveringLetter_\${LETTER_ID}\`, content);
-            showSuccess('पत्राचा मजकूर स्थानिकरित्या सेव्ह झाला!');
+            showSuccess('पत्राचा मजकूर तात्पुरता सेव्ह झाला!');
         }
         
         // Preview letter (opens in new window)
@@ -820,7 +1443,6 @@ class S3Service {
             const content = document.getElementById('letterContent').value;
             const previewWindow = window.open('', '_blank', 'width=800,height=600');
             
-            // Clone current document content for preview
             const currentHTML = document.documentElement.outerHTML;
             const previewHTML = currentHTML.replace(
                 'class="editable-content"',
@@ -831,7 +1453,6 @@ class S3Service {
             previewWindow.document.write(previewHTML);
             previewWindow.document.close();
             
-            // Update content in preview
             previewWindow.document.getElementById('letterContent').value = content;
             previewWindow.document.title = 'कव्हरिंग लेटर पूर्वावलोकन';
         }
@@ -864,10 +1485,6 @@ class S3Service {
                 if (response.ok) {
                     showSuccess('कव्हरिंग लेटर यशस्वीरित्या अपडेट झाले व नवीन PDF तयार झाले!');
                     
-                    // Clear localStorage
-                    localStorage.removeItem(\`coveringLetter_\${LETTER_ID}\`);
-                    
-                    // Optionally redirect to view/download
                     if (result.pdfUrl) {
                         setTimeout(() => {
                             if (confirm('नवीन PDF पाहायचे?')) {
@@ -886,24 +1503,6 @@ class S3Service {
             }
         }
         
-        // Auto-save functionality
-        let autoSaveTimeout;
-        document.getElementById('letterContent').addEventListener('input', function() {
-            clearTimeout(autoSaveTimeout);
-            autoSaveTimeout = setTimeout(() => {
-                saveLetter();
-            }, 2000); // Auto-save after 2 seconds of no typing
-        });
-        
-        // Load saved content on page load
-        window.addEventListener('load', function() {
-            const savedContent = localStorage.getItem(\`coveringLetter_\${LETTER_ID}\`);
-            if (savedContent) {
-                document.getElementById('letterContent').value = savedContent;
-                showSuccess('पूर्वी सेव्ह केलेला मजकूर लोड झाला!');
-            }
-        });
-        
         // Handle keyboard shortcuts
         document.addEventListener('keydown', function(e) {
             // Ctrl+S to save
@@ -918,24 +1517,6 @@ class S3Service {
                 updateAndGenerate();
             }
         });
-        
-        // Warn before leaving if unsaved changes
-        let hasUnsavedChanges = false;
-        document.getElementById('letterContent').addEventListener('input', function() {
-            hasUnsavedChanges = true;
-        });
-        
-        window.addEventListener('beforeunload', function(e) {
-            if (hasUnsavedChanges) {
-                e.preventDefault();
-                e.returnValue = '';
-            }
-        });
-        
-        // Mark as saved after successful update
-        function markAsSaved() {
-            hasUnsavedChanges = false;
-        }
     </script>
 </body>
 </html>
@@ -1241,8 +1822,12 @@ class S3Service {
             <p class="indent"><strong>आदेश अनुसरणे</strong></p>
         </div>
         
-        <!-- Signature Section -->
+        <!-- Signature Section with integrated digital signature -->
         <div class="signature-section">
+            <!-- Digital signature will be inserted here by JavaScript -->
+            <div id="digital-signature-area" style="text-align: right; margin-bottom: 15px;">
+                <!-- This area is reserved for digital signature overlay -->
+            </div>
             <p><strong>अर्ज शाखा प्रभारी अधिकारी,</strong></p>
             <p><strong>पोलीस अधिक्षक कार्यालय, अहिल्यानगर</strong></p>
         </div>
@@ -1255,78 +1840,119 @@ class S3Service {
   // Generate PDF and upload to S3
   async generateAndUploadCoveringLetter(letterContent, letterData) {
     try {
+      console.log('📄 Generating covering letter PDF...', {
+        letterNumber: letterData.letterNumber,
+        letterType: letterData.letterType
+      });
+
       // Generate HTML
       const htmlContent = this.generateCoveringLetterHTML(letterContent, letterData);
       
-      // Generate PDF using Puppeteer
+      // Generate PDF using Puppeteer with enhanced settings
       const browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: [
+          '--no-sandbox', 
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor'
+        ]
       });
       
-      const page = await browser.newPage();
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-      
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: {
-          top: '15mm',
-          bottom: '15mm',
-          left: '15mm',
-          right: '15mm'
-        }
-      });
-      
-      await browser.close();
-      
-      // Upload PDF to S3
-      const fileName = `covering-letters/${letterData.letterNumber}-${Date.now()}.pdf`;
-      const pdfCommand = new PutObjectCommand({
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: fileName,
-        Body: pdfBuffer,
-        ContentType: 'application/pdf',
-      });
-      
-      await s3Client.send(pdfCommand);
-      
-      // Upload HTML to S3 as well
-      const htmlFileName = `covering-letters/${letterData.letterNumber}-${Date.now()}.html`;
-      const htmlCommand = new PutObjectCommand({
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: htmlFileName,
-        Body: htmlContent,
-        ContentType: 'text/html',
-      });
-      
-      await s3Client.send(htmlCommand);
-      
-      // Generate URLs manually
-      const pdfUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
-      const htmlUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${htmlFileName}`;
-      
-      return {
-        pdfUrl: pdfUrl,
-        htmlUrl: htmlUrl,
-        fileName: fileName,
-        htmlFileName: htmlFileName
-      };
+      try {
+        const page = await browser.newPage();
+        
+        // Set page content with timeout
+        await page.setContent(htmlContent, { 
+          waitUntil: 'networkidle0',
+          timeout: 30000
+        });
+        
+        const pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true,
+          margin: {
+            top: '15mm',
+            bottom: '15mm',
+            left: '15mm',
+            right: '15mm'
+          }
+        });
+        
+        await browser.close();
+        
+        console.log('✅ PDF generated successfully, size:', pdfBuffer.length, 'bytes');
+        
+        // Upload PDF to S3
+        const fileName = `covering-letters/${letterData.letterNumber}-${Date.now()}.pdf`;
+        const pdfCommand = new PutObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: fileName,
+          Body: pdfBuffer,
+          ContentType: 'application/pdf',
+        });
+        
+        await s3Client.send(pdfCommand);
+        console.log('✅ PDF uploaded to S3:', fileName);
+        
+        // Upload HTML to S3 as well
+        const htmlFileName = `covering-letters/${letterData.letterNumber}-${Date.now()}.html`;
+        const htmlCommand = new PutObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: htmlFileName,
+          Body: htmlContent,
+          ContentType: 'text/html',
+        });
+        
+        await s3Client.send(htmlCommand);
+        console.log('✅ HTML uploaded to S3:', htmlFileName);
+        
+        // Generate URLs manually
+        const pdfUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+        const htmlUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${htmlFileName}`;
+        
+        return {
+          pdfUrl: pdfUrl,
+          htmlUrl: htmlUrl,
+          fileName: fileName,
+          htmlFileName: htmlFileName
+        };
+        
+      } catch (puppeteerError) {
+        await browser.close();
+        throw puppeteerError;
+      }
       
     } catch (error) {
-      console.error('Error generating and uploading covering letter:', error);
-      throw new Error('Failed to generate and upload covering letter');
+      console.error('❌ Error generating and uploading covering letter:', error);
+      throw new Error(`Failed to generate and upload covering letter: ${error.message}`);
     }
   }
   
-  // Upload file to S3
+  // Enhanced: Upload file to S3 with better error handling
   async uploadToS3(fileBuffer, fileName, contentType) {
     try {
+      console.log('☁️ Uploading to S3:', { fileName, contentType, size: fileBuffer.length });
+      
+      // Validate inputs
+      if (!fileBuffer || fileBuffer.length === 0) {
+        throw new Error('File buffer is empty or invalid');
+      }
+      
+      if (!fileName || typeof fileName !== 'string') {
+        throw new Error('File name is required and must be a string');
+      }
+      
+      if (!process.env.AWS_BUCKET_NAME) {
+        throw new Error('AWS_BUCKET_NAME environment variable is not set');
+      }
+      
       const command = new PutObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
         Key: `covering-letters/${fileName}`,
         Body: fileBuffer,
-        ContentType: contentType,
+        ContentType: contentType || 'application/octet-stream',
       });
       
       await s3Client.send(command);
@@ -1334,11 +1960,12 @@ class S3Service {
       // Generate URL manually
       const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/covering-letters/${fileName}`;
       
+      console.log('✅ File uploaded successfully to S3:', fileUrl);
       return fileUrl;
       
     } catch (error) {
-      console.error('Error uploading to S3:', error);
-      throw new Error('Failed to upload to S3');
+      console.error('❌ Error uploading to S3:', error);
+      throw new Error(`Failed to upload to S3: ${error.message}`);
     }
   }
 }

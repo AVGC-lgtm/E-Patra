@@ -17,6 +17,7 @@ const coveringLetters = require('./routes/coveringLetterRoutes');
 const emailRoutes = require('./routes/emailRoutes');
 const emailSenderReceiverRoutes = require('./routes/emailSenderReceiverRoutes');
 const dynamicEmailRoutes = require('./routes/dynamicEmailRoutes');
+const headRoutes = require('./routes/headRoutes');
 
 const app = express();
 
@@ -92,6 +93,8 @@ app.use('/api/letters', coveringLetters);
 app.use('/api/email', emailRoutes);
 app.use('/api', emailSenderReceiverRoutes);
 app.use('/api/dynamic-email', dynamicEmailRoutes);
+app.use('/api/head', headRoutes);
+
 
 // Email configuration verification on startup
 const { verifyEmailConfig } = require('./config/email');

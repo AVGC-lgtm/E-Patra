@@ -1,11 +1,5 @@
-// controllers/coveringLetterController.js - Enhanced with edit functionality
-const CoveringLetter = require('../models/CoveringLetter');
-const InwardPatra = require('../models/InwardPatra');
-const User = require('../models/User');
-const File = require('../models/File');
-
-// Import associations to ensure they're loaded
-require('../models/associations');
+// controllers/coveringLetterController.js - Enhanced with edit functionality and fixed associations
+const { InwardPatra, CoveringLetter, User, File, Head } = require('../models/associations');
 
 const openaiService = require('../services/openaiService');
 const s3Service = require('../services/s3Service');
@@ -20,6 +14,7 @@ class CoveringLetterController {
         include: [
           {
             model: User,
+            as: 'User', // Fix: Specify the alias
             attributes: ['id', 'email']
           },
           {
@@ -71,7 +66,7 @@ class CoveringLetterController {
         throw new Error('OpenAI failed to generate letter content');
       }
 
-      const letterNumber = `CL/${patra.referenceNumber}/${new Date().getFullYear()}`;
+      const letterNumber = `CL/${patra.referenceNumber || patra.outwardLetterNumber}/${new Date().getFullYear()}`;
 
       console.log('Letter content generated, uploading to S3...');
 
@@ -128,10 +123,12 @@ class CoveringLetterController {
         include: [
           {
             model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation']
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber']
           },
           {
             model: User,
+            as: 'User', // Fix: Specify the alias
             attributes: ['id', 'email']
           },
           {
@@ -195,7 +192,8 @@ class CoveringLetterController {
         include: [
           {
             model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter']
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'outwardLetterNumber']
           }
         ]
       });
@@ -242,10 +240,12 @@ class CoveringLetterController {
         include: [
           {
             model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter']
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'outwardLetterNumber']
           },
           {
             model: User,
+            as: 'User', // Fix: Specify the alias
             attributes: ['id', 'email']
           }
         ]
@@ -324,10 +324,12 @@ class CoveringLetterController {
         include: [
           {
             model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter']
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'outwardLetterNumber']
           },
           {
             model: User,
+            as: 'User', // Fix: Specify the alias
             attributes: ['id', 'email']
           },
           {
@@ -386,14 +388,24 @@ class CoveringLetterController {
   // Get all covering letters
   async getAllCoveringLetters(req, res) {
     try {
-      const coveringLetters = await CoveringLetter.findAll({
+      const { page = 1, limit = 10, status, letterType } = req.query;
+      const offset = (page - 1) * limit;
+      
+      const whereClause = {};
+      if (status) whereClause.status = status;
+      if (letterType) whereClause.letterType = letterType;
+
+      const coveringLetters = await CoveringLetter.findAndCountAll({
+        where: whereClause,
         include: [
           {
             model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter']
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'outwardLetterNumber']
           },
           {
             model: User,
+            as: 'User', // Fix: Specify the alias
             attributes: ['id', 'email']
           },
           {
@@ -403,10 +415,20 @@ class CoveringLetterController {
             required: false
           }
         ],
-        order: [['createdAt', 'DESC']]
+        order: [['createdAt', 'DESC']],
+        limit: parseInt(limit),
+        offset: parseInt(offset)
       });
 
-      return res.status(200).json(coveringLetters);
+      return res.status(200).json({
+        success: true,
+        data: {
+          coveringLetters: coveringLetters.rows,
+          totalCount: coveringLetters.count,
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(coveringLetters.count / limit)
+        }
+      });
 
     } catch (error) {
       console.error('Error fetching covering letters:', error);
@@ -423,10 +445,12 @@ class CoveringLetterController {
         include: [
           {
             model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation']
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber']
           },
           {
             model: User,
+            as: 'User', // Fix: Specify the alias
             attributes: ['id', 'email']
           },
           {
@@ -442,7 +466,10 @@ class CoveringLetterController {
         return res.status(404).json({ error: 'Covering letter not found' });
       }
 
-      return res.status(200).json(coveringLetter);
+      return res.status(200).json({
+        success: true,
+        data: coveringLetter
+      });
 
     } catch (error) {
       console.error('Error fetching covering letter by ID:', error);
@@ -459,6 +486,14 @@ class CoveringLetterController {
 
       if (!coveringLetter) {
         return res.status(404).json({ error: 'Covering letter not found' });
+      }
+
+      // Remove reference from InwardPatra if exists
+      if (coveringLetter.patraId) {
+        await InwardPatra.update(
+          { coveringLetterId: null },
+          { where: { id: coveringLetter.patraId } }
+        );
       }
 
       await coveringLetter.destroy();
@@ -528,9 +563,25 @@ class CoveringLetterController {
 
       await coveringLetter.update(updateData);
 
+      // Fetch updated covering letter with associations
+      const updatedCoveringLetter = await CoveringLetter.findByPk(id, {
+        include: [
+          {
+            model: InwardPatra,
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'outwardLetterNumber']
+          },
+          {
+            model: User,
+            as: 'User', // Fix: Specify the alias
+            attributes: ['id', 'email']
+          }
+        ]
+      });
+
       return res.status(200).json({
         message: 'Covering letter updated successfully',
-        coveringLetter
+        coveringLetter: updatedCoveringLetter
       });
 
     } catch (error) {
