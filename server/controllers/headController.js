@@ -1,6 +1,6 @@
 // controllers/headController.js - Updated to handle multiple signatures properly
 
-const { InwardPatra, CoveringLetter, User, File, Head } = require('../models/associations');
+const { InwardPatra, CoveringLetter, User, Head } = require('../models/associations');
 const s3Service = require('../services/s3Service');
 const multer = require('multer');
 
