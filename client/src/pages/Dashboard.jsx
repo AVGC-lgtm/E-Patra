@@ -64,20 +64,30 @@ const Dashboard = () => {
       
       console.log('API Response:', response.data); // Debug log
       
-      if (response.data && Array.isArray(response.data)) {
-        // Sort by createdAt in descending order (newest first)
-        const sortedData = [...response.data].sort((a, b) => 
-          new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-        );
-        
-        console.log('Sorted data:', sortedData); // Debug log
-        setPatras(sortedData);
-        processPatrasData(sortedData);
-        setError(null);
+      // Handle the new API response structure: {message, count, patras: [...]}
+      let patrasData = [];
+      if (response.data && response.data.patras && Array.isArray(response.data.patras)) {
+        patrasData = response.data.patras;
+        console.log('Using patras array from response:', patrasData);
+      } else if (response.data && Array.isArray(response.data)) {
+        // Fallback for direct array response
+        patrasData = response.data;
+        console.log('Using direct array response:', patrasData);
       } else {
         console.error('Unexpected data format:', response.data);
         setError('Unexpected data format received from server');
+        return;
       }
+      
+      // Sort by createdAt in descending order (newest first)
+      const sortedData = [...patrasData].sort((a, b) => 
+        new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+      );
+      
+      console.log('Sorted data:', sortedData); // Debug log
+      setPatras(sortedData);
+      processPatrasData(sortedData);
+      setError(null);
     } catch (err) {
       console.error('Error fetching patras:', err);
       setError('Failed to load patras data. Please try again later.');

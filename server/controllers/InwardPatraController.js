@@ -11,6 +11,9 @@ require('../models/associations');
 const coveringLetterController = require('./coveringLetterController');
 const { Op } = require('sequelize');
 
+// Create an instance of the CoveringLetterController
+const coveringLetterControllerInstance = new coveringLetterController();
+
 // Function to generate 8-digit reference number
 const generateReferenceNumber = async () => {
   let referenceNumber;
@@ -130,7 +133,7 @@ const createPatra = async (req, res) => {
 
     // AUTO-GENERATE COVERING LETTER
     try {
-      const coveringLetter = await coveringLetterController.autoGenerateCoveringLetter(
+      const coveringLetter = await coveringLetterControllerInstance.autoGenerateCoveringLetter(
         newPatra.id, 
         user.id,
         transaction
@@ -197,14 +200,46 @@ const getAllPatras = async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
-    return res.status(200).json({
+    // Debug: Log the structure of the first patra
+    if (patras.length > 0) {
+      console.log('🔍 Debug: First patra structure:');
+      console.log('  - ID:', patras[0].id);
+      console.log('  - Reference Number:', patras[0].referenceNumber);
+      console.log('  - Has uploadedFile:', !!patras[0].uploadedFile);
+      console.log('  - Has coveringLetter:', !!patras[0].coveringLetter);
+      
+      if (patras[0].uploadedFile) {
+        console.log('  - Uploaded file details:', {
+          id: patras[0].uploadedFile.id,
+          originalName: patras[0].uploadedFile.originalName,
+          fileUrl: patras[0].uploadedFile.fileUrl
+        });
+      }
+      
+      if (patras[0].coveringLetter) {
+        console.log('  - Covering letter details:', {
+          id: patras[0].coveringLetter.id,
+          hasAttachedFile: !!patras[0].coveringLetter.attachedFile
+        });
+        
+        if (patras[0].coveringLetter.attachedFile) {
+          console.log('  - Covering letter file details:', {
+            id: patras[0].coveringLetter.attachedFile.id,
+            originalName: patras[0].coveringLetter.attachedFile.originalName,
+            fileUrl: patras[0].coveringLetter.attachedFile.fileUrl
+          });
+        }
+      }
+    }
+
+    res.json({
       message: 'Patras retrieved successfully',
       count: patras.length,
       patras: patras
     });
   } catch (error) {
-    console.error('Error fetching all Patras:', error);
-    return res.status(500).json({ error: 'Server error', details: error.message });
+    console.error('Error retrieving Patras:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
@@ -329,6 +364,7 @@ const deletePatraById = async (req, res) => {
 
 // Update a Patra by ID
 // Update a Patra by ID - FIXED VERSION
+// Update a Patra by ID - FIXED VERSION
 const updatePatraById = async (req, res) => {
   const { id } = req.params;
   const {
@@ -412,20 +448,13 @@ const updatePatraById = async (req, res) => {
 
     await patra.update(updateData);
     
-    // FIXED: Changed from 'upload' to 'uploadedFile' to match the association
+    // Reload with complete covering letter data
+    // FIXED: Use the correct alias 'uploadedFile' instead of 'upload'
     await patra.reload({
       include: [
-        {
-          model: User,
-          attributes: ['id', 'email'],
-          foreignKey: 'userId'
-        },
-        {
-          model: File,
-          as: 'upload',
-          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
-          required: false
-        }
+        getUserInclude(),
+        getUploadedFileInclude(),
+        getCoveringLetterInclude()
       ]
     });
 
@@ -500,6 +529,64 @@ const updateLetterStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating letter status:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
+  }
+};
+
+// Send letter to HOD for approval
+const sendToHOD = async (req, res) => {
+  const { id } = req.params;
+  const { recipients, sendToData, includeCoveringLetter } = req.body;
+
+  try {
+    const patra = await Patra.findByPk(id);
+    if (!patra) {
+      return res.status(404).json({ error: 'Patra not found' });
+    }
+
+    // Update letter status to "sent to head" and store recipient information
+    await patra.update({
+      letterStatus: 'sent to head',
+      sentTo: JSON.stringify({
+        recipients: recipients,
+        sendToData: sendToData,
+        includeCoveringLetter: includeCoveringLetter,
+        sentAt: new Date()
+      })
+    });
+    
+    return res.status(200).json({ 
+      message: 'Letter sent to HOD for approval',
+      letterStatus: 'sent to head',
+      recipients: recipients
+    });
+  } catch (error) {
+    console.error('Error sending to HOD:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
+  }
+};
+
+// Approve letter (HOD action)
+const approveLetter = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const patra = await Patra.findByPk(id);
+    if (!patra) {
+      return res.status(404).json({ error: 'Patra not found' });
+    }
+
+    // Update letter status to "approved"
+    await patra.update({
+      letterStatus: 'approved'
+    });
+    
+    return res.status(200).json({ 
+      message: 'Letter approved successfully',
+      letterStatus: 'approved'
+    });
+  } catch (error) {
+    console.error('Error approving letter:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
@@ -580,6 +667,8 @@ module.exports = {
   updatePatraById,
   getPatraByUserIdAndPatraId,
   updateLetterStatus,
+  sendToHOD,
+  approveLetter,
   getAllCoveringLetters,
   getCoveringLetterById,
 };

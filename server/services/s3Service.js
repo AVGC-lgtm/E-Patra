@@ -1,5 +1,5 @@
 // services/s3Service.js - Enhanced with editable HTML generation
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
@@ -1339,6 +1339,40 @@ class S3Service {
     } catch (error) {
       console.error('Error uploading to S3:', error);
       throw new Error('Failed to upload to S3');
+    }
+  }
+
+  // Download file from S3
+  async downloadFileFromS3(key) {
+    try {
+      console.log('☁️ Downloading from S3, key:', key);
+      
+      const command = new GetObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: key,
+      });
+
+      const response = await s3Client.send(command);
+      
+      // Convert the readable stream to buffer
+      const chunks = [];
+      for await (const chunk of response.Body) {
+        chunks.push(chunk);
+      }
+      
+      const fileBuffer = Buffer.concat(chunks);
+      
+      console.log('✅ S3 download successful, size:', fileBuffer.length, 'bytes');
+      return fileBuffer;
+      
+    } catch (error) {
+      console.error('❌ Error downloading file from S3:', error);
+      console.error('S3 Error details:', {
+        message: error.message,
+        code: error.Code,
+        statusCode: error.$metadata?.httpStatusCode
+      });
+      throw new Error(`Failed to download file from S3: ${error.message}`);
     }
   }
 }

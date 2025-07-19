@@ -18,6 +18,11 @@ JWT_SECRET=your_jwt_secret_here
 EMAIL_USER=your_email@gmail.com
 EMAIL_PASS=your_email_password
 
+# Police Department Email Addresses
+IGP_EMAIL= punddipak444@gmail.com
+SP_EMAIL=punddipak444@gmail.com
+SDPO_EMAIL=punddipak444@gmail.com
+
 # AWS Configuration (if using AWS services)
 AWS_ACCESS_KEY=your_aws_access_key
 AWS_SECRET_KEY=your_aws_secret_key
@@ -36,6 +41,8 @@ if (!fs.existsSync(envPath)) {
   console.log('📝 Please edit the .env file and update the following:');
   console.log('   - DB_PASSWORD: Your PostgreSQL password');
   console.log('   - JWT_SECRET: A random string for JWT tokens');
+  console.log('   - EMAIL_USER & EMAIL_PASS: Your Gmail credentials');
+  console.log('   - IGP_EMAIL, SP_EMAIL, SDPO_EMAIL: Police department email addresses');
   console.log('   - Other credentials as needed');
 } else {
   console.log('⚠️  .env file already exists!');
@@ -47,4 +54,5 @@ console.log('🔧 Next steps:');
 console.log('1. Make sure PostgreSQL is running');
 console.log('2. Create a database: CREATE DATABASE ahilyanagar_feedback;');
 console.log('3. Update the password in the .env file');
-console.log('4. Run: npm start'); 
+console.log('4. Configure email settings for letter notifications');
+console.log('5. Run: npm start'); 

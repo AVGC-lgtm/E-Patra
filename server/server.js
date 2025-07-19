@@ -73,8 +73,18 @@ const corsOptions = {
 app.use(cors(corsOptions)); 
 app.use(express.json()); 
 
-// Create uploads directory for CSV imports if it doesn't exist
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Create uploads directory if it doesn't exist
 const fs = require('fs');
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('Created uploads directory for file serving');
+}
+
+// Create temp directory for CSV imports if it doesn't exist
 const tempDir = path.join(__dirname, 'temp');
 if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir);

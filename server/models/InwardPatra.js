@@ -82,6 +82,10 @@ const InwardPatra = sequelize.define('InwardPatra', {
     allowNull: true, // Nullable initially, will be set after covering letter creation
     references: { model: 'covering_letters', key: 'id' },
   },
+  sentTo: {
+    type: DataTypes.TEXT,
+    allowNull: true, // Store JSON string of recipient information
+  },
 }, {
   underscored: true,
   timestamps: true,

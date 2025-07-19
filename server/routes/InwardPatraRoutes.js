@@ -22,6 +22,12 @@ router.get('/user/:userId/patra/:patraId', patraController.getPatraByUserIdAndPa
 // Update letter status only (MUST BE BEFORE /:id route)
 router.put('/:id/status', patraController.updateLetterStatus);
 
+// Send to HOD for approval (MUST BE BEFORE /:id route)
+router.put('/:id/send-to-hod', patraController.sendToHOD);
+
+// Approve letter (HOD action) (MUST BE BEFORE /:id route)
+router.put('/:id/approve', patraController.approveLetter);
+
 // Get a Patra by ID with complete covering letter data
 router.get('/:id', patraController.getPatraById);
 

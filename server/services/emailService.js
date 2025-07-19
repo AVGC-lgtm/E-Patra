@@ -26,7 +26,20 @@ class EmailService {
         throw new Error('Email transporter is not available. Check email configuration.');
       }
 
-      console.log(`Preparing to send email with ${attachments.length} attachment(s) to: ${to}`);
+      console.log(`📧 Preparing to send email with ${attachments.length} attachment(s) to: ${to}`);
+      
+      // Debug attachments
+      if (attachments && attachments.length > 0) {
+        console.log('📎 Attachment details:');
+        attachments.forEach((att, index) => {
+          console.log(`  ${index + 1}. ${att.filename || 'unnamed'}`);
+          console.log(`     - Content-Type: ${att.contentType || 'unknown'}`);
+          console.log(`     - Size: ${att.content ? att.content.length : 'unknown'} bytes`);
+          console.log(`     - Has content: ${!!att.content}`);
+        });
+      } else {
+        console.log('⚠️ No attachments provided');
+      }
       
       const mailOptions = {
         from: {
@@ -40,7 +53,7 @@ class EmailService {
         attachments: attachments
       };
 
-      console.log('Sending email with attachments:', {
+      console.log('📤 Sending email with attachments:', {
         from: mailOptions.from,
         to: mailOptions.to,
         subject: mailOptions.subject,
@@ -48,7 +61,7 @@ class EmailService {
       });
 
       const result = await this.transporter.sendMail(mailOptions);
-      console.log('✓ Email with attachments sent successfully:', result.messageId);
+      console.log('✅ Email with attachments sent successfully:', result.messageId);
       
       return {
         success: true,
@@ -56,7 +69,7 @@ class EmailService {
         response: result.response
       };
     } catch (error) {
-      console.error('✗ Error sending email with attachments:', error);
+      console.error('❌ Error sending email with attachments:', error);
       throw error;
     }
   }

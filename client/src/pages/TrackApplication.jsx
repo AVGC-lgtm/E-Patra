@@ -66,10 +66,32 @@ const TrackApplication = () => {
     setError('');
     
     try {
-      const response = await axios.get(`http://localhost:5000/api/patras?referenceNumber=${ref}`);
-      if (response.data && response.data.length > 0) {
-        console.log('Application data received:', response.data[0]);
-        setApplication(response.data[0]);
+      // Use the specific route for getting patra by reference number
+      const response = await axios.get(`http://localhost:5000/api/patras/reference/${ref}`);
+      console.log('Full API response:', response.data);
+      
+      // Handle the API response structure
+      let applicationData = null;
+      if (response.data && response.data.patra) {
+        // Single patra response from getPatraByReferenceNumber
+        applicationData = response.data.patra;
+        console.log('Using single patra from response:', applicationData);
+      } else if (response.data && response.data.patras && Array.isArray(response.data.patras)) {
+        // Multiple patras response (fallback)
+        applicationData = response.data.patras[0];
+        console.log('Using first patra from array:', applicationData);
+      } else if (response.data && typeof response.data === 'object' && response.data.id) {
+        // Direct patra object response (fallback)
+        applicationData = response.data;
+        console.log('Using direct patra object:', applicationData);
+      } else {
+        console.error('Unexpected response structure:', response.data);
+        throw new Error('Invalid data format received from server');
+      }
+      
+      if (applicationData) {
+        console.log('Application data received:', applicationData);
+        setApplication(applicationData);
       } else {
         setError(language === 'mr' ? 'कोणतेही अर्ज सापडले नाहीत' : 'No applications found');
         setApplication(null);
@@ -159,24 +181,65 @@ const TrackApplication = () => {
     }
   };
 
-  // Helper function to get file URL
-  const getFileUrl = (application) => {
-    if (application.upload && application.upload.fileUrl) {
-      return application.upload.fileUrl;
+  // Function to get file URL from API
+  const getFileUrlFromId = async (fileId) => {
+    try {
+      console.log('Fetching file URL for ID:', fileId);
+      
+      const response = await fetch(`http://localhost:5000/api/files/${fileId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file: ${response.status}`);
+      }
+      
+      const fileData = await response.json();
+      console.log('File data received:', fileData);
+      
+      if (fileData.success && fileData.file) {
+        return {
+          url: fileData.file.fileUrl || fileData.file.url,
+          originalName: fileData.file.originalName
+        };
+      }
+      
+      return null;
+      
+    } catch (error) {
+      console.error('Error fetching file URL:', error);
+      return null;
     }
-    if (application.fileId) {
-      return `http://localhost:5000/uploads/${application.fileId}`;
-    }
-    return null;
   };
 
   // Function to preview file
-  const previewFile = (application) => {
-    const fileUrl = getFileUrl(application);
-    if (fileUrl) {
-      window.open(fileUrl, '_blank');
-    } else {
-      alert(language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available');
+  const previewFile = async (application) => {
+    try {
+      let fileUrl = null;
+      
+      // First check if application has upload data with fileUrl
+      if (application.upload && application.upload.fileUrl) {
+        fileUrl = application.upload.fileUrl;
+      } else if (application.fileId) {
+        // Get file URL from API
+        const fileInfo = await getFileUrlFromId(application.fileId);
+        if (fileInfo && fileInfo.url) {
+          fileUrl = fileInfo.url;
+        }
+      }
+      
+      if (fileUrl) {
+        window.open(fileUrl, '_blank');
+      } else {
+        alert(language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available');
+      }
+    } catch (error) {
+      console.error('Error previewing file:', error);
+      alert(language === 'mr' ? 'फाइल पहाण्यात त्रुटी!' : 'Error viewing file!');
     }
   };
 
@@ -365,7 +428,7 @@ const TrackApplication = () => {
             </div>
 
             {/* File Attachments */}
-            {getFileUrl(application) && (
+            {(application.upload && application.upload.fileUrl) || application.fileId ? (
               <div className="bg-white p-6 rounded-xl border border-gray-200">
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <FiPaperclip className="h-5 w-5 text-blue-600" />
@@ -384,7 +447,7 @@ const TrackApplication = () => {
                     </div>
                   </div>
                   <button
-                    onClick={() => previewFile(application)}
+                    onClick={async () => await previewFile(application)}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     <FiEye className="h-4 w-4" />
@@ -392,7 +455,60 @@ const TrackApplication = () => {
                   </button>
                 </div>
               </div>
-            )}
+            ) : null}
+
+            {/* Covering Letter Section */}
+            {application.coveringLetter && application.coveringLetter.id ? (
+              <div className="bg-white p-6 rounded-xl border border-gray-200">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <FiMail className="h-5 w-5 text-green-600" />
+                  {language === 'mr' ? 'कव्हरिंग लेटर' : 'Covering Letter'}
+                </h3>
+                <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <FiFileText className="h-8 w-8 text-green-600" />
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {application.coveringLetter.letterContent ? 
+                          (language === 'mr' ? 'कव्हरिंग लेटर सामग्री' : 'Covering Letter Content') :
+                          `Covering_Letter_${application.referenceNumber}.pdf`
+                        }
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {language === 'mr' ? 'तयार केली गेली' : 'Generated'}: {formatDate(application.coveringLetter.generatedAt)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {application.coveringLetter.pdfUrl && (
+                      <button
+                        onClick={() => window.open(application.coveringLetter.pdfUrl, '_blank')}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        <FiEye className="h-4 w-4" />
+                        {language === 'mr' ? 'पीडीएफ पहा' : 'View PDF'}
+                      </button>
+                    )}
+                    {application.coveringLetter.letterContent && (
+                      <button
+                        onClick={() => {
+                          // Create a modal or alert to show the letter content
+                          const content = application.coveringLetter.letterContent;
+                          alert(language === 'mr' ? 
+                            'कव्हरिंग लेटर सामग्री:\n\n' + content :
+                            'Covering Letter Content:\n\n' + content
+                          );
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <FiFileText className="h-4 w-4" />
+                        {language === 'mr' ? 'सामग्री पहा' : 'View Content'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             {/* Status Timeline */}
             <div className="bg-white p-6 rounded-xl border border-gray-200">

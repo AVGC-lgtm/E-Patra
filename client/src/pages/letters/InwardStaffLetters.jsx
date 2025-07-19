@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink, FiFileText, FiSend, FiDownload } from 'react-icons/fi';
+import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink, FiFileText, FiSend, FiDownload, FiTrash2, FiPlus, FiUpload } from 'react-icons/fi';
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
@@ -32,11 +32,17 @@ const InwardStaffLetters = () => {
     selectedPoliceStations: []
   });
   const [imageLoading, setImageLoading] = useState({});
+  const [uploadingCoveringLetter, setUploadingCoveringLetter] = useState(false);
+  const [generatingCoveringLetter, setGeneratingCoveringLetter] = useState(false);
   
   // Status filter options with translations
   const statusOptions = [
     { value: 'All', label: language === 'mr' ? 'सर्व स्थिती' : 'All Status' },
-    { value: 'sending for head sign', label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी पाठवत आहे' : 'Sending for Head Sign' }
+    { value: 'sending for head sign', label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी पाठवत आहे' : 'Sending for Head Sign' },
+    { value: 'sent to head', label: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'Sent to Head' },
+    { value: 'pending', label: language === 'mr' ? 'प्रलंबित' : 'Pending' },
+    { value: 'approved', label: language === 'mr' ? 'मंजूर' : 'Approved' },
+    { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' }
   ];
 
   // Date filter options
@@ -184,87 +190,6 @@ const InwardStaffLetters = () => {
     };
     
     return stationsMap[district] || [];
-  };
-
-  // Debug API Call function
-  const debugAPICall = async (letterId) => {
-    const token = localStorage.getItem('token');
-    
-    console.log('=== API Debug Start ===');
-    console.log('Testing letter ID:', letterId);
-    
-    try {
-      // First, try to GET the letter to ensure it exists
-      const getResponse = await axios.get(
-        `http://localhost:5000/api/patras/${letterId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-      console.log('GET Response:', getResponse.data);
-    } catch (error) {
-      console.error('GET Error:', error.response?.data || error.message);
-    }
-    
-    // Test 2: Try minimal update
-    try {
-      const minimalUpdate = {
-        letterStatus: 'pending'
-      };
-      
-      console.log('Attempting minimal update:', minimalUpdate);
-      
-      const updateResponse = await axios.put(
-        `http://localhost:5000/api/patras/${letterId}`,
-        minimalUpdate,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-      console.log('Minimal Update Success:', updateResponse.data);
-    } catch (error) {
-      console.error('Minimal Update Error:', error.response?.data || error.message);
-    }
-    
-    // Test 3: Check what fields the backend accepts
-    try {
-      const testFields = [
-        { letterStatus: 'pending' },
-        { letterStatus: 'sent to head' },
-        { letterStatus: 'forwarded' },
-        { sentTo: { igp: true } },
-        { sentAt: new Date().toISOString() },
-        { userId: 4 }
-      ];
-      
-      for (const field of testFields) {
-        try {
-          console.log('Testing field:', field);
-          const response = await axios.put(
-            `http://localhost:5000/api/patras/${letterId}`,
-            field,
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              }
-            }
-          );
-          console.log(`Field ${Object.keys(field)[0]} works:`, response.status);
-        } catch (error) {
-          console.error(`Field ${Object.keys(field)[0]} failed:`, error.response?.data);
-        }
-      }
-    } catch (error) {
-      console.error('Field testing error:', error);
-    }
-    
-    console.log('=== API Debug End ===');
   };
 
   // Get file type icon
@@ -444,35 +369,88 @@ const InwardStaffLetters = () => {
     setSendModalOpen(true);
   };
 
-  // Handle send form submission
-  const handleSendSubmit = async (e) => {
-    e.preventDefault();
-    
+  // Function to send letter to HOD for approval
+  const sendToHODForApproval = async (letterId) => {
     try {
-      // Get the correct letter ID
-      const letterId = selectedLetterForSend._id || 
-                      selectedLetterForSend.id || 
-                      selectedLetterForSend.letterID;
+      const token = localStorage.getItem('token');
       
-      console.log('Letter object:', selectedLetterForSend);
-      console.log('Using letter ID:', letterId);
-      
-      // Validate letter ID
-      if (!letterId) {
-        throw new Error('Letter ID not found. Please refresh and try again.');
-      }
-      
-      // Check if at least one recipient is selected
-      const hasRecipient = sendToData.igp || sendToData.sp || sendToData.sdpo || 
-                          (sendToData.policeStation && sendToData.selectedPoliceStations.length > 0);
-      
-      if (!hasRecipient) {
+      if (!token) {
         alert(language === 'mr' ? 
-          'कृपया किमान एक प्राप्तकर्ता निवडा!' : 
-          'Please select at least one recipient!');
+          'कृपया पुन्हा लॉगिन करा!' : 
+          'Please login again!');
+        navigate('/login');
         return;
       }
+
+      // Prepare recipients data for HOD approval
+      const recipients = [];
+      if (sendToData.igp) recipients.push('igp');
+      if (sendToData.sp) recipients.push('sp');
+      if (sendToData.sdpo) recipients.push('sdpo');
+      if (sendToData.policeStation && sendToData.selectedPoliceStations.length > 0) {
+        recipients.push('policeStation');
+      }
+
+      console.log('Sending to HOD:', {
+        letterId: letterId,
+        recipients: recipients,
+        sendToData: sendToData,
+        includeCoveringLetter: selectedLetterForSend.coveringLetter ? true : false
+      });
+
+      // Update letter status to "sent to head" and store recipient information
+      const response = await axios.put(
+        `http://localhost:5000/api/patras/${letterId}/send-to-hod`,
+        {
+          recipients: recipients,
+          sendToData: sendToData,
+          includeCoveringLetter: selectedLetterForSend.coveringLetter ? true : false
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.status === 200) {
+        const successMessage = language === 'mr' ? 
+          `पत्र HOD मंजुरीसाठी पाठवले गेले!\n\nप्राप्तकर्ते:\n${recipients.join(', ')}` : 
+          `Letter sent to HOD for approval!\n\nRecipients:\n${recipients.join(', ')}`;
+        
+        alert(successMessage);
+        
+        // Close modal
+        setSendModalOpen(false);
+        setSelectedLetterForSend(null);
+        
+        // Refresh letters
+        handleRefresh();
+      }
+    } catch (error) {
+      console.error('Error sending to HOD:', error);
       
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+        const errorMessage = error.response.data?.error || 
+                            error.response.data?.message || 
+                            'Failed to send to HOD';
+        
+        alert(language === 'mr' ? 
+          `HOD ला पाठवण्यात त्रुटी: ${errorMessage}` : 
+          `Error sending to HOD: ${errorMessage}`);
+      } else {
+        alert(language === 'mr' ? 
+          'नेटवर्क त्रुटी! कृपया पुन्हा प्रयत्न करा.' : 
+          'Network error! Please try again.');
+      }
+    }
+  };
+
+  // Function to send email directly (for SDPO only)
+  const sendEmailDirectly = async (letterId) => {
+    try {
       // Get authentication token
       const token = localStorage.getItem('token');
       
@@ -515,51 +493,25 @@ const InwardStaffLetters = () => {
           console.error('Error decoding token:', e);
         }
       }
-      
-      // Uncomment to debug API endpoints
-      // await debugAPICall(letterId);
-      
-      // Prepare the update data
-      // Try different status values based on what your backend expects
-      const possibleStatuses = ['sent to head', 'forwarded', 'pending', 'in review'];
-      
-      const updateData = {
-        letterStatus: 'sent to head', // Change this based on your backend requirements
-        sentTo: {
-          igp: sendToData.igp || false,
-          sp: sendToData.sp || false,
-          sdpo: sendToData.sdpo || false,
-          policeStation: sendToData.policeStation || false,
-          selectedDistrict: sendToData.selectedDistrict || '',
-          selectedPoliceStations: sendToData.selectedPoliceStations || []
-        },
-        sentAt: new Date().toISOString(),
-        // Include user information if available
-        ...(userData && {
-          userId: userData.id,
-          updatedBy: userData.id,
-          updatedByEmail: userData.email,
-          updatedByName: userData.name,
-          userRole: userData.role
-        })
+
+      // Prepare recipients array for email (only SDPO)
+      const recipients = ['sdpo'];
+
+      // Prepare email data
+      const emailData = {
+        letterId: letterId,
+        senderEmail: userData?.email || 'staff@police.gov.in',
+        recipients: recipients,
+        customMessage: '',
+        includeCoveringLetter: selectedLetterForSend.coveringLetter ? true : false
       };
 
-      // Clean up undefined values
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key] === undefined || updateData[key] === null) {
-          delete updateData[key];
-        }
-      });
-
-      console.log('Sending update request:');
-      console.log('URL:', `http://localhost:5000/api/patras/${letterId}`);
-      console.log('Data:', JSON.stringify(updateData, null, 2));
-      console.log('Token:', token);
+      console.log('Sending email directly to SDPO:', emailData);
       
-      // Make the API call
-      const response = await axios.put(
-        `http://localhost:5000/api/patras/${letterId}`, 
-        updateData, 
+      // Make the email API call
+      const response = await axios.post(
+        `http://localhost:5000/api/dynamic-email/send-inward-letter`, 
+        emailData, 
         {
           headers: {
             'Content-Type': 'application/json',
@@ -568,13 +520,14 @@ const InwardStaffLetters = () => {
         }
       );
 
-      console.log('Response:', response);
-
       if (response.status === 200 || response.status === 201) {
-        // Show success message
-        alert(language === 'mr' ? 
-          'पत्र HOD ला यशस्वीरित्या पाठवले गेले!' : 
-          'Letter sent to HOD successfully!');
+        const result = response.data;
+        
+        const successMessage = language === 'mr' ? 
+          `पत्र यशस्वीरित्या SDPO ला पाठवले गेले!\n\nईमेल तपशील:\n- पाठवले: ${result.data.successful}\n- अयशस्वी: ${result.data.failed}\n- संलग्नक: ${result.data.attachments}` : 
+          `Letter sent successfully to SDPO!\n\nEmail Details:\n- Sent: ${result.data.successful}\n- Failed: ${result.data.failed}\n- Attachments: ${result.data.attachments}`;
+        
+        alert(successMessage);
         
         // Close modal
         setSendModalOpen(false);
@@ -584,64 +537,72 @@ const InwardStaffLetters = () => {
         handleRefresh();
       }
     } catch (error) {
-      console.error('Error sending letter to HOD:', error);
+      console.error('Error sending email directly:', error);
       
-      if (error.response) {
-        console.error('Full error response:', error.response);
-        console.error('Error data:', JSON.stringify(error.response.data, null, 2));
-        
-        const errorMessage = error.response.data?.message || 
-                           error.response.data?.error || 
-                           error.response.data?.details ||
-                           (typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data)) ||
-                           'Server error';
-        
-        // For debugging, show the full error
-        if (error.response.status === 500) {
-          alert(`Server Error (500):\n${errorMessage}\n\nPlease check the server logs for more details.\n\nRequest Details:\n- URL: ${error.config.url}\n- Method: ${error.config.method}\n- Data: ${error.config.data}`);
-          
-          // Log what we tried to send
-          console.error('Failed request details:', {
-            url: error.config.url,
-            method: error.config.method,
-            headers: error.config.headers,
-            data: JSON.parse(error.config.data || '{}')
-          });
-          
-          // Suggest checking backend logs
-          console.error('💡 Troubleshooting tips:');
-          console.error('1. Check if the letter status transition is allowed (sending for head sign → sent to head)');
-          console.error('2. Verify all required fields are present in the updateData');
-          console.error('3. Check backend logs for the specific error');
-          console.error('4. Test the API endpoint with Postman using the same data');
-        } else if (error.response.status === 401) {
-          alert(language === 'mr' ? 
-            'वापरकर्ता सत्यापन अयशस्वी. कृपया पुन्हा लॉगिन करा.' : 
-            'User authentication failed. Please login again.');
-          
-          // Clear stored data
-          localStorage.removeItem('token');
-          localStorage.removeItem('userInfo');
-          localStorage.removeItem('user');
-          
-          // Redirect to login
-          navigate('/login');
-        } else {
-          alert(language === 'mr' ? 
-            `पत्र पाठविण्यात त्रुटी: ${errorMessage}` : 
-            `Error sending letter: ${errorMessage}`);
-        }
-      } else if (error.request) {
-        console.error('No response received:', error.request);
-        alert(language === 'mr' ? 
-          'सर्व्हरशी संपर्क साधू शकत नाही. कृपया पुन्हा प्रयत्न करा.' : 
-          'Cannot connect to server. Please try again.');
-      } else {
-        console.error('Error setting up request:', error.message);
-        alert(language === 'mr' ? 
-          `त्रुटी: ${error.message}` : 
-          `Error: ${error.message}`);
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.message || 
+                          'Failed to send email';
+      
+      alert(language === 'mr' ? 
+        `ईमेल पाठवण्यात त्रुटी: ${errorMessage}` : 
+        `Error sending email: ${errorMessage}`);
+    }
+  };
+
+  // Handle send form submission
+  const handleSendSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      // Get the correct letter ID
+      const letterId = selectedLetterForSend._id || 
+                      selectedLetterForSend.id || 
+                      selectedLetterForSend.letterID;
+      
+      console.log('Letter object:', selectedLetterForSend);
+      console.log('Using letter ID:', letterId);
+      
+      // Validate letter ID
+      if (!letterId) {
+        throw new Error('Letter ID not found. Please refresh and try again.');
       }
+      
+      // Check if at least one recipient is selected
+      const hasRecipient = sendToData.igp || sendToData.sp || sendToData.sdpo || 
+                          (sendToData.policeStation && sendToData.selectedPoliceStations.length > 0);
+      
+      if (!hasRecipient) {
+        alert(language === 'mr' ? 
+          'कृपया किमान एक प्राप्तकर्ता निवडा!' : 
+          'Please select at least one recipient!');
+        return;
+      }
+
+      // Check if any high-level recipients are selected (IGP, SP, Police Stations)
+      const hasHighLevelRecipients = sendToData.igp || sendToData.sp || 
+                                   (sendToData.policeStation && sendToData.selectedPoliceStations.length > 0);
+      
+      // If high-level recipients are selected, send to HOD for approval
+      if (hasHighLevelRecipients) {
+        await sendToHODForApproval(letterId);
+        return;
+      }
+      
+      // For SDPO only, send email directly (no HOD approval needed)
+      if (sendToData.sdpo) {
+        await sendEmailDirectly(letterId);
+        return;
+      }
+      
+      // If we reach here, no valid recipients were selected
+      alert(language === 'mr' ? 
+        'कृपया वैध प्राप्तकर्ता निवडा!' : 
+        'Please select valid recipients!');
+    } catch (error) {
+      console.error('Error in handleSendSubmit:', error);
+      alert(language === 'mr' ? 
+        'त्रुटी आली! कृपया पुन्हा प्रयत्न करा.' : 
+        'An error occurred! Please try again.');
     }
   };
 
@@ -670,6 +631,226 @@ const InwardStaffLetters = () => {
     }
   };
 
+  // Covering Letter Handler Functions
+  
+  // Handler to delete covering letter
+  const handleDeleteCoveringLetter = async (coveringLetterId) => {
+    try {
+      if (!coveringLetterId) {
+        alert(language === 'mr' 
+          ? 'कव्हरिंग लेटर ID सापडला नाही!' 
+          : 'Covering letter ID not found!');
+        return;
+      }
+      
+      const confirmDelete = window.confirm(
+        language === 'mr' 
+          ? 'तुम्हाला खरोखर हे कव्हरिंग लेटर हटवायचे आहे का? हे S3 वरून देखील हटवले जाईल.' 
+          : 'Are you sure you want to delete this covering letter? It will also be deleted from S3.'
+      );
+      
+      if (!confirmDelete) return;
+      
+      const token = localStorage.getItem('token');
+      
+      const response = await axios.delete(
+        `http://localhost:5000/api/letters/${coveringLetterId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.status === 200 && response.data.success) {
+        alert(language === 'mr' 
+          ? 'कव्हरिंग लेटर यशस्वीरित्या हटवले गेले!' 
+          : 'Covering letter deleted successfully!');
+        
+        // Update the selected letter to remove covering letter reference
+        setSelectedLetter(prev => ({
+          ...prev,
+          coveringLetter: null
+        }));
+        
+        // Update the letter in the main list
+        const letterId = selectedLetter._id || selectedLetter.id;
+        setLetters(prevLetters => 
+          prevLetters.map(l => 
+            (l._id || l.id) === letterId 
+              ? { ...l, coveringLetter: null }
+              : l
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error deleting covering letter:', error);
+      
+      if (error.response) {
+        const errorMessage = error.response.data?.message || error.response.data?.error || 'Server error';
+        alert(language === 'mr' 
+          ? `कव्हरिंग लेटर हटवताना त्रुटी: ${errorMessage}` 
+          : `Error deleting covering letter: ${errorMessage}`);
+      } else {
+        alert(language === 'mr' 
+          ? 'कव्हरिंग लेटर हटवताना त्रुटी!' 
+          : 'Error deleting covering letter!');
+      }
+    }
+  };
+
+  // Handler to generate new covering letter
+  const handleGenerateCoveringLetter = async (letter) => {
+    try {
+      setGeneratingCoveringLetter(true);
+      const token = localStorage.getItem('token');
+      
+      const generateData = {
+        patraId: letter._id || letter.id,
+        letterType: 'ACKNOWLEDGMENT', // Default type
+        fileId: letter.fileId || null
+      };
+      
+      const response = await axios.post(
+        'http://localhost:5000/api/letters/generate',
+        generateData,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.status === 201) {
+        alert(language === 'mr' 
+          ? 'कव्हरिंग लेटर यशस्वीरित्या तयार केले गेले!' 
+          : 'Covering letter generated successfully!');
+        
+        // Update the selected letter with new covering letter
+        setSelectedLetter(prev => ({
+          ...prev,
+          coveringLetter: response.data.coveringLetter
+        }));
+        
+        // Update the letter in the main list
+        setLetters(prevLetters => 
+          prevLetters.map(l => 
+            (l._id || l.id) === (letter._id || letter.id) 
+              ? { ...l, coveringLetter: response.data.coveringLetter }
+              : l
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error generating covering letter:', error);
+      const errorMessage = error.response?.data?.details || error.response?.data?.error || error.message;
+      alert(language === 'mr' 
+        ? `कव्हरिंग लेटर तयार करताना त्रुटी: ${errorMessage}` 
+        : `Error generating covering letter: ${errorMessage}`);
+    } finally {
+      setGeneratingCoveringLetter(false);
+    }
+  };
+
+  // Handler to upload covering letter file
+  const handleUploadCoveringLetter = async (letter, file) => {
+    try {
+      if (!file) {
+        alert(language === 'mr' ? 'कृपया फाईल निवडा!' : 'Please select a file!');
+        return;
+      }
+      
+      // Validate file type
+      const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!allowedTypes.includes(file.type)) {
+        alert(language === 'mr' 
+          ? 'कृपया फक्त PDF किंवा Word फाईल निवडा!' 
+          : 'Please select only PDF or Word files!');
+        return;
+      }
+      
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert(language === 'mr' 
+          ? 'फाईल साइझ 10MB पेक्षा कमी असावा!' 
+          : 'File size should be less than 10MB!');
+        return;
+      }
+      
+      // Show loading state
+      setUploadingCoveringLetter(true);
+      
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      
+      formData.append('coveringLetterFile', file);
+      formData.append('patraId', letter._id || letter.id);
+      formData.append('letterNumber', letter.referenceNumber || `CL/${Date.now()}`);
+      formData.append('letterDate', new Date().toISOString().split('T')[0]);
+      formData.append('recipientOffice', letter.officeSendingLetter || 'कार्यालय');
+      formData.append('recipientDesignation', letter.senderNameAndDesignation || 'अधिकारी');
+      formData.append('status', 'DRAFT');
+      
+      const response = await axios.post(
+        'http://localhost:5000/api/letters/upload',
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${token}`
+          },
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            console.log(`Upload progress: ${percentCompleted}%`);
+          }
+        }
+      );
+      
+      if (response.status === 201 && response.data.success) {
+        alert(language === 'mr' 
+          ? 'कव्हरिंग लेटर यशस्वीरित्या S3 वर अपलोड केले गेले!' 
+          : 'Covering letter uploaded successfully to S3!');
+        
+        // Use the updated patra data from the response
+        const updatedPatra = response.data.updatedPatra;
+        const updatedCoveringLetter = response.data.coveringLetter;
+        
+        // Update the selected letter with complete updated data
+        setSelectedLetter(prev => ({
+          ...prev,
+          ...updatedPatra,
+          coveringLetter: updatedCoveringLetter
+        }));
+        
+        // Update the letter in the main list with complete updated data
+        setLetters(prevLetters => 
+          prevLetters.map(l => 
+            (l._id || l.id) === (letter._id || letter.id) 
+              ? { ...l, ...updatedPatra, coveringLetter: updatedCoveringLetter }
+              : l
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error uploading covering letter:', error);
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message;
+      
+      // Show more specific error message if it's about existing covering letter
+      if (errorMessage.includes('already exists')) {
+        alert(language === 'mr' 
+          ? 'कव्हरिंग लेटर आधीच उपलब्ध आहे. कृपया आधी ते हटवा.' 
+          : 'Covering letter already exists. Please delete it first.');
+      } else {
+        alert(language === 'mr' 
+          ? `कव्हरिंग लेटर अपलोड करताना त्रुटी: ${errorMessage}` 
+          : `Error uploading covering letter: ${errorMessage}`);
+      }
+    } finally {
+      setUploadingCoveringLetter(false);
+    }
+  };
+
   // Fetch letters from API
   const handleRefresh = async () => {
     setLoading(true);
@@ -686,18 +867,37 @@ const InwardStaffLetters = () => {
         timeout: 10000
       });
       
-      if (response.data && Array.isArray(response.data)) {
-        console.log('Letters received:', response.data);
-        console.log('Letter IDs:', response.data.map(l => ({ 
-          ref: l.referenceNumber, 
-          id: l._id || l.id,
-          status: l.letterStatus,
-          hasFile: !!(l.uploadedFile || l.upload || l.letterFiles)
-        })));
-        setLetters(response.data);
+      console.log('Full API Response:', response.data);
+      
+      // Handle different response structures
+      let lettersData = [];
+      
+      if (response.data && response.data.patras && Array.isArray(response.data.patras)) {
+        // New API structure: { message, count, patras: [...] }
+        lettersData = response.data.patras;
+        console.log('Using patras array from response');
+      } else if (response.data && Array.isArray(response.data)) {
+        // Direct array response: [...]
+        lettersData = response.data;
+        console.log('Using direct array response');
+      } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+        // Alternative structure: { data: [...] }
+        lettersData = response.data.data;
+        console.log('Using data array from response');
       } else {
+        console.error('Unexpected response structure:', response.data);
         throw new Error('Invalid data format received from server');
       }
+      
+      console.log('Letters received:', lettersData.length);
+      console.log('Letter IDs:', lettersData.map(l => ({ 
+        ref: l.referenceNumber, 
+        id: l._id || l.id,
+        status: l.letterStatus,
+        hasFile: !!(l.uploadedFile || l.upload || l.letterFiles)
+      })));
+      
+      setLetters(lettersData);
     } catch (err) {
       const errorMessage = err.response?.data?.message || 
                          err.response?.data?.error ||
@@ -723,7 +923,7 @@ const InwardStaffLetters = () => {
       setLoading(false);
     }
   };
-  
+    
   const toggleAcknowledge = (letterId) => {
     setAcknowledgedLetters(prev => {
       const newAcknowledged = new Set(prev);
@@ -754,13 +954,11 @@ const InwardStaffLetters = () => {
   }, [navigate, language]);
 
   // Filter letters based on search term, status, and date
-  // Only show letters with status "sending for head sign" in InwardStaffLetters
   const filteredLetters = letters.filter(letter => {
-    // Only show letters with "sending for head sign" status
     const letterStatus = letter.letterStatus || letter.letter_status || letter.status || '';
-    if (letterStatus.toLowerCase() !== 'sending for head sign') {
-      return false;
-    }
+    
+    // Debug log all letters
+    console.log('InwardStaff Filter - Letter:', letter.referenceNumber, 'Status:', letterStatus);
 
     const searchableFields = [
       letter.referenceNumber,
@@ -777,7 +975,7 @@ const InwardStaffLetters = () => {
 
     const matchesSearch = searchTerm === '' || 
       searchableFields.includes(searchTerm.toLowerCase());
-    
+
     const displayStatus = getLetterStatus(letter);
     const matchesStatus = statusFilter === 'All' || 
       displayStatus.toLowerCase() === statusFilter.toLowerCase();
@@ -785,11 +983,54 @@ const InwardStaffLetters = () => {
     const matchesDate = dateFilter === 'all' || 
       (dateFilter === 'today' && isToday(letter.createdAt || letter.dateOfReceiptOfLetter));
 
-    return matchesSearch && matchesStatus && matchesDate;
+    const shouldInclude = matchesSearch && matchesStatus && matchesDate;
+    
+    if (shouldInclude) {
+      console.log('InwardStaff Filter - Including letter:', letter.referenceNumber, 'Status:', letterStatus);
+    }
+
+    return shouldInclude;
   });
 
   const totalPages = Math.ceil(filteredLetters.length / recordsPerPage);
   const paginatedLetters = filteredLetters.slice((currentPage - 1) * recordsPerPage, currentPage * recordsPerPage);
+
+  const hasCoveringLetter = (letter) => {
+    // Debug: Log the letter data structure
+    console.log('Checking covering letter for:', letter.referenceNumber);
+    console.log('Letter covering letter data:', letter.coveringLetter);
+    
+    // Check if covering letter exists and has required data
+    const coveringLetter = letter.coveringLetter;
+    
+    if (!coveringLetter) {
+      console.log('No covering letter object found');
+      return false;
+    }
+    
+    // Check for either id or _id (to handle both Sequelize and MongoDB)
+    const hasId = coveringLetter.id || coveringLetter._id;
+    
+    // Check for URL availability
+    const hasUrl = coveringLetter.pdfUrl || coveringLetter.htmlUrl;
+    
+    console.log('Covering letter ID:', hasId);
+    console.log('Covering letter URLs:', { pdfUrl: coveringLetter.pdfUrl, htmlUrl: coveringLetter.htmlUrl });
+    
+    return !!(hasId && hasUrl);
+  };
+  
+  // Helper function to view covering letter
+  const viewCoveringLetter = (letter) => {
+    if (!hasCoveringLetter(letter)) {
+      alert(language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही!' : 'Covering letter not available!');
+      return;
+    }
+    
+    // Prefer PDF over HTML
+    const url = letter.coveringLetter.pdfUrl || letter.coveringLetter.htmlUrl;
+    window.open(url, '_blank');
+  };
 
   return (
     <div className="p-6">
@@ -941,6 +1182,7 @@ const InwardStaffLetters = () => {
                       </td>
                       <td className="px-8 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end items-center space-x-2">
+                          {/* Details button */}
                           <button
                             onClick={() => {
                               setSelectedLetter(letter);
@@ -953,23 +1195,23 @@ const InwardStaffLetters = () => {
                             <span className="ml-1">{language === 'mr' ? 'तपशील' : 'Details'}</span>
                           </button>
                           
-                          {/* View File button */}
+                          {/* View Covering Letter button */}
                           <button
-                            onClick={() => hasAttachments(letter) ? viewFileInNewTab(letter) : null}
+                            onClick={() => hasCoveringLetter(letter) ? viewCoveringLetter(letter) : null}
                             className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded transition-colors shadow-sm ${
-                              hasAttachments(letter) 
-                                ? 'bg-purple-600 text-white hover:bg-purple-700' 
+                              hasCoveringLetter(letter) 
+                                ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
                                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                             }`}
                             title={
-                              hasAttachments(letter) 
-                                ? (language === 'mr' ? 'फाईल पहा' : 'View File') 
-                                : (language === 'mr' ? 'कोणतीही फाईल संलग्न नाही' : 'No file attached')
+                              hasCoveringLetter(letter) 
+                                ? (language === 'mr' ? 'कव्हरिंग लेटर पहा' : 'View Covering Letter') 
+                                : (language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'No covering letter available')
                             }
-                            disabled={!hasAttachments(letter)}
+                            disabled={!hasCoveringLetter(letter)}
                           >
-                            <FiExternalLink className="h-4 w-4" />
-                            <span className="ml-1">{language === 'mr' ? 'फाईल पहा' : 'View File'}</span>
+                            <FiFileText className="h-4 w-4" />
+                            <span className="ml-1">{language === 'mr' ? 'कव्हर लेटर' : 'Cover Letter'}</span>
                           </button>
                           
                           {/* Download button */}
@@ -1268,6 +1510,100 @@ const InwardStaffLetters = () => {
                 </div>
               </div>
 
+              {/* Attachment Information Section */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h3 className="text-lg font-bold text-blue-800 mb-3">
+                  {language === 'mr' ? 'ईमेलमध्ये समाविष्ट केलेली फाईल्स' : 'Files to be Included in Email'}
+                </h3>
+                
+                <div className="space-y-3">
+                  {/* Main Letter File */}
+                  {selectedLetterForSend.uploadedFile && (
+                    <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-blue-200">
+                      <div className="flex-shrink-0">
+                        <FiFileText className="h-6 w-6 text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-blue-900">
+                          {language === 'mr' ? 'मुख्य पत्र फाईल' : 'Main Letter File'}
+                        </p>
+                        <p className="text-xs text-blue-700">
+                          {selectedLetterForSend.uploadedFile.originalName || 'Document'}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          {language === 'mr' ? 'समाविष्ट' : 'Included'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Covering Letter File */}
+                  {selectedLetterForSend.coveringLetter && selectedLetterForSend.coveringLetter.attachedFile && (
+                    <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-blue-200">
+                      <div className="flex-shrink-0">
+                        <FiFileText className="h-6 w-6 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-900">
+                          {language === 'mr' ? 'कव्हरिंग लेटर फाईल' : 'Covering Letter File'}
+                        </p>
+                        <p className="text-xs text-green-700">
+                          {selectedLetterForSend.coveringLetter.attachedFile.originalName || 'Covering Letter'}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          {language === 'mr' ? 'समाविष्ट' : 'Included'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* No Files Warning */}
+                  {(!selectedLetterForSend.uploadedFile && (!selectedLetterForSend.coveringLetter || !selectedLetterForSend.coveringLetter.attachedFile)) && (
+                    <div className="flex items-center space-x-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                      <div className="flex-shrink-0">
+                        <FiFileText className="h-6 w-6 text-yellow-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-yellow-900">
+                          {language === 'mr' ? 'कोणत्याही फाईल्स नाहीत' : 'No Files Available'}
+                        </p>
+                        <p className="text-xs text-yellow-700">
+                          {language === 'mr' 
+                            ? 'या पत्रासाठी कोणत्याही फाईल्स नाहीत. एक टेस्ट फाईल समाविष्ट केली जाईल.' 
+                            : 'No files available for this letter. A test file will be included.'}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          {language === 'mr' ? 'टेस्ट फाईल' : 'Test File'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Total Attachment Count */}
+                <div className="mt-3 pt-3 border-t border-blue-200">
+                  <p className="text-sm text-blue-700">
+                    <span className="font-medium">
+                      {language === 'mr' ? 'एकूण संलग्नक:' : 'Total Attachments:'}
+                    </span>
+                    {' '}
+                    {(() => {
+                      let count = 0;
+                      if (selectedLetterForSend.uploadedFile) count++;
+                      if (selectedLetterForSend.coveringLetter && selectedLetterForSend.coveringLetter.attachedFile) count++;
+                      if (count === 0) count = 1; // Test file
+                      return count;
+                    })()}
+                  </p>
+                </div>
+              </div>
+
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
@@ -1473,6 +1809,154 @@ const InwardStaffLetters = () => {
                   {selectedLetter.subject || 'N/A'}
                 </div>
               </div>
+
+              {/* Covering Letter Section - Updated */}
+              {selectedLetter && (
+                <>
+                  <div className="border-b border-blue-100" />
+                  <div>
+                    <div className="text-base font-bold text-blue-900 mb-3">
+                      {language === 'mr' ? 'कव्हरिंग लेटर' : 'Covering Letter'}
+                    </div>
+                    
+                    {hasCoveringLetter(selectedLetter) ? (
+                      // Show existing covering letter
+                      <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h4 className="text-lg font-semibold text-indigo-800">
+                              {selectedLetter.coveringLetter.letterType === 'UPLOADED' 
+                                ? (language === 'mr' ? 'अपलोड केलेले कव्हरिंग लेटर' : 'Uploaded Covering Letter')
+                                : (language === 'mr' ? 'ऑटो-जेनेरेटेड कव्हरिंग लेटर' : 'Auto-Generated Covering Letter')
+                              }
+                            </h4>
+                            <p className="text-sm text-indigo-600">
+                              {language === 'mr' ? 'संदर्भ क्रमांक:' : 'Letter Number:'} {selectedLetter.coveringLetter.letterNumber}
+                            </p>
+                            <p className="text-sm text-indigo-600">
+                              {language === 'mr' ? 'दिनांक:' : 'Date:'} {selectedLetter.coveringLetter.letterDate}
+                            </p>
+                            <p className="text-sm text-indigo-600">
+                              {language === 'mr' ? 'स्थिती:' : 'Status:'} 
+                              <span className={`ml-1 px-2 py-1 rounded text-xs font-medium ${
+                                selectedLetter.coveringLetter.status === 'DRAFT' 
+                                  ? 'bg-yellow-100 text-yellow-800' 
+                                  : selectedLetter.coveringLetter.status === 'UPLOADED'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-green-100 text-green-800'
+                              }`}>
+                                {selectedLetter.coveringLetter.status}
+                              </span>
+                            </p>
+                          </div>
+                          
+                          <div className="flex flex-col space-y-2">
+                            {/* View and Action Buttons */}
+                            <div className="flex space-x-2">
+                              {/* View PDF Button */}
+                              {selectedLetter.coveringLetter.pdfUrl && (
+                                <button
+                                  onClick={() => window.open(selectedLetter.coveringLetter.pdfUrl, '_blank')}
+                                  className="inline-flex items-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors shadow-md"
+                                >
+                                  <FiFileText className="mr-1 h-3 w-3" />
+                                  {language === 'mr' ? 'PDF पहा' : 'View PDF'}
+                                </button>
+                              )}
+                              
+                              {/* View HTML Button - only for generated letters */}
+                              {selectedLetter.coveringLetter.htmlUrl && (
+                                <button
+                                  onClick={() => window.open(selectedLetter.coveringLetter.htmlUrl, '_blank')}
+                                  className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+                                >
+                                  <FiExternalLink className="mr-1 h-3 w-3" />
+                                  {language === 'mr' ? 'HTML पहा' : 'View HTML'}
+                                </button>
+                              )}
+                            </div>
+                            
+                            <div className="flex space-x-2">
+                              {/* Delete Button - for all covering letters */}
+                              <button
+                                onClick={() => handleDeleteCoveringLetter(selectedLetter.coveringLetter.id || selectedLetter.coveringLetter._id)}
+                                className="inline-flex items-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors shadow-md"
+                                title={language === 'mr' ? 'कव्हरिंग लेटर हटवा' : 'Delete covering letter'}
+                              >
+                                <FiTrash2 className="mr-1 h-3 w-3" />
+                                {language === 'mr' ? 'हटवा' : 'Delete'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Recipient Information */}
+                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="font-medium text-indigo-700">
+                              {language === 'mr' ? 'प्राप्तकर्ता कार्यालय:' : 'Recipient Office:'}
+                            </span>
+                            <p className="text-gray-600">{selectedLetter.coveringLetter.recipientOffice || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-indigo-700">
+                              {language === 'mr' ? 'प्राप्तकर्ता पदनाम:' : 'Recipient Designation:'}
+                            </span>
+                            <p className="text-gray-600">{selectedLetter.coveringLetter.recipientDesignation || 'N/A'}</p>
+                          </div>
+                        </div>
+                        
+                        {/* Show file info for uploaded files */}
+                        {selectedLetter.coveringLetter.uploadedFile && (
+                          <div className="mt-3 pt-3 border-t border-indigo-200">
+                            <p className="text-xs text-indigo-700">
+                              {language === 'mr' ? 'फाईल:' : 'File:'} {selectedLetter.coveringLetter.uploadedFile.originalName}
+                            </p>
+                            <p className="text-xs text-indigo-600">
+                              {language === 'mr' ? 'साईज:' : 'Size:'} {(selectedLetter.coveringLetter.uploadedFile.fileSize / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      // No covering letter - show upload/generate options
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                        <div className="text-center">
+                          <FiFileText className="mx-auto h-12 w-12 text-yellow-400 mb-3" />
+                          <h4 className="text-lg font-semibold text-yellow-800 mb-2">
+                            {language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'No Covering Letter Available'}
+                          </h4>
+                          <p className="text-sm text-yellow-700 mb-4">
+                            {language === 'mr' 
+                              ? 'या पत्रासाठी कव्हरिंग लेटर तयार करा किंवा अपलोड करा' 
+                              : 'Generate or upload a covering letter for this document'}
+                          </p>
+                          
+                          <div className="flex justify-center space-x-3">
+                    
+                            
+                            {/* Upload Existing Covering Letter */}
+                            <label className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-md cursor-pointer">
+                              <FiUpload className="mr-2 h-4 w-4" />
+                              {language === 'mr' ? 'फाईल अपलोड करा' : 'Upload File'}
+                              <input
+                                type="file"
+                                accept=".pdf,.doc,.docx"
+                                onChange={(e) => {
+                                  if (e.target.files[0]) {
+                                    handleUploadCoveringLetter(selectedLetter, e.target.files[0]);
+                                  }
+                                }}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
               
               {/* File Attachments */}
               {((selectedLetter.letterFiles && selectedLetter.letterFiles.length > 0) || 
@@ -1481,6 +1965,9 @@ const InwardStaffLetters = () => {
                 <>
                   <div className="border-b border-blue-100" />
                   <div>
+                    <div className="text-base font-bold text-blue-900 mb-3">
+                      {language === 'mr' ? 'संलग्न फाईल्स' : 'File Attachments'}
+                    </div>
       
                     {/* Handle uploadedFile structure (new API structure) */}
                     {selectedLetter.uploadedFile && (selectedLetter.uploadedFile.fileUrl || selectedLetter.uploadedFile.fileName) && (
@@ -1514,9 +2001,6 @@ const InwardStaffLetters = () => {
                                   </button>
                                 </div>
                               </div>
-                              
-                              {/* File Preview */}
-                
                             </div>
                           );
                         })()}
@@ -1557,63 +2041,6 @@ const InwardStaffLetters = () => {
                                   </button>
                                 </div>
                               </div>
-                              
-                              {/* File Preview */}
-                              {isViewable ? (
-                                <div className="mt-3">
-                                  {fileExt === 'pdf' ? (
-                                    <div className="bg-gray-50 rounded-lg p-4">
-                                      <p className="text-xs text-gray-500 mb-2 text-center">
-                                        {language === 'mr' ? 'PDF पूर्वावलोकन' : 'PDF Preview'}
-                                      </p>
-                                      <iframe
-                                        src={`${fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                                        className="w-full h-96 rounded border border-gray-300"
-                                        title="PDF Preview"
-                                        sandbox="allow-same-origin allow-scripts"
-                                        onError={(e) => {
-                                          e.target.style.display = 'none';
-                                          e.target.parentElement.innerHTML = `
-                                            <div class="text-center py-8">
-                                              <p class="text-gray-600">${language === 'mr' ? 'PDF लोड करताना त्रुटी' : 'Error loading PDF'}</p>
-                                              <p class="text-sm text-gray-500 mt-2">${language === 'mr' ? 'कृपया फाईल डाउनलोड करा' : 'Please download the file instead'}</p>
-                                            </div>
-                                          `;
-                                        }}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div className="bg-gray-50 rounded-lg p-4">
-                                      {imageLoading[fileUrl] && (
-                                        <div className="flex justify-center items-center h-48">
-                                          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-                                        </div>
-                                      )}
-                                      <img
-                                        src={fileUrl}
-                                        alt="Document Preview"
-                                        className={`max-w-full h-auto rounded border border-gray-300 ${imageLoading[fileUrl] ? 'hidden' : ''}`}
-                                        style={{ maxHeight: '400px', objectFit: 'contain' }}
-                                        onLoad={() => setImageLoading(prev => ({ ...prev, [fileUrl]: false }))}
-                                        onLoadStart={() => setImageLoading(prev => ({ ...prev, [fileUrl]: true }))}
-                                        onError={() => setImageLoading(prev => ({ ...prev, [fileUrl]: false }))}
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="mt-3 bg-gray-50 rounded-lg p-8 text-center">
-                                  <div className="flex flex-col items-center">
-                                    {getFileTypeIcon(fileName)}
-                                    <p className="mt-2 text-sm text-gray-600">
-                                      {language === 'mr' ? 'या फाईल प्रकाराचे पूर्वावलोकन उपलब्ध नाही' : 'Preview not available for this file type'}
-                                    </p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                      {language === 'mr' ? 'कृपया फाईल डाउनलोड करा' : 'Please download the file to view'}
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           );
                         })()}
@@ -1658,63 +2085,6 @@ const InwardStaffLetters = () => {
                                   </button>
                                 </div>
                               </div>
-                              
-                              {/* File Preview */}
-                              {isViewable ? (
-                                <div className="mt-3">
-                                  {fileExt === 'pdf' ? (
-                                    <div className="bg-gray-50 rounded-lg p-4">
-                                      <p className="text-xs text-gray-500 mb-2 text-center">
-                                        {language === 'mr' ? 'PDF पूर्वावलोकन' : 'PDF Preview'}
-                                      </p>
-                                      <iframe
-                                        src={`${fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                                        className="w-full h-96 rounded border border-gray-300"
-                                        title={`PDF Preview ${i + 1}`}
-                                        sandbox="allow-same-origin allow-scripts"
-                                        onError={(e) => {
-                                          e.target.style.display = 'none';
-                                          e.target.parentElement.innerHTML = `
-                                            <div class="text-center py-8">
-                                              <p class="text-gray-600">${language === 'mr' ? 'PDF लोड करताना त्रुटी' : 'Error loading PDF'}</p>
-                                              <p class="text-sm text-gray-500 mt-2">${language === 'mr' ? 'कृपया फाईल डाउनलोड करा' : 'Please download the file instead'}</p>
-                                            </div>
-                                          `;
-                                        }}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div className="bg-gray-50 rounded-lg p-4">
-                                      {imageLoading[fileUrl] && (
-                                        <div className="flex justify-center items-center h-48">
-                                          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-                                        </div>
-                                      )}
-                                      <img
-                                        src={fileUrl}
-                                        alt={`Document Preview ${i + 1}`}
-                                        className={`max-w-full h-auto rounded border border-gray-300 ${imageLoading[fileUrl] ? 'hidden' : ''}`}
-                                        style={{ maxHeight: '400px', objectFit: 'contain' }}
-                                        onLoad={() => setImageLoading(prev => ({ ...prev, [fileUrl]: false }))}
-                                        onLoadStart={() => setImageLoading(prev => ({ ...prev, [fileUrl]: true }))}
-                                        onError={() => setImageLoading(prev => ({ ...prev, [fileUrl]: false }))}
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="mt-3 bg-gray-50 rounded-lg p-8 text-center">
-                                  <div className="flex flex-col items-center">
-                                    {getFileTypeIcon(fileName)}
-                                    <p className="mt-2 text-sm text-gray-600">
-                                      {language === 'mr' ? 'या फाईल प्रकाराचे पूर्वावलोकन उपलब्ध नाही' : 'Preview not available for this file type'}
-                                    </p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                      {language === 'mr' ? 'कृपया फाईल डाउनलोड करा' : 'Please download the file to view'}
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           );
                         })}
@@ -1734,6 +2104,34 @@ const InwardStaffLetters = () => {
               >
                 {language === 'mr' ? 'बंद करा' : 'Close'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading overlay for covering letter upload */}
+      {uploadingCoveringLetter && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 shadow-xl">
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+              <p className="text-gray-700">
+                {language === 'mr' ? 'कव्हरिंग लेटर S3 वर अपलोड होत आहे...' : 'Uploading covering letter to S3...'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading overlay for covering letter generation */}
+      {generatingCoveringLetter && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 shadow-xl">
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mb-4"></div>
+              <p className="text-gray-700">
+                {language === 'mr' ? 'कव्हरिंग लेटर तयार होत आहे...' : 'Generating covering letter...'}
+              </p>
             </div>
           </div>
         </div>

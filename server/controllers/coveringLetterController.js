@@ -1,14 +1,55 @@
-// controllers/coveringLetterController.js - Enhanced with edit functionality
+// controllers/coveringLetterController.js - Without edit functionality
 const CoveringLetter = require('../models/CoveringLetter');
 const InwardPatra = require('../models/InwardPatra');
 const User = require('../models/User');
 const File = require('../models/File');
+const multer = require('multer');
+const multerS3 = require('multer-s3');
+const { S3Client } = require('@aws-sdk/client-s3');
 
 // Import associations to ensure they're loaded
 require('../models/associations');
 
+
+
 const openaiService = require('../services/openaiService');
 const s3Service = require('../services/s3Service');
+
+// Configure S3 client for multer
+const s3Client = new S3Client({
+    region: process.env.AWS_REGION,
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY,
+        secretAccessKey: process.env.AWS_SECRET_KEY,
+    },
+});
+
+// Configure multer for covering letter uploads
+const upload = multer({
+    storage: multerS3({
+        s3: s3Client,
+        bucket: process.env.AWS_BUCKET_NAME,
+        contentType: multerS3.AUTO_CONTENT_TYPE,
+        key: (req, file, cb) => {
+            const fileName = `covering-letters/${Date.now()}-${file.originalname}`;
+            cb(null, fileName);
+        },
+    }),
+    limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB
+        files: 1 // Only allow one file
+    },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/pdf') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only PDF files are allowed'), false);
+        }
+    }
+});
+
+// Create upload middleware
+const uploadSingle = upload.single('coveringLetterFile');
 
 class CoveringLetterController {
 
@@ -84,11 +125,23 @@ class CoveringLetterController {
 
       console.log('S3 upload successful:', uploadResult.pdfUrl);
 
+      // Create a new file record for the covering letter
+      const coveringLetterFile = await File.create({
+        originalName: `${letterNumber}.pdf`,
+        fileName: uploadResult.fileName,
+        fileUrl: uploadResult.pdfUrl,
+        filePath: uploadResult.pdfUrl, // Use S3 URL as filePath for consistency
+        mimeType: 'application/pdf',
+        fileSize: 0, // Will be updated if we can get the size
+        uploadDate: new Date(),
+        userId: userId
+      }, { transaction });
+
       // Create covering letter record within transaction
       const coveringLetter = await CoveringLetter.create({
         patraId: patraId,
         userId: userId,
-        fileId: patra.fileId || null,
+        fileId: coveringLetterFile.id, // Use the new file record's ID
         letterContent: letterContent,
         letterType: letterType,
         recipientOffice: patra.officeSendingLetter,
@@ -116,153 +169,6 @@ class CoveringLetterController {
       } else {
         throw new Error(`Covering letter generation failed: ${error.message}`);
       }
-    }
-  }
-
-  // NEW: Get covering letter for editing - returns editable HTML template
-  async getCoveringLetterForEdit(req, res) {
-    try {
-      const { id } = req.params;
-
-      const coveringLetter = await CoveringLetter.findByPk(id, {
-        include: [
-          {
-            model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation']
-          },
-          {
-            model: User,
-            attributes: ['id', 'email']
-          },
-          {
-            model: File,
-            as: 'attachedFile',
-            attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
-            required: false
-          }
-        ]
-      });
-
-      if (!coveringLetter) {
-        return res.status(404).json({ error: 'Covering letter not found' });
-      }
-
-      // Generate editable HTML template
-      const editableHTML = await s3Service.generateEditableHTML(coveringLetter.letterContent, {
-        letterNumber: coveringLetter.letterNumber,
-        patraId: coveringLetter.patraId,
-        letterType: coveringLetter.letterType,
-        extractedText: coveringLetter.letterContent
-      });
-
-      return res.status(200).json({
-        message: 'Covering letter retrieved successfully',
-        coveringLetter: {
-          id: coveringLetter.id,
-          letterContent: coveringLetter.letterContent,
-          letterType: coveringLetter.letterType,
-          letterNumber: coveringLetter.letterNumber,
-          letterDate: coveringLetter.letterDate,
-          status: coveringLetter.status,
-          pdfUrl: coveringLetter.pdfUrl,
-          htmlUrl: coveringLetter.htmlUrl,
-          recipientOffice: coveringLetter.recipientOffice,
-          recipientDesignation: coveringLetter.recipientDesignation,
-          patra: coveringLetter.InwardPatra,
-          user: coveringLetter.User,
-          attachedFile: coveringLetter.attachedFile
-        },
-        editableHTML: editableHTML
-      });
-
-    } catch (error) {
-      console.error('Error fetching covering letter for edit:', error);
-      return res.status(500).json({ error: 'Server error', details: error.message });
-    }
-  }
-
-  // NEW: Update covering letter with new content and regenerate PDF
-  async updateCoveringLetterContent(req, res) {
-    try {
-      const { id } = req.params;
-      const { letterContent, status, recipientOffice, recipientDesignation } = req.body;
-
-      if (!letterContent || letterContent.trim() === '') {
-        return res.status(400).json({ error: 'Letter content is required' });
-      }
-
-      const coveringLetter = await CoveringLetter.findByPk(id, {
-        include: [
-          {
-            model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter']
-          }
-        ]
-      });
-
-      if (!coveringLetter) {
-        return res.status(404).json({ error: 'Covering letter not found' });
-      }
-
-      console.log('Updating covering letter content and regenerating PDF...');
-
-      // Prepare letter data for PDF generation
-      const letterData = {
-        letterNumber: coveringLetter.letterNumber,
-        patraId: coveringLetter.patraId,
-        letterType: coveringLetter.letterType,
-        extractedText: letterContent,
-        complainantName: s3Service.extractComplainantName({ extractedText: letterContent }),
-        senderName: s3Service.extractComplainantName({ extractedText: letterContent })
-      };
-
-      // Regenerate PDF with updated content
-      const uploadResult = await s3Service.generateAndUploadCoveringLetter(
-        letterContent,
-        letterData
-      );
-
-      // Update the covering letter in database
-      const updateData = {
-        letterContent: letterContent,
-        pdfUrl: uploadResult.pdfUrl,
-        htmlUrl: uploadResult.htmlUrl,
-        s3FileName: uploadResult.fileName,
-        updatedAt: new Date()
-      };
-
-      if (status !== undefined) updateData.status = status;
-      if (recipientOffice !== undefined) updateData.recipientOffice = recipientOffice;
-      if (recipientDesignation !== undefined) updateData.recipientDesignation = recipientDesignation;
-
-      await coveringLetter.update(updateData);
-
-      // Fetch updated covering letter with associations
-      const updatedCoveringLetter = await CoveringLetter.findByPk(id, {
-        include: [
-          {
-            model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter']
-          },
-          {
-            model: User,
-            attributes: ['id', 'email']
-          }
-        ]
-      });
-
-      console.log('Covering letter updated successfully and PDF regenerated');
-
-      return res.status(200).json({
-        message: 'Covering letter updated successfully and PDF regenerated',
-        coveringLetter: updatedCoveringLetter,
-        pdfUrl: uploadResult.pdfUrl,
-        htmlUrl: uploadResult.htmlUrl
-      });
-
-    } catch (error) {
-      console.error('Error updating covering letter:', error);
-      return res.status(500).json({ error: 'Server error', details: error.message });
     }
   }
 
@@ -357,6 +263,17 @@ class CoveringLetterController {
       const { patraId, letterType, fileId } = req.body;
       const userId = req.user?.id || 1; // Get from authentication middleware
 
+      // Check if covering letter already exists
+      const existingCoveringLetter = await CoveringLetter.findOne({ 
+        where: { patraId } 
+      });
+
+      if (existingCoveringLetter) {
+        return res.status(400).json({ 
+          error: 'Covering letter already exists for this patra. Please delete the existing one first.' 
+        });
+      }
+
       // Validate file if provided
       if (fileId) {
         const file = await File.findByPk(fileId);
@@ -450,24 +367,265 @@ class CoveringLetterController {
     }
   }
 
-  // Delete covering letter
+  // Upload covering letter file - Only creates new, no replace
+  async uploadCoveringLetter(req, res) {
+    try {
+      const { patraId, letterNumber, letterDate, recipientOffice, recipientDesignation, status, letterType } = req.body;
+      
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: 'No file uploaded'
+        });
+      }
+      
+      if (!patraId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Patra ID is required'
+        });
+      }
+      
+      // Validate letterType if provided
+      const validLetterTypes = ['ACKNOWLEDGMENT', 'NAR', 'NA', 'FORWARD'];
+      const finalLetterType = letterType && validLetterTypes.includes(letterType) ? letterType : 'ACKNOWLEDGMENT';
+      
+      // First, verify the InwardPatra exists
+      const patra = await InwardPatra.findByPk(patraId);
+      if (!patra) {
+        return res.status(404).json({
+          success: false,
+          error: 'InwardPatra not found with the provided ID'
+        });
+      }
+      
+      // Check if covering letter already exists for this patra
+      const existingCoveringLetter = await CoveringLetter.findOne({ 
+        where: { patraId } 
+      });
+      
+      if (existingCoveringLetter) {
+        // Delete the uploaded S3 file since we're rejecting this upload
+        if (req.file && req.file.key) {
+          try {
+            const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
+            const { S3Client } = require('@aws-sdk/client-s3');
+            const s3Client = new S3Client({
+              region: process.env.AWS_REGION,
+              credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY,
+                secretAccessKey: process.env.AWS_SECRET_KEY,
+              },
+            });
+            
+            const deleteCommand = new DeleteObjectCommand({
+              Bucket: process.env.AWS_BUCKET_NAME,
+              Key: req.file.key
+            });
+            await s3Client.send(deleteCommand);
+          } catch (deleteError) {
+            console.error('Error deleting uploaded S3 file:', deleteError);
+          }
+        }
+        
+        return res.status(400).json({
+          success: false,
+          error: 'Covering letter already exists. Please delete the existing one first.'
+        });
+      }
+      
+      // The file is already uploaded to S3 by multer-s3
+      const s3FileUrl = req.file.location; // S3 URL
+      const s3Key = req.file.key; // S3 file key
+      
+      // Get user ID from authentication middleware
+      const userId = req.user?.id || 1;
+      
+      // Create a new file record for the covering letter
+      const coveringLetterFile = await File.create({
+        originalName: req.file.originalname,
+        fileName: s3Key,
+        fileUrl: s3FileUrl,
+        filePath: s3FileUrl, // Use S3 URL as filePath for consistency
+        mimeType: req.file.mimetype,
+        fileSize: req.file.size,
+        uploadDate: new Date(),
+        userId: userId
+      });
+      
+      // CREATE new covering letter
+      const newCoveringLetter = await CoveringLetter.create({
+        patraId: patraId, // Use the existing patra ID
+        userId: userId,
+        fileId: coveringLetterFile.id, // Use the new file record's ID
+        letterNumber: letterNumber || `CL/${patra.referenceNumber}/${new Date().getFullYear()}`,
+        letterDate: letterDate || new Date().toISOString().split('T')[0],
+        recipientOffice: recipientOffice || patra.officeSendingLetter || 'Office',
+        recipientDesignation: recipientDesignation || patra.senderNameAndDesignation || 'Officer',
+        letterContent: 'Uploaded file - content available in PDF',
+        status: status || 'DRAFT',
+        letterType: finalLetterType,
+        // S3 file information
+        pdfUrl: s3FileUrl,
+        htmlUrl: null,
+        s3FileName: s3Key
+      });
+      
+      // Update the existing InwardPatra to link to this covering letter
+      await patra.update({ 
+        coveringLetterId: newCoveringLetter.id 
+      });
+      
+      // Fetch the created covering letter with associations
+      const savedCoveringLetter = await CoveringLetter.findByPk(newCoveringLetter.id, {
+        include: [
+          {
+            model: InwardPatra,
+            attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'fileId']
+          },
+          {
+            model: User,
+            attributes: ['id', 'email']
+          },
+          {
+            model: File,
+            as: 'attachedFile',
+            attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+            required: false
+          }
+        ]
+      });
+      
+      // Also fetch the updated patra to return complete data
+      const updatedPatra = await InwardPatra.findByPk(patraId, {
+        include: [
+          {
+            model: User,
+            attributes: ['id', 'email']
+          },
+          {
+            model: File,
+            as: 'uploadedFile',
+            attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
+            required: false
+          },
+          {
+            model: CoveringLetter,
+            as: 'coveringLetter',
+            required: false,
+            include: [
+              {
+                model: File,
+                as: 'attachedFile',
+                attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+                required: false
+              }
+            ]
+          }
+        ]
+      });
+      
+      res.status(201).json({
+        success: true,
+        message: 'Covering letter uploaded successfully',
+        coveringLetter: savedCoveringLetter,
+        updatedPatra: updatedPatra // Return the updated patra data
+      });
+      
+    } catch (error) {
+      console.error('Error uploading covering letter:', error);
+      
+      // Clean up S3 file if database operation fails
+      if (req.file && req.file.key) {
+        try {
+          const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
+          const { S3Client } = require('@aws-sdk/client-s3');
+          const s3Client = new S3Client({
+            region: process.env.AWS_REGION,
+            credentials: {
+              accessKeyId: process.env.AWS_ACCESS_KEY,
+              secretAccessKey: process.env.AWS_SECRET_KEY,
+            },
+          });
+          
+          const deleteCommand = new DeleteObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: req.file.key
+          });
+          await s3Client.send(deleteCommand);
+        } catch (deleteError) {
+          console.error('Error deleting S3 file after failure:', deleteError);
+        }
+      }
+      
+      res.status(500).json({
+        success: false,
+        error: 'Error uploading covering letter',
+        details: error.message
+      });
+    }
+  }
+
+  // Delete covering letter with S3 cleanup
   async deleteCoveringLetter(req, res) {
     try {
       const { id } = req.params;
-
+      
       const coveringLetter = await CoveringLetter.findByPk(id);
-
+      
       if (!coveringLetter) {
-        return res.status(404).json({ error: 'Covering letter not found' });
+        return res.status(404).json({
+          success: false,
+          error: 'Covering letter not found'
+        });
       }
-
+      
+      // Delete from S3 if file exists
+      if (coveringLetter.s3FileName) {
+        try {
+          const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
+          const { S3Client } = require('@aws-sdk/client-s3');
+          const s3Client = new S3Client({
+            region: process.env.AWS_REGION,
+            credentials: {
+              accessKeyId: process.env.AWS_ACCESS_KEY,
+              secretAccessKey: process.env.AWS_SECRET_KEY,
+            },
+          });
+          
+          const deleteCommand = new DeleteObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: coveringLetter.s3FileName
+          });
+          await s3Client.send(deleteCommand);
+          console.log('Deleted file from S3:', coveringLetter.s3FileName);
+        } catch (s3Error) {
+          console.error('Error deleting from S3:', s3Error);
+          // Continue with database deletion even if S3 deletion fails
+        }
+      }
+      
+      // Update the related Patra to remove covering letter reference
+      const patra = await InwardPatra.findByPk(coveringLetter.patraId);
+      if (patra) {
+        await patra.update({ coveringLetterId: null });
+      }
+      
+      // Delete the covering letter record
       await coveringLetter.destroy();
-
-      return res.status(200).json({ message: 'Covering letter deleted successfully' });
-
+      
+      res.status(200).json({
+        success: true,
+        message: 'Covering letter deleted successfully from database and S3'
+      });
+      
     } catch (error) {
       console.error('Error deleting covering letter:', error);
-      return res.status(500).json({ error: 'Server error', details: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Error deleting covering letter',
+        details: error.message
+      });
     }
   }
 
@@ -499,7 +657,7 @@ class CoveringLetterController {
     }
   }
 
-  // LEGACY: Update covering letter (maintained for backward compatibility)
+  // Simple update covering letter (for backward compatibility)
   async updateCoveringLetter(req, res) {
     try {
       const { id } = req.params;
@@ -541,4 +699,5 @@ class CoveringLetterController {
 
 }
 
-module.exports = new CoveringLetterController();
+module.exports = CoveringLetterController;
+module.exports.uploadSingle = uploadSingle;

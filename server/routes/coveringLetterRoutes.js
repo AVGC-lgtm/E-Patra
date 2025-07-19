@@ -1,39 +1,40 @@
-// routes/coveringLetterRoutes.js - Updated with new edit functionality
 const express = require('express');
-const coveringLetterController = require('../controllers/coveringLetterController');
 const router = express.Router();
+const CoveringLetterController = require('../controllers/coveringLetterController');
+const { uploadSingle } = require('../controllers/coveringLetterController');
+const { authenticateToken } = require('../middleware/auth');
 
-// Get all covering letters
-router.get('/', coveringLetterController.getAllCoveringLetters);
-
-// Get covering letter by Patra ID
-router.get('/patra/:patraId', coveringLetterController.getCoveringLetterByPatraId);
-
-// NEW: Get covering letter for editing - returns editable HTML template
-router.get('/edit/:id', coveringLetterController.getCoveringLetterForEdit);
-
-// NEW: Update covering letter content and regenerate PDF
-router.put('/update-content/:id', coveringLetterController.updateCoveringLetterContent);
+// Create controller instance
+const coveringLetterController = new CoveringLetterController();
 
 // Download covering letter as PDF from S3
-router.get('/download/:id', coveringLetterController.downloadCoveringLetter);
+router.get('/download/:id', coveringLetterController.downloadCoveringLetter.bind(coveringLetterController));
 
 // View covering letter as HTML
-router.get('/view/:id', coveringLetterController.viewCoveringLetterHTML);
+router.get('/view/:id', coveringLetterController.viewCoveringLetterHTML.bind(coveringLetterController));
 
-// View PDF preview
-router.get('/preview/:id', coveringLetterController.previewCoveringLetter);
-
-// Get covering letter by ID
-router.get('/:id', coveringLetterController.getCoveringLetterById);
+// Get covering letter by Patra ID
+router.get('/patra/:patraId', coveringLetterController.getCoveringLetterByPatraId.bind(coveringLetterController));
 
 // Manually generate covering letter
-router.post('/generate', coveringLetterController.generateCoveringLetter);
+router.post('/generate', authenticateToken, coveringLetterController.generateCoveringLetter.bind(coveringLetterController));
 
-// LEGACY: Update covering letter (maintained for backward compatibility)
-router.put('/:id', coveringLetterController.updateCoveringLetter);
+// Get all covering letters
+router.get('/', coveringLetterController.getAllCoveringLetters.bind(coveringLetterController));
 
-// Delete covering letter
-router.delete('/:id', coveringLetterController.deleteCoveringLetter);
+// Get covering letter by ID
+router.get('/:id', coveringLetterController.getCoveringLetterById.bind(coveringLetterController));
+
+// Upload covering letter file - Only creates new, no replace
+router.post('/upload', authenticateToken, uploadSingle, coveringLetterController.uploadCoveringLetter.bind(coveringLetterController));
+
+// Delete covering letter with S3 cleanup
+router.delete('/:id', authenticateToken, coveringLetterController.deleteCoveringLetter.bind(coveringLetterController));
+
+// View covering letter PDF preview
+router.get('/preview/:id', coveringLetterController.previewCoveringLetter.bind(coveringLetterController));
+
+// Simple update covering letter (for backward compatibility)
+router.put('/:id', authenticateToken, coveringLetterController.updateCoveringLetter.bind(coveringLetterController));
 
 module.exports = router;
