@@ -893,7 +893,6 @@ const NewLetter = () => {
         <h2 className="text-3xl font-bold text-blue-700 mb-8 flex items-center gap-2">
           <FiPaperclip className="text-blue-500 text-3xl" /> {t.newLetter}
         </h2>
-        
         {/* File Upload Section */}
         <div className="mb-10">
           <div className="border-2 border-dashed border-blue-300 rounded-2xl p-8 text-center bg-blue-50 hover:border-blue-500 transition-colors">

@@ -1,12 +1,6 @@
-// controllers/InwardPatraController.js - Fixed version with proper column references
-const Patra = require('../models/InwardPatra');
-const User = require('../models/User');
-const File = require('../models/File');
-const CoveringLetter = require('../models/CoveringLetter');
+// controllers/InwardPatraController.js - Fixed version without designation field
+const { InwardPatra, CoveringLetter, User, File, Head } = require('../models/associations');
 const sequelize = require('../config/database');
-
-// Import associations to ensure they're loaded
-require('../models/associations');
 
 const coveringLetterController = require('./coveringLetterController');
 const { Op } = require('sequelize');
@@ -22,7 +16,7 @@ const generateReferenceNumber = async () => {
   while (!isUnique) {
     referenceNumber = Math.floor(10000000 + Math.random() * 90000000).toString();
 
-    const existingPatra = await Patra.findOne({ where: { referenceNumber } });
+    const existingPatra = await InwardPatra.findOne({ where: { referenceNumber } });
     if (!existingPatra) {
       isUnique = true;
     }
@@ -34,7 +28,7 @@ const generateReferenceNumber = async () => {
 // Common include configuration for covering letter
 const getCoveringLetterInclude = () => ({
   model: CoveringLetter,
-  as: 'coveringLetter',
+  as: 'coveringLetter', // Use the alias from associations
   required: false,
   include: [
     {
@@ -46,17 +40,18 @@ const getCoveringLetterInclude = () => ({
   ]
 });
 
-// Common include configuration for user - ONLY include fields that exist
+// Common include configuration for user - REMOVED designation field
 const getUserInclude = () => ({
   model: User,
-  attributes: ['id', 'email'], // Only include existing fields
+  as: 'User', // Use the alias from associations
+  attributes: ['id', 'email'], // REMOVED 'designation' from here
   required: false
 });
 
 // Common include configuration for uploaded file
 const getUploadedFileInclude = () => ({
   model: File,
-  as: 'uploadedFile',
+  as: 'uploadedFile', // Use the alias from associations
   attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
   required: false
 });
@@ -109,8 +104,8 @@ const createPatra = async (req, res) => {
 
     const referenceNumber = await generateReferenceNumber();
 
-    // Create Patra within transaction
-    const newPatra = await Patra.create({
+    // Create InwardPatra within transaction
+    const newPatra = await InwardPatra.create({
       referenceNumber,
       dateOfReceiptOfLetter,
       officeSendingLetter,
@@ -150,7 +145,7 @@ const createPatra = async (req, res) => {
       await transaction.commit();
       
       // Fetch the complete created Patra with all covering letter data
-      const completePatra = await Patra.findByPk(newPatra.id, {
+      const completePatra = await InwardPatra.findByPk(newPatra.id, {
         include: [
           getUserInclude(),
           getUploadedFileInclude(),
@@ -171,8 +166,10 @@ const createPatra = async (req, res) => {
     } catch (coveringLetterError) {
       console.error('Error generating covering letter:', coveringLetterError);
       
-      // Rollback transaction if covering letter creation fails
-      await transaction.rollback();
+      // Check if transaction is still active before rollback
+      if (!transaction.finished) {
+        await transaction.rollback();
+      }
       
       return res.status(500).json({
         message: 'Failed to create Patra due to covering letter generation error',
@@ -183,7 +180,10 @@ const createPatra = async (req, res) => {
 
   } catch (error) {
     console.error('Error creating Patra:', error);
-    await transaction.rollback();
+    // Check if transaction is still active before rollback
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
@@ -191,55 +191,70 @@ const createPatra = async (req, res) => {
 // Get all Patras with their complete covering letters data
 const getAllPatras = async (req, res) => {
   try {
-    const patras = await Patra.findAll({
+    const { page = 1, limit = 10, status, classification } = req.query;
+    const offset = (page - 1) * limit;
+    
+    const whereClause = {};
+    if (status) whereClause.letterStatus = status;
+    if (classification) whereClause.letterClassification = classification;
+
+    const patras = await InwardPatra.findAndCountAll({
+      where: whereClause,
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
         getCoveringLetterInclude()
       ],
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
     });
 
     // Debug: Log the structure of the first patra
-    if (patras.length > 0) {
+    if (patras.rows.length > 0) {
       console.log('🔍 Debug: First patra structure:');
-      console.log('  - ID:', patras[0].id);
-      console.log('  - Reference Number:', patras[0].referenceNumber);
-      console.log('  - Has uploadedFile:', !!patras[0].uploadedFile);
-      console.log('  - Has coveringLetter:', !!patras[0].coveringLetter);
+      console.log('  - ID:', patras.rows[0].id);
+      console.log('  - Reference Number:', patras.rows[0].referenceNumber);
+      console.log('  - Has uploadedFile:', !!patras.rows[0].uploadedFile);
+      console.log('  - Has coveringLetter:', !!patras.rows[0].coveringLetter);
       
-      if (patras[0].uploadedFile) {
+      if (patras.rows[0].uploadedFile) {
         console.log('  - Uploaded file details:', {
-          id: patras[0].uploadedFile.id,
-          originalName: patras[0].uploadedFile.originalName,
-          fileUrl: patras[0].uploadedFile.fileUrl
+          id: patras.rows[0].uploadedFile.id,
+          originalName: patras.rows[0].uploadedFile.originalName,
+          fileUrl: patras.rows[0].uploadedFile.fileUrl
         });
       }
       
-      if (patras[0].coveringLetter) {
+      if (patras.rows[0].coveringLetter) {
         console.log('  - Covering letter details:', {
-          id: patras[0].coveringLetter.id,
-          hasAttachedFile: !!patras[0].coveringLetter.attachedFile
+          id: patras.rows[0].coveringLetter.id,
+          hasAttachedFile: !!patras.rows[0].coveringLetter.attachedFile
         });
         
-        if (patras[0].coveringLetter.attachedFile) {
+        if (patras.rows[0].coveringLetter.attachedFile) {
           console.log('  - Covering letter file details:', {
-            id: patras[0].coveringLetter.attachedFile.id,
-            originalName: patras[0].coveringLetter.attachedFile.originalName,
-            fileUrl: patras[0].coveringLetter.attachedFile.fileUrl
+            id: patras.rows[0].coveringLetter.attachedFile.id,
+            originalName: patras.rows[0].coveringLetter.attachedFile.originalName,
+            fileUrl: patras.rows[0].coveringLetter.attachedFile.fileUrl
           });
         }
       }
     }
 
-    res.json({
+    return res.status(200).json({
+      success: true,
       message: 'Patras retrieved successfully',
-      count: patras.length,
-      patras: patras
+      data: {
+        patras: patras.rows,
+        totalCount: patras.count,
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(patras.count / limit)
+      }
     });
   } catch (error) {
     console.error('Error retrieving Patras:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
+    return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
@@ -248,11 +263,23 @@ const getPatraById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const patra = await Patra.findByPk(id, {
+    const patra = await InwardPatra.findByPk(id, {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
-        getCoveringLetterInclude()
+        getCoveringLetterInclude(),
+        {
+          model: Head,
+          as: 'heads',
+          include: [
+            {
+              model: User,
+              as: 'User',
+              attributes: ['id', 'email'] // REMOVED 'designation' from here too
+            }
+          ],
+          required: false
+        }
       ]
     });
 
@@ -261,8 +288,9 @@ const getPatraById = async (req, res) => {
     }
 
     return res.status(200).json({
+      success: true,
       message: 'Patra retrieved successfully',
-      patra: patra
+      data: patra
     });
   } catch (error) {
     console.error('Error fetching Patra by ID:', error);
@@ -275,7 +303,7 @@ const getPatraByReferenceNumber = async (req, res) => {
   const { referenceNumber } = req.params;
 
   try {
-    const patra = await Patra.findOne({
+    const patra = await InwardPatra.findOne({
       where: { referenceNumber },
       include: [
         getUserInclude(),
@@ -289,8 +317,9 @@ const getPatraByReferenceNumber = async (req, res) => {
     }
 
     return res.status(200).json({
+      success: true,
       message: 'Patra retrieved successfully',
-      patra: patra
+      data: patra
     });
   } catch (error) {
     console.error('Error fetching Patra by reference number:', error);
@@ -303,7 +332,7 @@ const getPatraByUserId = async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const patras = await Patra.findAll({
+    const patras = await InwardPatra.findAll({
       where: { userId },
       include: [
         getUserInclude(),
@@ -318,9 +347,12 @@ const getPatraByUserId = async (req, res) => {
     }
 
     return res.status(200).json({
+      success: true,
       message: 'Patras retrieved successfully',
-      count: patras.length,
-      patras: patras
+      data: {
+        count: patras.length,
+        patras: patras
+      }
     });
   } catch (error) {
     console.error('Error fetching Patras by user ID:', error);
@@ -336,7 +368,7 @@ const deletePatraById = async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const patra = await Patra.findByPk(id, { transaction });
+    const patra = await InwardPatra.findByPk(id, { transaction });
     if (!patra) {
       await transaction.rollback();
       return res.status(404).json({ error: 'Patra not found' });
@@ -348,22 +380,31 @@ const deletePatraById = async (req, res) => {
       transaction 
     });
 
+    // Delete associated head entries
+    await Head.destroy({
+      where: { patraId: id },
+      transaction
+    });
+
     // Delete the patra
     await patra.destroy({ transaction });
     
     // Commit transaction
     await transaction.commit();
     
-    return res.status(200).json({ message: 'Patra and associated covering letter deleted successfully' });
+    return res.status(200).json({ 
+      success: true,
+      message: 'Patra and associated data deleted successfully' 
+    });
   } catch (error) {
-    await transaction.rollback();
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
     console.error('Error deleting Patra by ID:', error);
     return res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
 
-// Update a Patra by ID
-// Update a Patra by ID - FIXED VERSION
 // Update a Patra by ID - FIXED VERSION
 const updatePatraById = async (req, res) => {
   const { id } = req.params;
@@ -384,7 +425,6 @@ const updatePatraById = async (req, res) => {
     NAR,
     userId,
     fileId,
-    // Add support for the new fields from frontend
     sentTo,
     sentAt,
     updatedBy,
@@ -394,7 +434,7 @@ const updatePatraById = async (req, res) => {
   } = req.body;
 
   try {
-    const patra = await Patra.findByPk(id);
+    const patra = await InwardPatra.findByPk(id);
     if (!patra) {
       return res.status(404).json({ error: 'Patra not found' });
     }
@@ -438,8 +478,8 @@ const updatePatraById = async (req, res) => {
     if (userId !== undefined) updateData.userId = userId;
     if (fileId !== undefined) updateData.fileId = validatedFileId;
     
-    // Add new fields for tracking who sent the letter and where
-    if (sentTo !== undefined) updateData.sentTo = JSON.stringify(sentTo); // Store as JSON string
+    // Add new fields for tracking
+    if (sentTo !== undefined) updateData.sentTo = JSON.stringify(sentTo);
     if (sentAt !== undefined) updateData.sentAt = sentAt;
     if (updatedBy !== undefined) updateData.updatedBy = updatedBy;
     if (updatedByEmail !== undefined) updateData.updatedByEmail = updatedByEmail;
@@ -448,9 +488,8 @@ const updatePatraById = async (req, res) => {
 
     await patra.update(updateData);
     
-    // Reload with complete covering letter data
-    // FIXED: Use the correct alias 'uploadedFile' instead of 'upload'
-    await patra.reload({
+    // Reload with complete data using proper associations
+    const updatedPatra = await InwardPatra.findByPk(id, {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
@@ -459,8 +498,9 @@ const updatePatraById = async (req, res) => {
     });
 
     return res.status(200).json({ 
+      success: true,
       message: 'Patra updated successfully', 
-      patra: patra 
+      data: updatedPatra 
     });
   } catch (error) {
     console.error('Error updating Patra by ID:', error);
@@ -473,7 +513,7 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
   const { userId, patraId } = req.params;
 
   try {
-    const patra = await Patra.findOne({
+    const patra = await InwardPatra.findOne({
       where: { id: patraId, userId },
       include: [
         getUserInclude(),
@@ -487,8 +527,9 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
     }
 
     return res.status(200).json({
+      success: true,
       message: 'Patra retrieved successfully',
-      patra: patra
+      data: patra
     });
   } catch (error) {
     console.error('Error fetching Patra by user ID and Patra ID:', error);
@@ -502,7 +543,7 @@ const updateLetterStatus = async (req, res) => {
   const { letterStatus } = req.body;
 
   try {
-    const patra = await Patra.findByPk(id);
+    const patra = await InwardPatra.findByPk(id);
     if (!patra) {
       return res.status(404).json({ error: 'Patra not found' });
     }
@@ -514,7 +555,7 @@ const updateLetterStatus = async (req, res) => {
     await patra.update({ letterStatus });
 
     // Return updated patra with complete covering letter data
-    await patra.reload({
+    const updatedPatra = await InwardPatra.findByPk(id, {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
@@ -523,9 +564,12 @@ const updateLetterStatus = async (req, res) => {
     });
 
     return res.status(200).json({ 
+      success: true,
       message: 'Letter status updated successfully', 
-      letterStatus: patra.letterStatus,
-      patra: patra
+      data: {
+        letterStatus: updatedPatra.letterStatus,
+        patra: updatedPatra
+      }
     });
   } catch (error) {
     console.error('Error updating letter status:', error);
@@ -539,7 +583,7 @@ const sendToHOD = async (req, res) => {
   const { recipients, sendToData, includeCoveringLetter } = req.body;
 
   try {
-    const patra = await Patra.findByPk(id);
+    const patra = await InwardPatra.findByPk(id);
     if (!patra) {
       return res.status(404).json({ error: 'Patra not found' });
     }
@@ -571,7 +615,7 @@ const approveLetter = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const patra = await Patra.findByPk(id);
+    const patra = await InwardPatra.findByPk(id);
     if (!patra) {
       return res.status(404).json({ error: 'Patra not found' });
     }
@@ -594,13 +638,26 @@ const approveLetter = async (req, res) => {
 // NEW: Get only covering letters with complete data
 const getAllCoveringLetters = async (req, res) => {
   try {
-    const coveringLetters = await CoveringLetter.findAll({
+    const { page = 1, limit = 10, status, letterType } = req.query;
+    const offset = (page - 1) * limit;
+    
+    const whereClause = {};
+    if (status) whereClause.status = status;
+    if (letterType) whereClause.letterType = letterType;
+
+    const coveringLetters = await CoveringLetter.findAndCountAll({
+      where: whereClause,
       include: [
         {
-          model: Patra, // Changed from InwardPatra to Patra
-          attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation']
+          model: InwardPatra,
+          as: 'InwardPatra', // Use proper alias
+          attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber']
         },
-        getUserInclude(),
+        {
+          model: User,
+          as: 'User', // Use proper alias
+          attributes: ['id', 'email'] // REMOVED 'designation' from here
+        },
         {
           model: File,
           as: 'attachedFile',
@@ -608,13 +665,20 @@ const getAllCoveringLetters = async (req, res) => {
           required: false
         }
       ],
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
     });
 
     return res.status(200).json({
+      success: true,
       message: 'Covering letters retrieved successfully',
-      count: coveringLetters.length,
-      coveringLetters: coveringLetters
+      data: {
+        coveringLetters: coveringLetters.rows,
+        totalCount: coveringLetters.count,
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(coveringLetters.count / limit)
+      }
     });
   } catch (error) {
     console.error('Error fetching covering letters:', error);
@@ -622,7 +686,7 @@ const getAllCoveringLetters = async (req, res) => {
   }
 };
 
-// NEW: Get covering letter by ID with complete data
+// FIXED: Get covering letter by ID with proper associations
 const getCoveringLetterById = async (req, res) => {
   const { id } = req.params;
 
@@ -630,14 +694,31 @@ const getCoveringLetterById = async (req, res) => {
     const coveringLetter = await CoveringLetter.findByPk(id, {
       include: [
         {
-          model: Patra, // Changed from InwardPatra to Patra
-          attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation']
+          model: InwardPatra,
+          as: 'InwardPatra', // Use proper alias
+          attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber', 'letterDate']
         },
-        getUserInclude(),
+        {
+          model: User,
+          as: 'User', // Use proper alias
+          attributes: ['id', 'email'] // REMOVED 'designation' from here
+        },
         {
           model: File,
           as: 'attachedFile',
           attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+          required: false
+        },
+        {
+          model: Head,
+          as: 'heads',
+          include: [
+            {
+              model: User,
+              as: 'User',
+              attributes: ['id', 'email'] // REMOVED 'designation' from here too
+            }
+          ],
           required: false
         }
       ]
@@ -648,8 +729,9 @@ const getCoveringLetterById = async (req, res) => {
     }
 
     return res.status(200).json({
+      success: true,
       message: 'Covering letter retrieved successfully',
-      coveringLetter: coveringLetter
+      data: coveringLetter
     });
   } catch (error) {
     console.error('Error fetching covering letter by ID:', error);

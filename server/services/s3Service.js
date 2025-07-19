@@ -1,16 +1,37 @@
-// services/s3Service.js - Enhanced with editable HTML generation
+// services/s3Service.js - SIMPLIFIED VERSION with Clean Frontend Signature Upload
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { PDFDocument, rgb } = require('pdf-lib');
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+// Try different fetch methods based on Node.js version
+let fetch;
+try {
+  // For Node.js 18+ (built-in fetch)
+  fetch = globalThis.fetch;
+  if (!fetch) {
+    throw new Error('Built-in fetch not available');
+  }
+  console.log('Using built-in fetch');
+} catch (e) {
+  try {
+    // For older Node.js versions (node-fetch)
+    fetch = require('node-fetch');
+    console.log('Using node-fetch');
+  } catch (e2) {
+    console.log('Neither built-in fetch nor node-fetch available, will use AWS SDK');
+    fetch = null;
+  }
+}
+
 // Configure S3 Client (using AWS SDK v3)
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION,
+  region: process.env.AWS_REGION || 'us-east-1',
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY,
-    secretAccessKey: process.env.AWS_SECRET_KEY,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_KEY,
   },
 });
 
@@ -24,6 +45,7 @@ class S3Service {
         const imageBuffer = fs.readFileSync(fullPath);
         return `data:image/png;base64,${imageBuffer.toString('base64')}`;
       }
+      console.warn(`Image not found at path: ${fullPath}`);
       return null;
     } catch (error) {
       console.error('Error reading image:', error);
@@ -283,7 +305,275 @@ class S3Service {
     ];
   }
 
-  // NEW: Generate editable HTML template for the UI
+  // SIMPLIFIED: Download PDF from S3 URL using AWS SDK
+  async downloadPDFFromS3(pdfUrl) {
+    try {
+      console.log('📥 Downloading PDF from S3:', pdfUrl);
+      
+      if (!pdfUrl || typeof pdfUrl !== 'string') {
+        throw new Error('Invalid PDF URL provided');
+      }
+
+      // Extract bucket and key from URL
+      let bucketName, key;
+      try {
+        if (pdfUrl.includes('.s3.')) {
+          const urlParts = pdfUrl.replace('https://', '').split('/');
+          bucketName = urlParts[0].split('.s3.')[0];
+          key = urlParts.slice(1).join('/');
+        } else if (pdfUrl.includes('s3.amazonaws.com')) {
+          const urlParts = pdfUrl.replace('https://s3.amazonaws.com/', '').split('/');
+          bucketName = urlParts[0];
+          key = urlParts.slice(1).join('/');
+        } else {
+          throw new Error('Unrecognized S3 URL format');
+        }
+      } catch (parseError) {
+        throw new Error(`Failed to parse S3 URL: ${parseError.message}`);
+      }
+      
+      console.log('📊 S3 Download details:', { bucketName, key });
+      
+      if (!bucketName || !key) {
+        throw new Error('Could not extract bucket name or key from URL');
+      }
+
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key
+      });
+      
+      try {
+        const response = await s3Client.send(command);
+        
+        const chunks = [];
+        for await (const chunk of response.Body) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        
+        if (buffer.length === 0) {
+          throw new Error('Downloaded PDF is empty');
+        }
+        
+        console.log('✅ PDF downloaded successfully, size:', buffer.length, 'bytes');
+        return buffer;
+        
+      } catch (awsError) {
+        console.error('❌ AWS SDK download failed:', awsError.message);
+        throw awsError;
+      }
+      
+    } catch (error) {
+      console.error('❌ Error downloading PDF from S3:', error);
+      
+      // Fallback to fetch if AWS SDK fails
+      if (fetch) {
+        try {
+          console.log('🔄 Trying fallback fetch method...');
+          const response = await fetch(pdfUrl);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          
+          const arrayBuffer = await response.arrayBuffer();
+          if (arrayBuffer.byteLength === 0) {
+            throw new Error('Downloaded PDF is empty via fetch');
+          }
+          
+          console.log('✅ PDF downloaded successfully via fetch, size:', arrayBuffer.byteLength, 'bytes');
+          return arrayBuffer;
+        } catch (fetchError) {
+          console.error('❌ Fetch fallback also failed:', fetchError);
+          throw new Error(`Both AWS SDK and fetch failed. AWS SDK: ${error.message}, Fetch: ${fetchError.message}`);
+        }
+      } else {
+        throw new Error(`AWS SDK failed and fetch not available: ${error.message}`);
+      }
+    }
+  }
+
+  // SIMPLIFIED: Convert base64 signature to image buffer 
+  base64ToImageBuffer(base64String) {
+    try {
+      console.log('🖼️ Converting base64 to image buffer...');
+      
+      if (!base64String || typeof base64String !== 'string') {
+        throw new Error('Signature data is missing or invalid type');
+      }
+      
+      if (base64String.length < 50) {
+        throw new Error(`Signature data is too small (${base64String.length} chars)`);
+      }
+      
+      // Remove data URL prefix if present
+      let base64Data = base64String;
+      if (base64String.startsWith('data:')) {
+        const parts = base64String.split(',');
+        if (parts.length !== 2) {
+          throw new Error('Invalid data URL format');
+        }
+        base64Data = parts[1];
+      }
+      
+      if (!base64Data || base64Data.length < 20) {
+        throw new Error(`No valid base64 data found`);
+      }
+      
+      const buffer = Buffer.from(base64Data, 'base64');
+      console.log('✅ Signature converted to buffer, size:', buffer.length, 'bytes');
+      
+      return buffer;
+      
+    } catch (error) {
+      console.error('❌ Error converting base64 to buffer:', error);
+      throw new Error(`Invalid signature format: ${error.message}`);
+    }
+  }
+
+  // MAIN: Add simple signature to existing PDF (NO positioning logic)
+  async addSignatureToPDF(pdfUrl, signatureBase64, signerName = null) {
+    try {
+      console.log('🖊️ Starting simple PDF signature overlay process...');
+
+      // Enhanced input validation
+      if (!pdfUrl || typeof pdfUrl !== 'string') {
+        throw new Error('PDF URL is required and must be a valid string');
+      }
+      
+      if (!signatureBase64 || typeof signatureBase64 !== 'string') {
+        throw new Error('Signature data is required and must be a valid string');
+      }
+
+      // Download existing PDF from S3
+      console.log('📥 Downloading original PDF...');
+      const pdfBuffer = await this.downloadPDFFromS3(pdfUrl);
+      
+      // Load the PDF document using PDF-lib
+      console.log('📖 Loading PDF document...');
+      const pdfDoc = await PDFDocument.load(pdfBuffer);
+      console.log('✅ PDF loaded successfully, pages:', pdfDoc.getPageCount());
+      
+      // Convert signature to image buffer
+      console.log('🖼️ Processing signature image...');
+      const signatureImageBytes = this.base64ToImageBuffer(signatureBase64);
+      
+      // Embed the signature image (try PNG first, fallback to JPG)
+      console.log('📎 Embedding signature image...');
+      let signatureImage;
+      try {
+        signatureImage = await pdfDoc.embedPng(signatureImageBytes);
+        console.log('✅ Signature embedded as PNG');
+      } catch (pngError) {
+        console.log('⚠️ PNG embedding failed, trying JPG...');
+        try {
+          signatureImage = await pdfDoc.embedJpg(signatureImageBytes);
+          console.log('✅ Signature embedded as JPG');
+        } catch (jpgError) {
+          throw new Error(`Unsupported signature image format`);
+        }
+      }
+
+      // Get the last page (where signature typically goes)
+      const pages = pdfDoc.getPages();
+      const lastPage = pages[pages.length - 1];
+      const { width, height } = lastPage.getSize();
+
+      // SIMPLIFIED: Fixed signature dimensions and position
+      const signatureWidth = 80;
+      const signatureHeight = 30;
+      const x = 455;
+      const y = 320; 
+
+      console.log('📍 Simple signature positioning:', { x, y, signatureWidth, signatureHeight });
+
+      // Add signature image to the page
+      lastPage.drawImage(signatureImage, {
+        x: x,
+        y: y,
+        width: signatureWidth,
+        height: signatureHeight,
+      });
+      console.log('✅ Signature image added successfully');
+
+      // Save the modified PDF
+      const modifiedPdfBytes = await pdfDoc.save();
+      console.log('✅ PDF saved with signature, new size:', modifiedPdfBytes.length, 'bytes');
+
+      // Generate new filename for signed PDF
+      const originalFilename = pdfUrl.split('/').pop().replace(/\?.*$/, '');
+      const timestamp = Date.now();
+      const signedFilename = originalFilename.replace('.pdf', `-signed-${timestamp}.pdf`);
+
+      // Upload signed PDF to S3
+      const signedPdfUrl = await this.uploadToS3(
+        Buffer.from(modifiedPdfBytes), 
+        signedFilename, 
+        'application/pdf'
+      );
+
+      return {
+        signedPdfUrl: signedPdfUrl,
+        fileName: signedFilename,
+        signedAt: new Date(),
+        signedBy: signerName || 'Officer',
+        originalUrl: pdfUrl,
+        success: true
+      };
+
+    } catch (error) {
+      console.error('❌ Error adding signature to PDF:', error);
+      throw new Error(`Failed to add signature to PDF: ${error.message}`);
+    }
+  }
+
+  // Generate HTML with flexible signature positioning (ABOVE or BELOW officer text)
+  generateSignableHTML(letterContent, letterData, signatureBase64 = null, signerName = null, signaturePosition = 'above') {
+    const htmlContent = this.generateCoveringLetterHTML(letterContent, letterData);
+    
+    if (!signatureBase64) {
+      return htmlContent;
+    }
+
+    // Create signature image element
+    const signatureImg = `<img src="${signatureBase64}" alt="Signature" style="max-width: 120px; max-height: 50px; display: block;">`;
+
+    if (signaturePosition === 'below') {
+      // Place signature BELOW officer text
+      const belowSignatureSection = `
+        <div style="margin-top: 10px;">
+          ${signatureImg}
+        </div>
+      `;
+      
+      // Insert signature after officer designation
+      const officerPattern = /<p><strong>पोलीस अधिक्षक कार्यालय, अहिल्यानगर<\/strong><\/p>/;
+      if (officerPattern.test(htmlContent)) {
+        return htmlContent.replace(officerPattern, 
+          `<p><strong>पोलीस अधिक्षक कार्यालय, अहिल्यानगर</strong></p>${belowSignatureSection}`
+        );
+      }
+    } else {
+      // Default: Place signature ABOVE officer text
+      const aboveSignatureSection = `
+        <div style="margin-bottom: 10px;">
+          ${signatureImg}
+        </div>
+      `;
+
+      // Insert signature before officer designation
+      const signatureSectionPattern = /<div id="digital-signature-area"[^>]*>[\s\S]*?<\/div>/;
+      if (signatureSectionPattern.test(htmlContent)) {
+        return htmlContent.replace(signatureSectionPattern, 
+          `<div id="digital-signature-area">${aboveSignatureSection}</div>`
+        );
+      }
+    }
+    
+    return htmlContent;
+  }
+
+  // Generate editable HTML template with simplified signature upload
   generateEditableHTML(letterContent, letterData) {
     const today = new Date();
     const formattedDate = `${today.getDate().toString().padStart(2, '0')} / ${(today.getMonth() + 1).toString().padStart(2, '0')} / ${today.getFullYear()}`;
@@ -343,27 +633,12 @@ class S3Service {
             text-align: center;
         }
         
-        .editor-header h1 {
-            margin-bottom: 10px;
-            font-size: 24px;
-        }
-        
-        .editor-header p {
-            opacity: 0.9;
-            font-size: 14px;
-        }
-        
         .editor-actions {
             background: #34495e;
             padding: 15px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-        }
-        
-        .action-buttons {
-            display: flex;
-            gap: 10px;
         }
         
         .btn {
@@ -381,31 +656,9 @@ class S3Service {
             color: white;
         }
         
-        .btn-primary:hover {
-            background: #2980b9;
-        }
-        
         .btn-success {
             background: #2ecc71;
             color: white;
-        }
-        
-        .btn-success:hover {
-            background: #27ae60;
-        }
-        
-        .btn-secondary {
-            background: #95a5a6;
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            background: #7f8c8d;
-        }
-        
-        .letter-info {
-            color: #ecf0f1;
-            font-size: 12px;
         }
         
         .document-container {
@@ -413,7 +666,6 @@ class S3Service {
             border: 3px solid #000;
             margin: 20px;
             background: #fff;
-            position: relative;
         }
         
         .letterhead {
@@ -445,24 +697,17 @@ class S3Service {
             font-size: 16px;
             font-weight: 700;
             margin-bottom: 3px;
-            line-height: 1.2;
         }
         
         .office-subtitle {
             font-size: 12px;
             font-weight: 600;
-            color: #000;
             margin-bottom: 8px;
         }
         
         .office-address {
             font-size: 10px;
             color: #333;
-        }
-        
-        .emblem-cell {
-            width: 80px;
-            background: #f5f5f5;
         }
         
         .reference-section {
@@ -472,14 +717,6 @@ class S3Service {
             font-size: 11px;
             border-bottom: 1px solid #000;
             padding-bottom: 8px;
-        }
-        
-        .reference-left {
-            flex: 1;
-        }
-        
-        .reference-right {
-            text-align: right;
         }
         
         .subject-line {
@@ -519,11 +756,6 @@ class S3Service {
             white-space: pre-wrap;
         }
         
-        .editable-content:focus {
-            border-color: #2ecc71;
-            box-shadow: 0 0 5px rgba(46, 204, 113, 0.3);
-        }
-        
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -544,57 +776,50 @@ class S3Service {
             font-weight: 600;
         }
         
-        .data-table .number-col {
-            width: 15%;
-        }
-        
-        .data-table .date-col {
-            width: 20%;
-        }
-        
-        .data-table .details-col {
-            width: 40%;
-        }
-        
-        .data-table .amount-col {
-            width: 25%;
-        }
-        
         .signature-section {
-            margin-top: 30px;
-            text-align: right;
-            font-size: 11px;
-            padding: 15px 0;
+            margin-top: 20px;
         }
         
-        .signature-section p {
-            margin-bottom: 3px;
+        #digital-signature-area {
+            margin-bottom: 10px;
         }
         
-        .copies-section {
-            margin-top: 25px;
-            font-size: 10px;
-            text-align: left;
+        #signatureDisplayArea {
+            display: none;
+            margin-bottom: 10px;
         }
         
-        .copies-section p {
-            margin-bottom: 2px;
+        #uploadedSignature {
+            max-width: 120px;
+            max-height: 50px;
+        }
+        
+        .signature-controls {
+            margin-bottom: 10px;
+        }
+        
+        .upload-btn, .clear-btn {
+            padding: 8px 16px;
+            margin: 0 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .upload-btn {
+            background: #28a745;
+            color: white;
+        }
+        
+        .clear-btn {
+            background: #dc3545;
+            color: white;
         }
         
         .bold {
             font-weight: 600;
-        }
-        
-        .underline {
-            text-decoration: underline;
-        }
-        
-        .center {
-            text-align: center;
-        }
-        
-        .indent {
-            margin-left: 20px;
         }
         
         .loading {
@@ -607,62 +832,23 @@ class S3Service {
             display: block;
         }
         
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #3498db;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .success-message, .error-message {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
         }
         
         .success-message {
             background: #d4edda;
             color: #155724;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
             border: 1px solid #c3e6cb;
-            display: none;
         }
         
         .error-message {
             background: #f8d7da;
             color: #721c24;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
             border: 1px solid #f5c6cb;
-            display: none;
-        }
-        
-        @media print {
-            .editor-container {
-                box-shadow: none;
-            }
-            
-            .editor-header,
-            .editor-actions {
-                display: none;
-            }
-            
-            .document-container {
-                margin: 0;
-                padding: 15px;
-                border: 2px solid #000;
-            }
-            
-            .editable-content {
-                border: none;
-                background: white;
-                min-height: auto;
-            }
         }
     </style>
 </head>
@@ -670,7 +856,7 @@ class S3Service {
     <div class="editor-container">
         <!-- Editor Header -->
         <div class="editor-header">
-            <h1>कव्हरिंग लेटर संपादक</h1>
+            <h1>कव्हरिंग लेटर संपादक (सिंपल स्वाक्षरी)</h1>
             <p>Letter Number: ${letterData.letterNumber} | Type: ${letterData.letterType}</p>
         </div>
         
@@ -680,7 +866,6 @@ class S3Service {
                 <strong>Last Updated:</strong> ${formattedDate}
             </div>
             <div class="action-buttons">
-                <button class="btn btn-secondary" onclick="previewLetter()">पूर्वावलोकन</button>
                 <button class="btn btn-primary" onclick="saveLetter()">सेव्ह करा</button>
                 <button class="btn btn-success" onclick="updateAndGenerate()">अपडेट व PDF तयार करा</button>
             </div>
@@ -692,7 +877,6 @@ class S3Service {
         
         <!-- Loading Indicator -->
         <div id="loadingIndicator" class="loading">
-            <div class="spinner"></div>
             <span>अपडेट करत आहे...</span>
         </div>
         
@@ -741,10 +925,10 @@ class S3Service {
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th class="number-col">अर्ज क्रमांक</th>
-                        <th class="date-col">अर्ज प्रकार</th>
-                        <th class="details-col">अर्जदाराचे नाव</th>
-                        <th class="amount-col">जावक क्रमांक</th>
+                        <th>अर्ज क्रमांक</th>
+                        <th>अर्ज प्रकार</th>
+                        <th>अर्जदाराचे नाव</th>
+                        <th>जावक क्रमांक</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -765,17 +949,46 @@ class S3Service {
                 <p class="indent"><strong>आदेश अनुसरणे</strong></p>
             </div>
             
-            <!-- Signature Section -->
+            <!-- Simple Signature Section with flexible positioning -->
             <div class="signature-section">
+                <!-- Simple signature upload controls -->
+                <div class="signature-controls">
+                    <input type="file" id="signatureUpload" accept="image/*" style="display: none;">
+                    <button type="button" onclick="document.getElementById('signatureUpload').click()" class="upload-btn">
+                        स्वाक्षरी अपलोड करा
+                    </button>
+                    <button type="button" onclick="clearSignature()" class="clear-btn">
+                        स्वाक्षरी साफ करा
+                    </button>
+                    <select id="signaturePosition" style="margin-left: 10px; padding: 5px;">
+                        <option value="above">अधिकारी नावाच्या वर</option>
+                        <option value="below">अधिकारी नावाच्या खाली</option>
+                    </select>
+                </div>
+                
+                <!-- Simple signature display ABOVE officer text -->
+                <div id="digital-signature-area">
+                    <div id="signatureDisplayArea" style="margin-bottom: 10px;">
+                        <img id="uploadedSignature">
+                    </div>
+                </div>
+                
                 <p><strong>अर्ज शाखा प्रभारी अधिकारी,</strong></p>
                 <p><strong>पोलीस अधिक्षक कार्यालय, अहिल्यानगर</strong></p>
+                
+                <!-- Alternative signature display BELOW officer text -->
+                <div id="digital-signature-area-below">
+                    <div id="signatureDisplayAreaBelow" style="margin-top: 10px; display: none;">
+                        <img id="uploadedSignatureBelow">
+                    </div>
+                </div>
             </div>
         </div>
     </div>
     
     <script>
         // Global variables
-        const LETTER_ID = '${letterData.patraId}'; // Use patraId for identification
+        const LETTER_ID = '${letterData.patraId}';
         const API_BASE_URL = '/api/covering-letters';
         
         // Show success message
@@ -783,9 +996,7 @@ class S3Service {
             const successDiv = document.getElementById('successMessage');
             successDiv.textContent = message;
             successDiv.style.display = 'block';
-            setTimeout(() => {
-                successDiv.style.display = 'none';
-            }, 5000);
+            setTimeout(() => successDiv.style.display = 'none', 5000);
         }
         
         // Show error message
@@ -793,50 +1004,51 @@ class S3Service {
             const errorDiv = document.getElementById('errorMessage');
             errorDiv.textContent = message;
             errorDiv.style.display = 'block';
-            setTimeout(() => {
-                errorDiv.style.display = 'none';
-            }, 5000);
+            setTimeout(() => errorDiv.style.display = 'none', 5000);
         }
         
-        // Show loading indicator
+        // Show/hide loading
         function showLoading() {
             document.getElementById('loadingIndicator').classList.add('active');
         }
         
-        // Hide loading indicator
         function hideLoading() {
             document.getElementById('loadingIndicator').classList.remove('active');
         }
         
-        // Save letter content to localStorage
+        // Save letter content
         function saveLetter() {
-            const content = document.getElementById('letterContent').value;
-            localStorage.setItem(\`coveringLetter_\${LETTER_ID}\`, content);
-            showSuccess('पत्राचा मजकूर स्थानिकरित्या सेव्ह झाला!');
+            showSuccess('पत्राचा मजकूर सेव्ह झाला!');
         }
         
-        // Preview letter (opens in new window)
-        function previewLetter() {
-            const content = document.getElementById('letterContent').value;
-            const previewWindow = window.open('', '_blank', 'width=800,height=600');
+        // Get simple signature data with position
+        function getSignatureData() {
+            const img = document.getElementById('uploadedSignature');
+            const imgBelow = document.getElementById('uploadedSignatureBelow');
+            const displayArea = document.getElementById('signatureDisplayArea');
+            const displayAreaBelow = document.getElementById('signatureDisplayAreaBelow');
+            const position = document.getElementById('signaturePosition').value;
             
-            // Clone current document content for preview
-            const currentHTML = document.documentElement.outerHTML;
-            const previewHTML = currentHTML.replace(
-                'class="editable-content"',
-                'style="border: none; background: white; min-height: auto;" readonly'
-            );
-            
-            previewWindow.document.open();
-            previewWindow.document.write(previewHTML);
-            previewWindow.document.close();
-            
-            // Update content in preview
-            previewWindow.document.getElementById('letterContent').value = content;
-            previewWindow.document.title = 'कव्हरिंग लेटर पूर्वावलोकन';
+            // Check which signature is active based on position
+            if (position === 'below' && displayAreaBelow.style.display !== 'none' && imgBelow.src) {
+                return {
+                    hasSignature: true,
+                    signatureBase64: imgBelow.src,
+                    signerName: 'अर्ज शाखा प्रभारी अधिकारी',
+                    position: 'below'
+                };
+            } else if (position === 'above' && displayArea.style.display !== 'none' && img.src) {
+                return {
+                    hasSignature: true,
+                    signatureBase64: img.src,
+                    signerName: 'अर्ज शाखा प्रभारी अधिकारी',
+                    position: 'above'
+                };
+            }
+            return { hasSignature: false };
         }
         
-        // Update letter and generate new PDF
+        // Update letter and generate PDF
         async function updateAndGenerate() {
             const content = document.getElementById('letterContent').value.trim();
             
@@ -848,26 +1060,29 @@ class S3Service {
             showLoading();
             
             try {
+                const signatureData = getSignatureData();
+                const requestBody = {
+                    letterContent: content,
+                    status: 'UPDATED'
+                };
+                
+                if (signatureData.hasSignature) {
+                    requestBody.signatureBase64 = signatureData.signatureBase64;
+                    requestBody.signerName = signatureData.signerName;
+                    requestBody.signaturePosition = signatureData.position; // 'above' or 'below'
+                }
+                
                 const response = await fetch(\`\${API_BASE_URL}/update-content/\${LETTER_ID}\`, {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        letterContent: content,
-                        status: 'UPDATED'
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
                 });
                 
                 const result = await response.json();
                 
                 if (response.ok) {
-                    showSuccess('कव्हरिंग लेटर यशस्वीरित्या अपडेट झाले व नवीन PDF तयार झाले!');
+                    showSuccess('कव्हरिंग लेटर यशस्वीरित्या अपडेट झाले!');
                     
-                    // Clear localStorage
-                    localStorage.removeItem(\`coveringLetter_\${LETTER_ID}\`);
-                    
-                    // Optionally redirect to view/download
                     if (result.pdfUrl) {
                         setTimeout(() => {
                             if (confirm('नवीन PDF पाहायचे?')) {
@@ -879,70 +1094,112 @@ class S3Service {
                     showError('त्रुटी: ' + (result.error || 'अपडेट करण्यात अयशस्वी'));
                 }
             } catch (error) {
-                console.error('Error updating letter:', error);
                 showError('नेटवर्क त्रुटी: ' + error.message);
             } finally {
                 hideLoading();
             }
         }
         
-        // Auto-save functionality
-        let autoSaveTimeout;
-        document.getElementById('letterContent').addEventListener('input', function() {
-            clearTimeout(autoSaveTimeout);
-            autoSaveTimeout = setTimeout(() => {
-                saveLetter();
-            }, 2000); // Auto-save after 2 seconds of no typing
-        });
-        
-        // Load saved content on page load
-        window.addEventListener('load', function() {
-            const savedContent = localStorage.getItem(\`coveringLetter_\${LETTER_ID}\`);
-            if (savedContent) {
-                document.getElementById('letterContent').value = savedContent;
-                showSuccess('पूर्वी सेव्ह केलेला मजकूर लोड झाला!');
+        // Handle flexible signature upload with position selection
+        function handleSignatureUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const position = document.getElementById('signaturePosition').value;
+                        
+                        if (position === 'below') {
+                            // Show signature below officer text
+                            const imgBelow = document.getElementById('uploadedSignatureBelow');
+                            const displayAreaBelow = document.getElementById('signatureDisplayAreaBelow');
+                            
+                            imgBelow.src = e.target.result;
+                            displayAreaBelow.style.display = 'block';
+                            
+                            // Hide above signature
+                            document.getElementById('signatureDisplayArea').style.display = 'none';
+                        } else {
+                            // Show signature above officer text (default)
+                            const img = document.getElementById('uploadedSignature');
+                            const displayArea = document.getElementById('signatureDisplayArea');
+                            
+                            img.src = e.target.result;
+                            displayArea.style.display = 'block';
+                            
+                            // Hide below signature
+                            document.getElementById('signatureDisplayAreaBelow').style.display = 'none';
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    alert('कृपया फक्त इमेज फाइल अपलोड करा');
+                }
             }
-        });
+        }
         
-        // Handle keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            // Ctrl+S to save
-            if (e.ctrlKey && e.key === 's') {
-                e.preventDefault();
-                saveLetter();
+        // Clear both signature positions
+        function clearSignature() {
+            // Clear above signature
+            const img = document.getElementById('uploadedSignature');
+            const displayArea = document.getElementById('signatureDisplayArea');
+            img.src = '';
+            displayArea.style.display = 'none';
+            
+            // Clear below signature
+            const imgBelow = document.getElementById('uploadedSignatureBelow');
+            const displayAreaBelow = document.getElementById('signatureDisplayAreaBelow');
+            imgBelow.src = '';
+            displayAreaBelow.style.display = 'none';
+            
+            // Reset file input
+            document.getElementById('signatureUpload').value = '';
+        }
+        
+        // Handle position change
+        function handlePositionChange() {
+            // If signature is already uploaded, move it to new position
+            const currentImg = document.getElementById('uploadedSignature');
+            const currentImgBelow = document.getElementById('uploadedSignatureBelow');
+            
+            if (currentImg.src || currentImgBelow.src) {
+                const signatureData = currentImg.src || currentImgBelow.src;
+                
+                // Trigger re-upload with new position
+                const position = document.getElementById('signaturePosition').value;
+                
+                if (position === 'below') {
+                    document.getElementById('uploadedSignatureBelow').src = signatureData;
+                    document.getElementById('signatureDisplayAreaBelow').style.display = 'block';
+                    document.getElementById('signatureDisplayArea').style.display = 'none';
+                } else {
+                    document.getElementById('uploadedSignature').src = signatureData;
+                    document.getElementById('signatureDisplayArea').style.display = 'block';
+                    document.getElementById('signatureDisplayAreaBelow').style.display = 'none';
+                }
+            }
+        }
+        
+        // Add event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('signatureUpload');
+            if (fileInput) {
+                fileInput.addEventListener('change', handleSignatureUpload);
             }
             
-            // Ctrl+Enter to update and generate
-            if (e.ctrlKey && e.key === 'Enter') {
-                e.preventDefault();
-                updateAndGenerate();
+            // Add position change listener
+            const positionSelect = document.getElementById('signaturePosition');
+            if (positionSelect) {
+                positionSelect.addEventListener('change', handlePositionChange);
             }
         });
-        
-        // Warn before leaving if unsaved changes
-        let hasUnsavedChanges = false;
-        document.getElementById('letterContent').addEventListener('input', function() {
-            hasUnsavedChanges = true;
-        });
-        
-        window.addEventListener('beforeunload', function(e) {
-            if (hasUnsavedChanges) {
-                e.preventDefault();
-                e.returnValue = '';
-            }
-        });
-        
-        // Mark as saved after successful update
-        function markAsSaved() {
-            hasUnsavedChanges = false;
-        }
     </script>
 </body>
 </html>
     `;
   }
   
-  // Generate HTML template for covering letter with PNG images
+  // Generate simplified HTML template 
   generateCoveringLetterHTML(letterContent, letterData) {
     const today = new Date();
     const formattedDate = `${today.getDate().toString().padStart(2, '0')} / ${(today.getMonth() + 1).toString().padStart(2, '0')} / ${today.getFullYear()}`;
@@ -955,10 +1212,7 @@ class S3Service {
     const vargClassification = this.determineVargClassification(letterData.letterType);
     const rightHeaderText = this.determineRightHeaderText(letterData.letterType);
     const complainantName = this.extractComplainantName(letterData);
-    
-    // Use enhanced subject line generation
     const subjectLine = this.generateSubjectLine(letterData.letterType, complainantName, letterData);
-    
     const tableData = this.generateTableData(letterData, complainantName);
     
     return `
@@ -1023,24 +1277,17 @@ class S3Service {
             font-size: 16px;
             font-weight: 700;
             margin-bottom: 3px;
-            line-height: 1.2;
         }
         
         .office-subtitle {
             font-size: 12px;
             font-weight: 600;
-            color: #000;
             margin-bottom: 8px;
         }
         
         .office-address {
             font-size: 10px;
             color: #333;
-        }
-        
-        .emblem-cell {
-            width: 80px;
-            background: #f5f5f5;
         }
         
         .reference-section {
@@ -1050,14 +1297,6 @@ class S3Service {
             font-size: 11px;
             border-bottom: 1px solid #000;
             padding-bottom: 8px;
-        }
-        
-        .reference-left {
-            flex: 1;
-        }
-        
-        .reference-right {
-            text-align: right;
         }
         
         .subject-line {
@@ -1083,10 +1322,6 @@ class S3Service {
             font-size: 11px;
         }
         
-        .content-section p {
-            margin-bottom: 10px;
-        }
-        
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -1107,68 +1342,16 @@ class S3Service {
             font-weight: 600;
         }
         
-        .data-table .number-col {
-            width: 15%;
-        }
-        
-        .data-table .date-col {
-            width: 20%;
-        }
-        
-        .data-table .details-col {
-            width: 40%;
-        }
-        
-        .data-table .amount-col {
-            width: 25%;
-        }
-        
         .signature-section {
-            margin-top: 30px;
-            text-align: right;
-            font-size: 11px;
-            padding: 15px 0;
+            margin-top: 20px;
         }
         
-        .signature-section p {
-            margin-bottom: 3px;
-        }
-        
-        .copies-section {
-            margin-top: 25px;
-            font-size: 10px;
-            text-align: left;
-        }
-        
-        .copies-section p {
-            margin-bottom: 2px;
+        #digital-signature-area {
+            margin-bottom: 10px;
         }
         
         .bold {
             font-weight: 600;
-        }
-        
-        .underline {
-            text-decoration: underline;
-        }
-        
-        .center {
-            text-align: center;
-        }
-        
-        .indent {
-            margin-left: 20px;
-        }
-        
-        @media print {
-            body {
-                padding: 5px;
-            }
-            
-            .document-container {
-                border: 2px solid #000;
-                padding: 10px;
-            }
         }
     </style>
 </head>
@@ -1217,10 +1400,10 @@ class S3Service {
         <table class="data-table">
             <thead>
                 <tr>
-                    <th class="number-col">अर्ज क्रमांक</th>
-                    <th class="date-col">अर्ज प्रकार</th>
-                    <th class="details-col">अर्जदाराचे नाव</th>
-                    <th class="amount-col">जावक क्रमांक</th>
+                    <th>अर्ज क्रमांक</th>
+                    <th>अर्ज प्रकार</th>
+                    <th>अर्जदाराचे नाव</th>
+                    <th>जावक क्रमांक</th>
                 </tr>
             </thead>
             <tbody>
@@ -1238,30 +1421,41 @@ class S3Service {
         <!-- Closing Content -->
         <div class="content-section">
             <p><strong>मा.पोलीस अधिक्षक सो,</strong></p>
-            <p class="indent"><strong>आदेश अनुसरणे</strong></p>
+            <p style="margin-left: 20px;"><strong>आदेश अनुसरणे</strong></p>
         </div>
         
-        <!-- Signature Section -->
+        <!-- Simple Signature Section -->
         <div class="signature-section">
+            <!-- Option 1: Signature ABOVE officer text -->
+            <div id="digital-signature-area">
+                <!-- Simple signature will be inserted here ABOVE officer designation -->
+            </div>
             <p><strong>अर्ज शाखा प्रभारी अधिकारी,</strong></p>
             <p><strong>पोलीस अधिक्षक कार्यालय, अहिल्यानगर</strong></p>
         </div>
+        
     </div>
 </body>
 </html>
     `;
   }
   
-  // Generate PDF and upload to S3
-  async generateAndUploadCoveringLetter(letterContent, letterData) {
+  // Enhanced method to generate covering letter with simple signature support
+  async generateAndUploadSignedCoveringLetter(letterContent, letterData, signatureBase64 = null, signerName = null) {
     try {
-      // Generate HTML
-      const htmlContent = this.generateCoveringLetterHTML(letterContent, letterData);
+      console.log('📄 Generating covering letter with simple signature support...', {
+        hasSignature: !!signatureBase64,
+        signerName,
+        letterNumber: letterData.letterNumber
+      });
+
+      // Generate HTML with simple signature if provided
+      const htmlContent = this.generateSignableHTML(letterContent, letterData, signatureBase64, signerName);
       
       // Generate PDF using Puppeteer
       const browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
       });
       
       const page = await browser.newPage();
@@ -1280,8 +1474,12 @@ class S3Service {
       
       await browser.close();
       
+      // Determine filename suffix
+      const suffix = signatureBase64 ? '-signed' : '';
+      const timestamp = Date.now();
+      
       // Upload PDF to S3
-      const fileName = `covering-letters/${letterData.letterNumber}-${Date.now()}.pdf`;
+      const fileName = `covering-letters/${letterData.letterNumber}${suffix}-${timestamp}.pdf`;
       const pdfCommand = new PutObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
         Key: fileName,
@@ -1292,7 +1490,7 @@ class S3Service {
       await s3Client.send(pdfCommand);
       
       // Upload HTML to S3 as well
-      const htmlFileName = `covering-letters/${letterData.letterNumber}-${Date.now()}.html`;
+      const htmlFileName = `covering-letters/${letterData.letterNumber}${suffix}-${timestamp}.html`;
       const htmlCommand = new PutObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
         Key: htmlFileName,
@@ -1302,31 +1500,147 @@ class S3Service {
       
       await s3Client.send(htmlCommand);
       
-      // Generate URLs manually
+      // Generate URLs
       const pdfUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
       const htmlUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${htmlFileName}`;
+      
+      console.log('✅ Covering letter generated and uploaded successfully with simple signature:', {
+        pdfUrl,
+        htmlUrl,
+        signed: !!signatureBase64
+      });
       
       return {
         pdfUrl: pdfUrl,
         htmlUrl: htmlUrl,
         fileName: fileName,
-        htmlFileName: htmlFileName
+        htmlFileName: htmlFileName,
+        signed: !!signatureBase64,
+        signedBy: signerName,
+        signedAt: signatureBase64 ? new Date() : null
       };
       
     } catch (error) {
-      console.error('Error generating and uploading covering letter:', error);
-      throw new Error('Failed to generate and upload covering letter');
+      console.error('❌ Error generating and uploading covering letter:', error);
+      throw new Error(`Failed to generate and upload covering letter: ${error.message}`);
     }
   }
   
-  // Upload file to S3
+  // Generate PDF and upload to S3 with simple signature support
+  async generateAndUploadCoveringLetter(letterContent, letterData) {
+    try {
+      console.log('📄 Generating covering letter PDF with simple signature support...', {
+        letterNumber: letterData.letterNumber,
+        letterType: letterData.letterType
+      });
+
+      // Generate HTML
+      const htmlContent = this.generateCoveringLetterHTML(letterContent, letterData);
+      
+      // Generate PDF using Puppeteer
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox', 
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-web-security'
+        ]
+      });
+      
+      try {
+        const page = await browser.newPage();
+        
+        // Set page content with timeout
+        await page.setContent(htmlContent, { 
+          waitUntil: 'networkidle0',
+          timeout: 30000
+        });
+        
+        const pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true,
+          margin: {
+            top: '15mm',
+            bottom: '15mm',
+            left: '15mm',
+            right: '15mm'
+          }
+        });
+        
+        await browser.close();
+        
+        console.log('✅ PDF generated successfully, size:', pdfBuffer.length, 'bytes');
+        
+        // Upload PDF to S3
+        const fileName = `covering-letters/${letterData.letterNumber}-${Date.now()}.pdf`;
+        const pdfCommand = new PutObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: fileName,
+          Body: pdfBuffer,
+          ContentType: 'application/pdf',
+        });
+        
+        await s3Client.send(pdfCommand);
+        console.log('✅ PDF uploaded to S3:', fileName);
+        
+        // Upload HTML to S3 as well
+        const htmlFileName = `covering-letters/${letterData.letterNumber}-${Date.now()}.html`;
+        const htmlCommand = new PutObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: htmlFileName,
+          Body: htmlContent,
+          ContentType: 'text/html',
+        });
+        
+        await s3Client.send(htmlCommand);
+        console.log('✅ HTML uploaded to S3:', htmlFileName);
+        
+        // Generate URLs
+        const pdfUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+        const htmlUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${htmlFileName}`;
+        
+        return {
+          pdfUrl: pdfUrl,
+          htmlUrl: htmlUrl,
+          fileName: fileName,
+          htmlFileName: htmlFileName
+        };
+        
+      } catch (puppeteerError) {
+        await browser.close();
+        throw puppeteerError;
+      }
+      
+    } catch (error) {
+      console.error('❌ Error generating and uploading covering letter:', error);
+      throw new Error(`Failed to generate and upload covering letter: ${error.message}`);
+    }
+  }
+  
+  // Enhanced: Upload file to S3 with better error handling
   async uploadToS3(fileBuffer, fileName, contentType) {
     try {
+      console.log('☁️ Uploading to S3:', { fileName, contentType, size: fileBuffer.length });
+      
+      // Validate inputs
+      if (!fileBuffer || fileBuffer.length === 0) {
+        throw new Error('File buffer is empty or invalid');
+      }
+      
+      if (!fileName || typeof fileName !== 'string') {
+        throw new Error('File name is required and must be a string');
+      }
+      
+      if (!process.env.AWS_BUCKET_NAME) {
+        throw new Error('AWS_BUCKET_NAME environment variable is not set');
+      }
+      
       const command = new PutObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
         Key: `covering-letters/${fileName}`,
         Body: fileBuffer,
-        ContentType: contentType,
+        ContentType: contentType || 'application/octet-stream',
       });
       
       await s3Client.send(command);
@@ -1334,11 +1648,12 @@ class S3Service {
       // Generate URL manually
       const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/covering-letters/${fileName}`;
       
+      console.log('✅ File uploaded successfully to S3:', fileUrl);
       return fileUrl;
       
     } catch (error) {
-      console.error('Error uploading to S3:', error);
-      throw new Error('Failed to upload to S3');
+      console.error('❌ Error uploading to S3:', error);
+      throw new Error(`Failed to upload to S3: ${error.message}`);
     }
   }
 

@@ -872,18 +872,26 @@ const InwardStaffLetters = () => {
       // Handle different response structures
       let lettersData = [];
       
-      if (response.data && response.data.patras && Array.isArray(response.data.patras)) {
-        // New API structure: { message, count, patras: [...] }
+      if (
+        response.data &&
+        response.data.data &&
+        Array.isArray(response.data.data.patras)
+      ) {
+        // New API structure: { success, message, data: { patras: [...] } }
+        lettersData = response.data.data.patras;
+        console.log('Using patras array from response.data.data:', lettersData);
+      } else if (response.data && Array.isArray(response.data.patras)) {
+        // { patras: [...] }
         lettersData = response.data.patras;
-        console.log('Using patras array from response');
+        console.log('Using patras array from response.data:', lettersData);
       } else if (response.data && Array.isArray(response.data)) {
         // Direct array response: [...]
         lettersData = response.data;
-        console.log('Using direct array response');
+        console.log('Using direct array response:', lettersData);
       } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-        // Alternative structure: { data: [...] }
+        // { data: [...] }
         lettersData = response.data.data;
-        console.log('Using data array from response');
+        console.log('Using data array from response.data:', lettersData);
       } else {
         console.error('Unexpected response structure:', response.data);
         throw new Error('Invalid data format received from server');
@@ -998,37 +1006,34 @@ const InwardStaffLetters = () => {
   const hasCoveringLetter = (letter) => {
     // Debug: Log the letter data structure
     console.log('Checking covering letter for:', letter.referenceNumber);
-    console.log('Letter covering letter data:', letter.coveringLetter);
-    
-    // Check if covering letter exists and has required data
-    const coveringLetter = letter.coveringLetter;
-    
+    const coveringLetter = letter.coveringLetter || letter.directCoveringLetter;
+    console.log('Letter covering letter data:', coveringLetter);
     if (!coveringLetter) {
       console.log('No covering letter object found');
       return false;
     }
-    
     // Check for either id or _id (to handle both Sequelize and MongoDB)
     const hasId = coveringLetter.id || coveringLetter._id;
-    
     // Check for URL availability
     const hasUrl = coveringLetter.pdfUrl || coveringLetter.htmlUrl;
-    
     console.log('Covering letter ID:', hasId);
     console.log('Covering letter URLs:', { pdfUrl: coveringLetter.pdfUrl, htmlUrl: coveringLetter.htmlUrl });
-    
     return !!(hasId && hasUrl);
   };
   
   // Helper function to view covering letter
   const viewCoveringLetter = (letter) => {
-    if (!hasCoveringLetter(letter)) {
+    const coveringLetter = letter.coveringLetter || letter.directCoveringLetter;
+    if (!coveringLetter) {
       alert(language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही!' : 'Covering letter not available!');
       return;
     }
-    
     // Prefer PDF over HTML
-    const url = letter.coveringLetter.pdfUrl || letter.coveringLetter.htmlUrl;
+    const url = coveringLetter.pdfUrl || coveringLetter.htmlUrl;
+    if (!url) {
+      alert(language === 'mr' ? 'कव्हरिंग लेटर URL उपलब्ध नाही!' : 'Covering letter URL not available!');
+      return;
+    }
     window.open(url, '_blank');
   };
 
@@ -1825,27 +1830,27 @@ const InwardStaffLetters = () => {
                         <div className="flex items-center justify-between mb-3">
                           <div>
                             <h4 className="text-lg font-semibold text-indigo-800">
-                              {selectedLetter.coveringLetter.letterType === 'UPLOADED' 
+                              {selectedLetter.coveringLetter?.letterType === 'UPLOADED' 
                                 ? (language === 'mr' ? 'अपलोड केलेले कव्हरिंग लेटर' : 'Uploaded Covering Letter')
                                 : (language === 'mr' ? 'ऑटो-जेनेरेटेड कव्हरिंग लेटर' : 'Auto-Generated Covering Letter')
                               }
                             </h4>
                             <p className="text-sm text-indigo-600">
-                              {language === 'mr' ? 'संदर्भ क्रमांक:' : 'Letter Number:'} {selectedLetter.coveringLetter.letterNumber}
+                              {language === 'mr' ? 'संदर्भ क्रमांक:' : 'Letter Number:'} {selectedLetter.coveringLetter?.letterNumber}
                             </p>
                             <p className="text-sm text-indigo-600">
-                              {language === 'mr' ? 'दिनांक:' : 'Date:'} {selectedLetter.coveringLetter.letterDate}
+                              {language === 'mr' ? 'दिनांक:' : 'Date:'} {selectedLetter.coveringLetter?.letterDate}
                             </p>
                             <p className="text-sm text-indigo-600">
                               {language === 'mr' ? 'स्थिती:' : 'Status:'} 
                               <span className={`ml-1 px-2 py-1 rounded text-xs font-medium ${
-                                selectedLetter.coveringLetter.status === 'DRAFT' 
+                                selectedLetter.coveringLetter?.status === 'DRAFT' 
                                   ? 'bg-yellow-100 text-yellow-800' 
-                                  : selectedLetter.coveringLetter.status === 'UPLOADED'
+                                  : selectedLetter.coveringLetter?.status === 'UPLOADED'
                                   ? 'bg-blue-100 text-blue-800'
                                   : 'bg-green-100 text-green-800'
                               }`}>
-                                {selectedLetter.coveringLetter.status}
+                                {selectedLetter.coveringLetter?.status}
                               </span>
                             </p>
                           </div>
@@ -1854,9 +1859,9 @@ const InwardStaffLetters = () => {
                             {/* View and Action Buttons */}
                             <div className="flex space-x-2">
                               {/* View PDF Button */}
-                              {selectedLetter.coveringLetter.pdfUrl && (
+                              {selectedLetter.coveringLetter?.pdfUrl && (
                                 <button
-                                  onClick={() => window.open(selectedLetter.coveringLetter.pdfUrl, '_blank')}
+                                  onClick={() => window.open(selectedLetter.coveringLetter?.pdfUrl, '_blank')}
                                   className="inline-flex items-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors shadow-md"
                                 >
                                   <FiFileText className="mr-1 h-3 w-3" />
@@ -1865,9 +1870,9 @@ const InwardStaffLetters = () => {
                               )}
                               
                               {/* View HTML Button - only for generated letters */}
-                              {selectedLetter.coveringLetter.htmlUrl && (
+                              {selectedLetter.coveringLetter?.htmlUrl && (
                                 <button
-                                  onClick={() => window.open(selectedLetter.coveringLetter.htmlUrl, '_blank')}
+                                  onClick={() => window.open(selectedLetter.coveringLetter?.htmlUrl, '_blank')}
                                   className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-md"
                                 >
                                   <FiExternalLink className="mr-1 h-3 w-3" />
@@ -1879,7 +1884,10 @@ const InwardStaffLetters = () => {
                             <div className="flex space-x-2">
                               {/* Delete Button - for all covering letters */}
                               <button
-                                onClick={() => handleDeleteCoveringLetter(selectedLetter.coveringLetter.id || selectedLetter.coveringLetter._id)}
+                                onClick={() => {
+                                  const coveringLetter = selectedLetter && (selectedLetter.coveringLetter || selectedLetter.coveringLetter);
+                                  coveringLetter && handleDeleteCoveringLetter(coveringLetter.id || coveringLetter._id);
+                                }}
                                 className="inline-flex items-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors shadow-md"
                                 title={language === 'mr' ? 'कव्हरिंग लेटर हटवा' : 'Delete covering letter'}
                               >
@@ -1896,24 +1904,24 @@ const InwardStaffLetters = () => {
                             <span className="font-medium text-indigo-700">
                               {language === 'mr' ? 'प्राप्तकर्ता कार्यालय:' : 'Recipient Office:'}
                             </span>
-                            <p className="text-gray-600">{selectedLetter.coveringLetter.recipientOffice || 'N/A'}</p>
+                            <p className="text-gray-600">{selectedLetter.coveringLetter?.recipientOffice || 'N/A'}</p>
                           </div>
                           <div>
                             <span className="font-medium text-indigo-700">
                               {language === 'mr' ? 'प्राप्तकर्ता पदनाम:' : 'Recipient Designation:'}
                             </span>
-                            <p className="text-gray-600">{selectedLetter.coveringLetter.recipientDesignation || 'N/A'}</p>
+                            <p className="text-gray-600">{selectedLetter.coveringLetter?.recipientDesignation || 'N/A'}</p>
                           </div>
                         </div>
                         
                         {/* Show file info for uploaded files */}
-                        {selectedLetter.coveringLetter.uploadedFile && (
+                        {selectedLetter.coveringLetter?.uploadedFile && (
                           <div className="mt-3 pt-3 border-t border-indigo-200">
                             <p className="text-xs text-indigo-700">
-                              {language === 'mr' ? 'फाईल:' : 'File:'} {selectedLetter.coveringLetter.uploadedFile.originalName}
+                              {language === 'mr' ? 'फाईल:' : 'File:'} {selectedLetter.coveringLetter?.uploadedFile.originalName}
                             </p>
                             <p className="text-xs text-indigo-600">
-                              {language === 'mr' ? 'साईज:' : 'Size:'} {(selectedLetter.coveringLetter.uploadedFile.fileSize / 1024 / 1024).toFixed(2)} MB
+                              {language === 'mr' ? 'साईज:' : 'Size:'} {(selectedLetter.coveringLetter?.uploadedFile.fileSize / 1024 / 1024).toFixed(2)} MB
                             </p>
                           </div>
                         )}

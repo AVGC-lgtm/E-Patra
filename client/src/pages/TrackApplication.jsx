@@ -84,6 +84,10 @@ const TrackApplication = () => {
         // Direct patra object response (fallback)
         applicationData = response.data;
         console.log('Using direct patra object:', applicationData);
+      } else if (response.data && response.data.data && typeof response.data.data === 'object' && response.data.data.id) {
+        // Handle { success, message, data: { ...patra } } structure
+        applicationData = response.data.data;
+        console.log('Using patra from response.data.data:', applicationData);
       } else {
         console.error('Unexpected response structure:', response.data);
         throw new Error('Invalid data format received from server');

@@ -64,19 +64,41 @@ const Dashboard = () => {
       
       console.log('API Response:', response.data); // Debug log
       
-      // Handle the new API response structure: {message, count, patras: [...]}
+      // Handle the new API response structure: {message, count, patras: [...], ...}
       let patrasData = [];
-      if (response.data && response.data.patras && Array.isArray(response.data.patras)) {
+      if (
+        response.data &&
+        response.data.data &&
+        Array.isArray(response.data.data.patras)
+      ) {
+        patrasData = response.data.data.patras;
+        console.log('Using patras array from response.data.data:', patrasData);
+      } else if (response.data && Array.isArray(response.data.patras)) {
         patrasData = response.data.patras;
-        console.log('Using patras array from response:', patrasData);
+        console.log('Using patras array from response.data:', patrasData);
       } else if (response.data && Array.isArray(response.data)) {
-        // Fallback for direct array response
         patrasData = response.data;
         console.log('Using direct array response:', patrasData);
       } else {
-        console.error('Unexpected data format:', response.data);
-        setError('Unexpected data format received from server');
-        return;
+        // Try to extract from nested data (for paginated or wrapped responses)
+        if (response.data && typeof response.data === 'object') {
+          // Try to find the first array property
+          const arrayProp = Object.values(response.data).find(v => Array.isArray(v));
+          if (arrayProp) {
+            patrasData = arrayProp;
+            console.log('Using first array property from response:', patrasData);
+          } else {
+            console.error('Unexpected data format:', response.data);
+            setError('Unexpected data format received from server');
+            setPatras([]);
+            return;
+          }
+        } else {
+          console.error('Unexpected data format:', response.data);
+          setError('Unexpected data format received from server');
+          setPatras([]);
+          return;
+        }
       }
       
       // Sort by createdAt in descending order (newest first)
@@ -91,6 +113,7 @@ const Dashboard = () => {
     } catch (err) {
       console.error('Error fetching patras:', err);
       setError('Failed to load patras data. Please try again later.');
+      setPatras([]);
     } finally {
       setIsLoading(false);
     }

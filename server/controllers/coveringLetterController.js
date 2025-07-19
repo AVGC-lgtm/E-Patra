@@ -1,19 +1,13 @@
-// controllers/coveringLetterController.js - Without edit functionality
-const CoveringLetter = require('../models/CoveringLetter');
-const InwardPatra = require('../models/InwardPatra');
-const User = require('../models/User');
-const File = require('../models/File');
+// controllers/coveringLetterController.js - Enhanced with edit functionality and fixed associations
+const { InwardPatra, CoveringLetter, User, File, Head } = require('../models/associations');
 const multer = require('multer');
 const multerS3 = require('multer-s3');
 const { S3Client } = require('@aws-sdk/client-s3');
 
-// Import associations to ensure they're loaded
-require('../models/associations');
-
-
 
 const openaiService = require('../services/openaiService');
 const s3Service = require('../services/s3Service');
+
 
 // Configure S3 client for multer
 const s3Client = new S3Client({
@@ -61,6 +55,7 @@ class CoveringLetterController {
         include: [
           {
             model: User,
+            as: 'User', // Fix: Specify the alias
             attributes: ['id', 'email']
           },
           {
@@ -112,7 +107,7 @@ class CoveringLetterController {
         throw new Error('OpenAI failed to generate letter content');
       }
 
-      const letterNumber = `CL/${patra.referenceNumber}/${new Date().getFullYear()}`;
+      const letterNumber = `CL/${patra.referenceNumber || patra.outwardLetterNumber}/${new Date().getFullYear()}`;
 
       console.log('Letter content generated, uploading to S3...');
 
@@ -169,6 +164,159 @@ class CoveringLetterController {
       } else {
         throw new Error(`Covering letter generation failed: ${error.message}`);
       }
+    }
+  }
+
+
+  // NEW: Get covering letter for editing - returns editable HTML template
+  async getCoveringLetterForEdit(req, res) {
+    try {
+      const { id } = req.params;
+
+      const coveringLetter = await CoveringLetter.findByPk(id, {
+        include: [
+          {
+            model: InwardPatra,
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber']
+          },
+          {
+            model: User,
+            as: 'User', // Fix: Specify the alias
+            attributes: ['id', 'email']
+          },
+          {
+            model: File,
+            as: 'attachedFile',
+            attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+            required: false
+          }
+        ]
+      });
+
+      if (!coveringLetter) {
+        return res.status(404).json({ error: 'Covering letter not found' });
+      }
+
+      // Generate editable HTML template
+      const editableHTML = await s3Service.generateEditableHTML(coveringLetter.letterContent, {
+        letterNumber: coveringLetter.letterNumber,
+        patraId: coveringLetter.patraId,
+        letterType: coveringLetter.letterType,
+        extractedText: coveringLetter.letterContent
+      });
+
+      return res.status(200).json({
+        message: 'Covering letter retrieved successfully',
+        coveringLetter: {
+          id: coveringLetter.id,
+          letterContent: coveringLetter.letterContent,
+          letterType: coveringLetter.letterType,
+          letterNumber: coveringLetter.letterNumber,
+          letterDate: coveringLetter.letterDate,
+          status: coveringLetter.status,
+          pdfUrl: coveringLetter.pdfUrl,
+          htmlUrl: coveringLetter.htmlUrl,
+          recipientOffice: coveringLetter.recipientOffice,
+          recipientDesignation: coveringLetter.recipientDesignation,
+          patra: coveringLetter.InwardPatra,
+          user: coveringLetter.User,
+          attachedFile: coveringLetter.attachedFile
+        },
+        editableHTML: editableHTML
+      });
+
+    } catch (error) {
+      console.error('Error fetching covering letter for edit:', error);
+      return res.status(500).json({ error: 'Server error', details: error.message });
+    }
+  }
+
+  // NEW: Update covering letter with new content and regenerate PDF
+  async updateCoveringLetterContent(req, res) {
+    try {
+      const { id } = req.params;
+      const { letterContent, status, recipientOffice, recipientDesignation } = req.body;
+
+      if (!letterContent || letterContent.trim() === '') {
+        return res.status(400).json({ error: 'Letter content is required' });
+      }
+
+      const coveringLetter = await CoveringLetter.findByPk(id, {
+        include: [
+          {
+            model: InwardPatra,
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'outwardLetterNumber']
+          }
+        ]
+      });
+
+      if (!coveringLetter) {
+        return res.status(404).json({ error: 'Covering letter not found' });
+      }
+
+      console.log('Updating covering letter content and regenerating PDF...');
+
+      // Prepare letter data for PDF generation
+      const letterData = {
+        letterNumber: coveringLetter.letterNumber,
+        patraId: coveringLetter.patraId,
+        letterType: coveringLetter.letterType,
+        extractedText: letterContent,
+        complainantName: s3Service.extractComplainantName({ extractedText: letterContent }),
+        senderName: s3Service.extractComplainantName({ extractedText: letterContent })
+      };
+
+      // Regenerate PDF with updated content
+      const uploadResult = await s3Service.generateAndUploadCoveringLetter(
+        letterContent,
+        letterData
+      );
+
+      // Update the covering letter in database
+      const updateData = {
+        letterContent: letterContent,
+        pdfUrl: uploadResult.pdfUrl,
+        htmlUrl: uploadResult.htmlUrl,
+        s3FileName: uploadResult.fileName,
+        updatedAt: new Date()
+      };
+
+      if (status !== undefined) updateData.status = status;
+      if (recipientOffice !== undefined) updateData.recipientOffice = recipientOffice;
+      if (recipientDesignation !== undefined) updateData.recipientDesignation = recipientDesignation;
+
+      await coveringLetter.update(updateData);
+
+      // Fetch updated covering letter with associations
+      const updatedCoveringLetter = await CoveringLetter.findByPk(id, {
+        include: [
+          {
+            model: InwardPatra,
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'outwardLetterNumber']
+          },
+          {
+            model: User,
+            as: 'User', // Fix: Specify the alias
+            attributes: ['id', 'email']
+          }
+        ]
+      });
+
+      console.log('Covering letter updated successfully and PDF regenerated');
+
+      return res.status(200).json({
+        message: 'Covering letter updated successfully and PDF regenerated',
+        coveringLetter: updatedCoveringLetter,
+        pdfUrl: uploadResult.pdfUrl,
+        htmlUrl: uploadResult.htmlUrl
+      });
+
+    } catch (error) {
+      console.error('Error updating covering letter:', error);
+      return res.status(500).json({ error: 'Server error', details: error.message });
     }
   }
 
@@ -230,10 +378,12 @@ class CoveringLetterController {
         include: [
           {
             model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter']
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'outwardLetterNumber']
           },
           {
             model: User,
+            as: 'User', // Fix: Specify the alias
             attributes: ['id', 'email']
           },
           {
@@ -303,14 +453,24 @@ class CoveringLetterController {
   // Get all covering letters
   async getAllCoveringLetters(req, res) {
     try {
-      const coveringLetters = await CoveringLetter.findAll({
+      const { page = 1, limit = 10, status, letterType } = req.query;
+      const offset = (page - 1) * limit;
+      
+      const whereClause = {};
+      if (status) whereClause.status = status;
+      if (letterType) whereClause.letterType = letterType;
+
+      const coveringLetters = await CoveringLetter.findAndCountAll({
+        where: whereClause,
         include: [
           {
             model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter']
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'outwardLetterNumber']
           },
           {
             model: User,
+            as: 'User', // Fix: Specify the alias
             attributes: ['id', 'email']
           },
           {
@@ -320,10 +480,20 @@ class CoveringLetterController {
             required: false
           }
         ],
-        order: [['createdAt', 'DESC']]
+        order: [['createdAt', 'DESC']],
+        limit: parseInt(limit),
+        offset: parseInt(offset)
       });
 
-      return res.status(200).json(coveringLetters);
+      return res.status(200).json({
+        success: true,
+        data: {
+          coveringLetters: coveringLetters.rows,
+          totalCount: coveringLetters.count,
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(coveringLetters.count / limit)
+        }
+      });
 
     } catch (error) {
       console.error('Error fetching covering letters:', error);
@@ -340,10 +510,12 @@ class CoveringLetterController {
         include: [
           {
             model: InwardPatra,
-            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation']
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber']
           },
           {
             model: User,
+            as: 'User', // Fix: Specify the alias
             attributes: ['id', 'email']
           },
           {
@@ -359,7 +531,10 @@ class CoveringLetterController {
         return res.status(404).json({ error: 'Covering letter not found' });
       }
 
-      return res.status(200).json(coveringLetter);
+      return res.status(200).json({
+        success: true,
+        data: coveringLetter
+      });
 
     } catch (error) {
       console.error('Error fetching covering letter by ID:', error);
@@ -481,10 +656,12 @@ class CoveringLetterController {
         include: [
           {
             model: InwardPatra,
+            as: 'InwardPatra', // <-- ADD THIS
             attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'fileId']
           },
           {
             model: User,
+            as: 'User', // <-- ADD THIS
             attributes: ['id', 'email']
           },
           {
@@ -501,6 +678,7 @@ class CoveringLetterController {
         include: [
           {
             model: User,
+            as: 'User', // <-- ADD THIS
             attributes: ['id', 'email']
           },
           {
@@ -579,6 +757,15 @@ class CoveringLetterController {
           error: 'Covering letter not found'
         });
       }
+
+      // Remove reference from InwardPatra if exists
+      if (coveringLetter.patraId) {
+        await InwardPatra.update(
+          { coveringLetterId: null },
+          { where: { id: coveringLetter.patraId } }
+        );
+      }
+
       
       // Delete from S3 if file exists
       if (coveringLetter.s3FileName) {
@@ -686,9 +873,25 @@ class CoveringLetterController {
 
       await coveringLetter.update(updateData);
 
+      // Fetch updated covering letter with associations
+      const updatedCoveringLetter = await CoveringLetter.findByPk(id, {
+        include: [
+          {
+            model: InwardPatra,
+            as: 'InwardPatra', // Fix: Specify the alias
+            attributes: ['referenceNumber', 'subject', 'officeSendingLetter', 'outwardLetterNumber']
+          },
+          {
+            model: User,
+            as: 'User', // Fix: Specify the alias
+            attributes: ['id', 'email']
+          }
+        ]
+      });
+
       return res.status(200).json({
         message: 'Covering letter updated successfully',
-        coveringLetter
+        coveringLetter: updatedCoveringLetter
       });
 
     } catch (error) {

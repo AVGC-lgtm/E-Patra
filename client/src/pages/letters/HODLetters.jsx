@@ -327,6 +327,19 @@ const handleRefresh = async () => {
       // Alternative structure: { data: [...] }
       lettersData = response.data.data;
       console.log('HOD Letters - Using data array from response');
+    } else if (response.data && response.data.success && Array.isArray(response.data.data)) {
+      // Handle { success, message, data: [...] } structure
+      lettersData = response.data.data;
+      console.log('HOD Letters - Using data array from { success, message, data } response');
+    } else if (
+      response.data &&
+      response.data.data &&
+      response.data.data.patras &&
+      Array.isArray(response.data.data.patras)
+    ) {
+      // Handle { success, message, data: { patras: [...] } } structure
+      lettersData = response.data.data.patras;
+      console.log('HOD Letters - Using patras array from response.data.data.patras');
     } else {
       console.error('HOD Letters - Unexpected response structure:', response.data);
       throw new Error('Invalid data format received from server');
