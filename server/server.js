@@ -18,6 +18,8 @@ const emailRoutes = require('./routes/emailRoutes');
 const emailSenderReceiverRoutes = require('./routes/emailSenderReceiverRoutes');
 const dynamicEmailRoutes = require('./routes/dynamicEmailRoutes');
 const headRoutes = require('./routes/headRoutes');
+const imapRoutes = require('./routes/imapRoutes');
+const { startImapListenerAuto } = require('./controllers/imapController');
 
 const app = express();
 
@@ -104,6 +106,7 @@ app.use('/api/email', emailRoutes);
 app.use('/api', emailSenderReceiverRoutes);
 app.use('/api/dynamic-email', dynamicEmailRoutes);
 app.use('/api/head', headRoutes);
+app.use('/api/imap', imapRoutes);
 
 
 // Email configuration verification on startup
@@ -180,6 +183,9 @@ sequelize.sync({ force: false, alter: true })  // Automatically update the table
       // Initialize email service and create default email contacts
       await initializeEmailService();
       
+      // Start IMAP listener
+      startImapListenerAuto(); // This will start the listener on server startup
+
       console.log('✓ Application initialized successfully');
       console.log('Available API endpoints:');
       console.log('  - Auth: /api/auth');

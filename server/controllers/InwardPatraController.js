@@ -1,5 +1,5 @@
-// controllers/InwardPatraController.js - Fixed version without designation field
-const { InwardPatra, CoveringLetter, User, File, Head } = require('../models/associations');
+// controllers/InwardPatraController.js - Updated with EmailRecord inclusion
+const { InwardPatra, CoveringLetter, User, File, Head, EmailRecord } = require('../models/associations');
 const sequelize = require('../config/database');
 
 const coveringLetterController = require('./coveringLetterController');
@@ -28,7 +28,7 @@ const generateReferenceNumber = async () => {
 // Common include configuration for covering letter
 const getCoveringLetterInclude = () => ({
   model: CoveringLetter,
-  as: 'coveringLetter', // Use the alias from associations
+  as: 'coveringLetter',
   required: false,
   include: [
     {
@@ -40,20 +40,29 @@ const getCoveringLetterInclude = () => ({
   ]
 });
 
-// Common include configuration for user - REMOVED designation field
+// Common include configuration for user
 const getUserInclude = () => ({
   model: User,
-  as: 'User', // Use the alias from associations
-  attributes: ['id', 'email'], // REMOVED 'designation' from here
+  as: 'User',
+  attributes: ['id', 'email'],
   required: false
 });
 
 // Common include configuration for uploaded file
 const getUploadedFileInclude = () => ({
   model: File,
-  as: 'uploadedFile', // Use the alias from associations
+  as: 'uploadedFile',
   attributes: ['id', 'originalName', 'fileName', 'fileUrl', 'extractData'],
   required: false
+});
+
+// NEW: Common include configuration for email records
+const getEmailRecordsInclude = () => ({
+  model: EmailRecord,
+  as: 'EmailRecords', // This should match the association name
+  attributes: ['id', 'subject', 'from', 'date', 'text', 'html', 'messageId', 'inReplyTo', 'references', 'attachments', 'referenceNumber', 'createdAt'],
+  required: false,
+  order: [['date', 'DESC']] // Order emails by date, newest first
 });
 
 // Create a new Patra (InwardPatra) with auto-generated covering letter
@@ -144,12 +153,13 @@ const createPatra = async (req, res) => {
       // Commit transaction if everything succeeds
       await transaction.commit();
       
-      // Fetch the complete created Patra with all covering letter data
+      // Fetch the complete created Patra with all covering letter data and email records
       const completePatra = await InwardPatra.findByPk(newPatra.id, {
         include: [
           getUserInclude(),
           getUploadedFileInclude(),
-          getCoveringLetterInclude()
+          getCoveringLetterInclude(),
+          getEmailRecordsInclude() // Include email records
         ]
       });
       
@@ -188,23 +198,31 @@ const createPatra = async (req, res) => {
   }
 };
 
-// Get all Patras with their complete covering letters data
+// Get all Patras with their complete covering letters data and email records
 const getAllPatras = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, classification } = req.query;
+    const { page = 1, limit = 10, status, classification, includeEmails = 'true' } = req.query;
     const offset = (page - 1) * limit;
     
     const whereClause = {};
     if (status) whereClause.letterStatus = status;
     if (classification) whereClause.letterClassification = classification;
 
+    // Build includes array based on query params
+    const includes = [
+      getUserInclude(),
+      getUploadedFileInclude(),
+      getCoveringLetterInclude()
+    ];
+    
+    // Optionally include email records (default is true)
+    if (includeEmails === 'true') {
+      includes.push(getEmailRecordsInclude());
+    }
+
     const patras = await InwardPatra.findAndCountAll({
       where: whereClause,
-      include: [
-        getUserInclude(),
-        getUploadedFileInclude(),
-        getCoveringLetterInclude()
-      ],
+      include: includes,
       order: [['createdAt', 'DESC']],
       limit: parseInt(limit),
       offset: parseInt(offset)
@@ -217,6 +235,7 @@ const getAllPatras = async (req, res) => {
       console.log('  - Reference Number:', patras.rows[0].referenceNumber);
       console.log('  - Has uploadedFile:', !!patras.rows[0].uploadedFile);
       console.log('  - Has coveringLetter:', !!patras.rows[0].coveringLetter);
+      console.log('  - Email Records count:', patras.rows[0].EmailRecords ? patras.rows[0].EmailRecords.length : 0);
       
       if (patras.rows[0].uploadedFile) {
         console.log('  - Uploaded file details:', {
@@ -258,7 +277,7 @@ const getAllPatras = async (req, res) => {
   }
 };
 
-// Get a Patra by ID with complete covering letter data
+// Get a Patra by ID with complete covering letter data and email records
 const getPatraById = async (req, res) => {
   const { id } = req.params;
 
@@ -268,6 +287,7 @@ const getPatraById = async (req, res) => {
         getUserInclude(),
         getUploadedFileInclude(),
         getCoveringLetterInclude(),
+        getEmailRecordsInclude(), // Include email records
         {
           model: Head,
           as: 'heads',
@@ -275,7 +295,7 @@ const getPatraById = async (req, res) => {
             {
               model: User,
               as: 'User',
-              attributes: ['id', 'email'] // REMOVED 'designation' from here too
+              attributes: ['id', 'email']
             }
           ],
           required: false
@@ -298,7 +318,7 @@ const getPatraById = async (req, res) => {
   }
 };
 
-// Get Patra by reference number with complete covering letter data
+// Get Patra by reference number with complete covering letter data and email records
 const getPatraByReferenceNumber = async (req, res) => {
   const { referenceNumber } = req.params;
 
@@ -308,7 +328,8 @@ const getPatraByReferenceNumber = async (req, res) => {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
-        getCoveringLetterInclude()
+        getCoveringLetterInclude(),
+        getEmailRecordsInclude() // Include email records
       ]
     });
 
@@ -327,18 +348,27 @@ const getPatraByReferenceNumber = async (req, res) => {
   }
 };
 
-// Get Patra by user ID with complete covering letter data
+// Get Patra by user ID with complete covering letter data and email records
 const getPatraByUserId = async (req, res) => {
   const { userId } = req.params;
+  const { includeEmails = 'true' } = req.query;
 
   try {
+    // Build includes array based on query params
+    const includes = [
+      getUserInclude(),
+      getUploadedFileInclude(),
+      getCoveringLetterInclude()
+    ];
+    
+    // Optionally include email records
+    if (includeEmails === 'true') {
+      includes.push(getEmailRecordsInclude());
+    }
+
     const patras = await InwardPatra.findAll({
       where: { userId },
-      include: [
-        getUserInclude(),
-        getUploadedFileInclude(),
-        getCoveringLetterInclude()
-      ],
+      include: includes,
       order: [['createdAt', 'DESC']]
     });
 
@@ -374,7 +404,13 @@ const deletePatraById = async (req, res) => {
       return res.status(404).json({ error: 'Patra not found' });
     }
 
-    // Delete associated covering letter first
+    // Delete associated email records first
+    await EmailRecord.destroy({ 
+      where: { referenceNumber: patra.referenceNumber },
+      transaction 
+    });
+
+    // Delete associated covering letter
     await CoveringLetter.destroy({ 
       where: { patraId: id },
       transaction 
@@ -405,7 +441,7 @@ const deletePatraById = async (req, res) => {
   }
 };
 
-// Update a Patra by ID - FIXED VERSION
+// Update a Patra by ID
 const updatePatraById = async (req, res) => {
   const { id } = req.params;
   const {
@@ -493,7 +529,8 @@ const updatePatraById = async (req, res) => {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
-        getCoveringLetterInclude()
+        getCoveringLetterInclude(),
+        getEmailRecordsInclude() // Include email records
       ]
     });
 
@@ -508,7 +545,7 @@ const updatePatraById = async (req, res) => {
   }
 };
 
-// Get Patra by user ID and Patra ID with complete covering letter data
+// Get Patra by user ID and Patra ID with complete covering letter data and email records
 const getPatraByUserIdAndPatraId = async (req, res) => {
   const { userId, patraId } = req.params;
 
@@ -518,7 +555,8 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
-        getCoveringLetterInclude()
+        getCoveringLetterInclude(),
+        getEmailRecordsInclude() // Include email records
       ]
     });
 
@@ -554,12 +592,13 @@ const updateLetterStatus = async (req, res) => {
 
     await patra.update({ letterStatus });
 
-    // Return updated patra with complete covering letter data
+    // Return updated patra with complete covering letter data and email records
     const updatedPatra = await InwardPatra.findByPk(id, {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
-        getCoveringLetterInclude()
+        getCoveringLetterInclude(),
+        getEmailRecordsInclude() // Include email records
       ]
     });
 
@@ -650,13 +689,13 @@ const getAllCoveringLetters = async (req, res) => {
       include: [
         {
           model: InwardPatra,
-          as: 'InwardPatra', // Use proper alias
+          as: 'InwardPatra',
           attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber']
         },
         {
           model: User,
-          as: 'User', // Use proper alias
-          attributes: ['id', 'email'] // REMOVED 'designation' from here
+          as: 'User',
+          attributes: ['id', 'email']
         },
         {
           model: File,
@@ -695,13 +734,13 @@ const getCoveringLetterById = async (req, res) => {
       include: [
         {
           model: InwardPatra,
-          as: 'InwardPatra', // Use proper alias
+          as: 'InwardPatra',
           attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber', 'letterDate']
         },
         {
           model: User,
-          as: 'User', // Use proper alias
-          attributes: ['id', 'email'] // REMOVED 'designation' from here
+          as: 'User',
+          attributes: ['id', 'email']
         },
         {
           model: File,
@@ -716,7 +755,7 @@ const getCoveringLetterById = async (req, res) => {
             {
               model: User,
               as: 'User',
-              attributes: ['id', 'email'] // REMOVED 'designation' from here too
+              attributes: ['id', 'email']
             }
           ],
           required: false
@@ -739,6 +778,39 @@ const getCoveringLetterById = async (req, res) => {
   }
 };
 
+// NEW: Get email conversation history for a specific InwardPatra
+const getEmailConversation = async (req, res) => {
+  const { referenceNumber } = req.params;
+
+  try {
+    const emails = await EmailRecord.findAll({
+      where: { referenceNumber },
+      order: [['date', 'ASC']], // Order by date ascending to show conversation flow
+      attributes: ['id', 'subject', 'from', 'date', 'text', 'html', 'messageId', 'inReplyTo', 'references', 'attachments', 'createdAt']
+    });
+
+    if (emails.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'No email conversation found for this reference number' 
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email conversation retrieved successfully',
+      data: {
+        referenceNumber,
+        emailCount: emails.length,
+        emails: emails
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching email conversation:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
+  }
+};
+
 module.exports = {
   createPatra,
   getAllPatras,
@@ -753,4 +825,5 @@ module.exports = {
   approveLetter,
   getAllCoveringLetters,
   getCoveringLetterById,
+  getEmailConversation, // Export new function
 };

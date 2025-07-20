@@ -609,6 +609,7 @@ const NewLetter = () => {
   
   // State to track if we're processing files
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Helper function to get display value for classification
   const getClassificationDisplayValue = (key) => {
@@ -748,6 +749,7 @@ const NewLetter = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
   
     try {
       if (!mainFileId && !formData.fileId) {
@@ -857,6 +859,8 @@ const NewLetter = () => {
     } catch (error) {
       console.error('Error submitting form:', error);
       toast.error(error.message || t.submitError || 'Error submitting form');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1144,9 +1148,20 @@ const NewLetter = () => {
           <div className="flex justify-end space-x-3 pt-4">
             <button 
               type="submit" 
-              className="px-7 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 shadow transition-colors text-base"
+              className="px-7 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 shadow transition-colors text-base flex items-center justify-center"
+              disabled={isSubmitting}
             >
-              {currentLanguage === 'mr' ? 'पत्र सबमिट करा' : 'Submit Letter'}
+              {isSubmitting ? (
+                <>
+                  <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                  </svg>
+                  {currentLanguage === 'mr' ? 'कव्हरिंग लेटर तयार करत आहे...' : 'Creating covering letter...'}
+                </>
+              ) : (
+                currentLanguage === 'mr' ? 'पत्र सबमिट करा' : 'Submit Letter'
+              )}
             </button>
           </div>
         </form>

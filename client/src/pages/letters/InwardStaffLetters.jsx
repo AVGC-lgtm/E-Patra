@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink, FiFileText, FiSend, FiDownload, FiTrash2, FiPlus, FiUpload } from 'react-icons/fi';
+import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink, FiFileText, FiSend, FiDownload, FiTrash2, FiPlus, FiUpload, FiMail } from 'react-icons/fi';
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
@@ -34,6 +34,8 @@ const InwardStaffLetters = () => {
   const [imageLoading, setImageLoading] = useState({});
   const [uploadingCoveringLetter, setUploadingCoveringLetter] = useState(false);
   const [generatingCoveringLetter, setGeneratingCoveringLetter] = useState(false);
+  const [replyModalOpen, setReplyModalOpen] = useState(false);
+  const [selectedReplies, setSelectedReplies] = useState([]);
   
   // Status filter options with translations
   const statusOptions = [
@@ -1037,6 +1039,14 @@ const InwardStaffLetters = () => {
     window.open(url, '_blank');
   };
 
+  function cleanEmailText(text) {
+    return text
+      .split('\n')
+      .map(line => line.replace(/^>+\s?/, '').trim()) // Remove leading > and whitespace
+      .filter(line => line && !line.startsWith('This is an automated notification')) // Remove notification lines
+      .join('\n');
+  }
+
   return (
     <div className="p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
@@ -1138,7 +1148,10 @@ const InwardStaffLetters = () => {
                     <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap min-w-[180px]">
                       {language === 'mr' ? 'पाठवा' : 'Send To'}
                     </th>
-                    <th scope="col" className="px-8 py-4 text-right text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
+                    <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
+                      {language === 'mr' ? 'प्राप्त उत्तर' : 'Received Reply'}
+                    </th>
+                    <th scope="col" className="px-8 py-4 text-right text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap" style={{ minWidth: 120 }}>
                       {language === 'mr' ? 'क्रिया' : 'Actions'}
                     </th>
                   </tr>
@@ -1185,66 +1198,94 @@ const InwardStaffLetters = () => {
                           </span>
                         )}
                       </td>
-                      <td className="px-8 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end items-center space-x-2">
-                          {/* Details button */}
-                          <button
-                            onClick={() => {
-                              setSelectedLetter(letter);
-                              setViewModalOpen(true);
-                            }}
-                            className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors shadow-sm"
-                            title={language === 'mr' ? 'तपशील पहा' : 'View Details'}
-                          >
-                            <FiEye className="h-4 w-4" />
-                            <span className="ml-1">{language === 'mr' ? 'तपशील' : 'Details'}</span>
-                          </button>
+                      <td className="px-8 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {letter.letterStatus?.toLowerCase() === 'sent to head' ? (
+                          <span className="text-green-600 text-xs">
+                            {language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'Sent to Head'}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">
+                            {language === 'mr' ? 'प्रलंबित' : 'Pending'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-8 py-4 whitespace-nowrap text-right text-sm font-medium flex items-center justify-end space-x-2">
+                        {/* Details button */}
+                        <button
+                          onClick={() => {
+                            setSelectedLetter(letter);
+                            setViewModalOpen(true);
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors shadow-sm"
+                          title={language === 'mr' ? 'तपशील पहा' : 'View Details'}
+                        >
+                          <FiEye className="h-4 w-4" />
+                          <span className="ml-1">{language === 'mr' ? 'तपशील' : 'Details'}</span>
+                        </button>
+                        
+                        {/* View Covering Letter button */}
+                        <button
+                          onClick={() => hasCoveringLetter(letter) ? viewCoveringLetter(letter) : null}
+                          className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded transition-colors shadow-sm ${
+                            hasCoveringLetter(letter) 
+                              ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                          title={
+                            hasCoveringLetter(letter) 
+                              ? (language === 'mr' ? 'कव्हरिंग लेटर पहा' : 'View Covering Letter') 
+                              : (language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'No covering letter available')
+                          }
+                          disabled={!hasCoveringLetter(letter)}
+                        >
+                          <FiFileText className="h-4 w-4" />
+                          <span className="ml-1">{language === 'mr' ? 'कव्हर लेटर' : 'Cover Letter'}</span>
+                        </button>
+                        
+                        {/* Download button */}
+                        <button
+                          onClick={() => hasAttachments(letter) ? handleFileDownload(letter) : null}
+                          className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded transition-colors shadow-sm relative ${
+                            hasAttachments(letter) 
+                              ? 'bg-green-600 text-white hover:bg-green-700' 
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                          title={
+                            hasAttachments(letter) 
+                              ? (language === 'mr' ? 'फाईल डाउनलोड करा' : 'Download File') 
+                              : (language === 'mr' ? 'कोणतीही फाईल संलग्न नाही' : 'No file attached')
+                          }
+                          disabled={!hasAttachments(letter)}
+                        >
+                          <FiDownload className="h-4 w-4" />
+                          <span className="ml-1">{language === 'mr' ? 'डाउनलोड' : 'Download'}</span>
                           
-                          {/* View Covering Letter button */}
-                          <button
-                            onClick={() => hasCoveringLetter(letter) ? viewCoveringLetter(letter) : null}
-                            className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded transition-colors shadow-sm ${
-                              hasCoveringLetter(letter) 
-                                ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
-                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            }`}
-                            title={
-                              hasCoveringLetter(letter) 
-                                ? (language === 'mr' ? 'कव्हरिंग लेटर पहा' : 'View Covering Letter') 
-                                : (language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'No covering letter available')
-                            }
-                            disabled={!hasCoveringLetter(letter)}
-                          >
-                            <FiFileText className="h-4 w-4" />
-                            <span className="ml-1">{language === 'mr' ? 'कव्हर लेटर' : 'Cover Letter'}</span>
-                          </button>
-                          
-                          {/* Download button */}
-                          <button
-                            onClick={() => hasAttachments(letter) ? handleFileDownload(letter) : null}
-                            className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded transition-colors shadow-sm relative ${
-                              hasAttachments(letter) 
-                                ? 'bg-green-600 text-white hover:bg-green-700' 
-                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            }`}
-                            title={
-                              hasAttachments(letter) 
-                                ? (language === 'mr' ? 'फाईल डाउनलोड करा' : 'Download File') 
-                                : (language === 'mr' ? 'कोणतीही फाईल संलग्न नाही' : 'No file attached')
-                            }
-                            disabled={!hasAttachments(letter)}
-                          >
-                            <FiDownload className="h-4 w-4" />
-                            <span className="ml-1">{language === 'mr' ? 'डाउनलोड' : 'Download'}</span>
-                            
-                            {/* Show badge if multiple files */}
-                            {letter.letterFiles && letter.letterFiles.length > 1 && (
-                              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center font-bold">
-                                {letter.letterFiles.length}
-                              </span>
-                            )}
-                          </button>
-                        </div>
+                          {/* Show badge if multiple files */}
+                          {letter.letterFiles && letter.letterFiles.length > 1 && (
+                            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center font-bold">
+                              {letter.letterFiles.length}
+                            </span>
+                          )}
+                        </button>
+                        
+                        {/* Reply button */}
+                        <button
+                          onClick={() => {
+                            setSelectedReplies(letter.EmailRecords || []);
+                            setReplyModalOpen(true);
+                          }}
+                          className={`relative inline-flex items-center px-3 py-1.5 bg-yellow-600 text-white text-xs font-medium rounded hover:bg-yellow-700 transition-colors shadow-sm`}
+                          title={language === 'mr' ? 'प्राप्त ईमेल पहा' : 'View Received Replies'}
+                          disabled={!letter.EmailRecords || letter.EmailRecords.length === 0}
+                        >
+                          <FiMail className="mr-1 h-4 w-4" />
+                          {language === 'mr' ? 'उत्तर' : 'Replies'}
+                          {letter.EmailRecords && letter.EmailRecords.length > 0 && (
+                            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
+                              {letter.EmailRecords.length}
+                            </span>
+                          )}
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -2141,6 +2182,71 @@ const InwardStaffLetters = () => {
                 {language === 'mr' ? 'कव्हरिंग लेटर तयार होत आहे...' : 'Generating covering letter...'}
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {replyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8 relative max-h-[90vh] overflow-y-auto border border-yellow-200">
+            <button
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 bg-gray-100 rounded-full p-1 shadow"
+              onClick={() => setReplyModalOpen(false)}
+            >
+              <FiX className="h-6 w-6" />
+            </button>
+            <h2 className="text-xl font-bold mb-4 text-yellow-700 text-center">
+              {language === 'mr' ? 'प्राप्त ईमेल्स' : 'Received Replies'}
+            </h2>
+            {selectedReplies.length === 0 ? (
+              <div className="text-center text-gray-500">
+                {language === 'mr' ? 'कोणतेही उत्तर प्राप्त झाले नाही.' : 'No replies received.'}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {selectedReplies.map((reply, idx) => (
+                  <div key={idx} className="mb-8 rounded-lg border border-yellow-200 bg-yellow-50 shadow-sm p-4">
+                    {/* Header: Subject, Sender, Date */}
+                    <div className="mb-2">
+                      <div className="font-bold text-lg text-yellow-900 mb-1">
+                        {reply.subject || (language === 'mr' ? 'विषय उपलब्ध नाही' : 'No Subject')}
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        <span className="font-medium">{language === 'mr' ? 'प्रेषक:' : 'From:'}</span> {reply.from}
+                        <span className="mx-2">|</span>
+                        <span className="font-medium">{language === 'mr' ? 'दिनांक:' : 'Date:'}</span> {new Date(reply.date).toLocaleString()}
+                      </div>
+                    </div>
+                    {/* Email Body */}
+                    <div className="bg-white rounded p-3 my-3 text-gray-800 whitespace-pre-line border border-gray-200">
+                      {cleanEmailText(reply.text)}
+                    </div>
+                    {/* Attachments */}
+                    {reply.attachments && reply.attachments.length > 0 && (
+                      <div className="mt-3">
+                        <div className="font-semibold text-gray-800 mb-1">
+                          {language === 'mr' ? 'संलग्नक:' : 'Attachments:'}
+                        </div>
+                        <ul className="list-disc ml-6">
+                          {reply.attachments.map((att, i) => (
+                            <li key={i}>
+                              <a
+                                href={att.s3Url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-700 hover:underline font-medium"
+                              >
+                                {att.filename}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

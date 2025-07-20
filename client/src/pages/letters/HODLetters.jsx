@@ -670,10 +670,20 @@ const getStatusBadge = (status) => {
         return;
       }
 
+      // Get the original inward_user's email from the letter
+      const originalUserEmail = letter.User?.email || letter.user?.email;
+      
+      if (!originalUserEmail) {
+        alert(language === 'mr' ? 
+          'मूळ वापरकर्त्याची ईमेल सापडली नाही!' : 
+          'Original user email not found!');
+        return;
+      }
+
       // Prepare email data
       const emailData = {
         letterId: letter.id || letter._id,
-        senderEmail: userData?.email || 'hod@police.gov.in',
+        senderEmail: originalUserEmail, // Use the original inward_user's email instead of HOD's email
         recipients: recipients,
         customMessage: '',
         includeCoveringLetter: includeCoveringLetter

@@ -1,54 +1,137 @@
-// models/associations.js - FIXED VERSION WITH HEAD MODEL
+// models/associations.js - FIXED VERSION WITH UNIQUE ALIASES
+const sequelize = require('../config/database');
+
+// Direct imports since these are already defined models, not factory functions
 const InwardPatra = require('./InwardPatra');
-const CoveringLetter = require('./CoveringLetter');
-const User = require('./User');
+const EmailRecord = require('./EmailRecord');
 const File = require('./File');
-const Head = require('./Head'); // Added Head model
+const Head = require('./Head');
+const CoveringLetter = require('./CoveringLetter');
+const User = require('./User'); // You'll need this for associations
 
 // Define associations
 
-// InwardPatra associations
-InwardPatra.belongsTo(User, { foreignKey: 'userId', as: 'User' });
-InwardPatra.belongsTo(File, { as: 'uploadedFile', foreignKey: 'fileId' });
+// InwardPatra - User association
+InwardPatra.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'User'
+});
 
-// One-to-One relationship: InwardPatra has one CoveringLetter
-InwardPatra.hasOne(CoveringLetter, { foreignKey: 'patraId', as: 'coveringLetter' });
-// Also add the direct reference through coveringLetterId
-// InwardPatra.belongsTo(CoveringLetter, { foreignKey: 'coveringLetterId', as: 'coveringLetter' });
+User.hasMany(InwardPatra, {
+  foreignKey: 'userId',
+  as: 'InwardPatras'
+});
 
-// InwardPatra has many Head entries (for signatures)
-InwardPatra.hasMany(Head, { foreignKey: 'patraId', as: 'heads' });
+// InwardPatra - File association (for uploaded file)
+InwardPatra.belongsTo(File, {
+  foreignKey: 'fileId',
+  as: 'uploadedFile'
+});
 
-// CoveringLetter associations
-CoveringLetter.belongsTo(InwardPatra, { foreignKey: 'patraId', as: 'InwardPatra' });
-CoveringLetter.belongsTo(User, { foreignKey: 'userId', as: 'User' });
-CoveringLetter.belongsTo(File, { as: 'attachedFile', foreignKey: 'fileId' });
+File.hasMany(InwardPatra, {
+  foreignKey: 'fileId',
+  as: 'InwardPatras'
+});
 
-// CoveringLetter has many Head entries (for signatures)
-CoveringLetter.hasMany(Head, { foreignKey: 'coveringLetterId', as: 'heads' });
+// InwardPatra - CoveringLetter association (one-to-one via coveringLetterId)
+InwardPatra.belongsTo(CoveringLetter, {
+  foreignKey: 'coveringLetterId',
+  as: 'coveringLetter'
+});
 
-// User associations
-User.hasMany(InwardPatra, { foreignKey: 'userId', as: 'inwardPatras' });
-User.hasMany(CoveringLetter, { foreignKey: 'userId', as: 'coveringLetters' });
+CoveringLetter.hasOne(InwardPatra, {
+  foreignKey: 'coveringLetterId',
+  as: 'patraWithCoveringLetter' // Changed alias to be unique
+});
 
-// User has many Head entries (signatures they've made)
-User.hasMany(Head, { foreignKey: 'userId', as: 'signatures' });
+// CoveringLetter - InwardPatra association (belongs to via patraId)
+CoveringLetter.belongsTo(InwardPatra, {
+  foreignKey: 'patraId',
+  as: 'InwardPatra' // This is OK as it's on CoveringLetter model
+});
 
-// File associations
-File.hasMany(InwardPatra, { foreignKey: 'fileId', as: 'inwardPatras' });
-File.hasMany(CoveringLetter, { foreignKey: 'fileId', as: 'coveringLetters' });
+InwardPatra.hasOne(CoveringLetter, {
+  foreignKey: 'patraId',
+  as: 'generatedCoveringLetter' // Unique alias for the reverse association
+});
 
+// CoveringLetter - User association
+CoveringLetter.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'User'
+});
 
+User.hasMany(CoveringLetter, {
+  foreignKey: 'userId',
+  as: 'CoveringLetters'
+});
 
-// Head associations
-Head.belongsTo(User, { foreignKey: 'userId', as: 'User' });
-Head.belongsTo(InwardPatra, { foreignKey: 'patraId', as: 'InwardPatra' });
-Head.belongsTo(CoveringLetter, { foreignKey: 'coveringLetterId', as: 'coveringLetters' });
+// CoveringLetter - File association (for attached file)
+CoveringLetter.belongsTo(File, {
+  foreignKey: 'fileId',
+  as: 'attachedFile'
+});
 
+File.hasMany(CoveringLetter, {
+  foreignKey: 'fileId',
+  as: 'CoveringLetters'
+});
+
+// Head - InwardPatra association
+Head.belongsTo(InwardPatra, {
+  foreignKey: 'patraId',
+  as: 'InwardPatra'
+});
+
+InwardPatra.hasMany(Head, {
+  foreignKey: 'patraId',
+  as: 'heads'
+});
+
+// Head - CoveringLetter association
+Head.belongsTo(CoveringLetter, {
+  foreignKey: 'coveringLetterId',
+  as: 'CoveringLetter'
+});
+
+CoveringLetter.hasMany(Head, {
+  foreignKey: 'coveringLetterId',
+  as: 'heads'
+});
+
+// Head - User association
+Head.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'User'
+});
+
+User.hasMany(Head, {
+  foreignKey: 'userId',
+  as: 'Heads'
+});
+
+// EmailRecord - InwardPatra association
+InwardPatra.hasMany(EmailRecord, {
+  foreignKey: 'referenceNumber',
+  sourceKey: 'referenceNumber',
+  as: 'EmailRecords',
+  constraints: false // This prevents foreign key constraint in database
+});
+
+EmailRecord.belongsTo(InwardPatra, {
+  foreignKey: 'referenceNumber',
+  targetKey: 'referenceNumber',
+  as: 'InwardPatra',
+  constraints: false // This prevents foreign key constraint in database
+});
+
+// Export all models
 module.exports = {
   InwardPatra,
+  EmailRecord,
+  File,
+  Head,
   CoveringLetter,
   User,
-  File,
-  Head // Added Head to exports
+  sequelize // Export sequelize instance as well
 };
