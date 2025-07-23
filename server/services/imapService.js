@@ -1,5 +1,6 @@
 const Imap = require('imap');
 const { simpleParser } = require('mailparser');
+const nodemailer = require('nodemailer');
 
 class ImapService {
   constructor(config) {
@@ -7,6 +8,61 @@ class ImapService {
     this.imap = null;
     this.isConnected = false;
     this.mailCheckInterval = null;
+    this.smtpTransporter = null;
+  }
+
+  // Initialize SMTP transporter
+  initializeSMTP() {
+    if (!this.smtpTransporter) {
+      this.smtpTransporter = nodemailer.createTransport({
+        host: this.imapConfig.smtpHost || this.imapConfig.host,
+        port: this.imapConfig.smtpPort || 587,
+        secure: this.imapConfig.smtpSecure || false,
+        auth: {
+          user: this.imapConfig.user,
+          pass: this.imapConfig.password
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+    }
+    return this.smtpTransporter;
+  }
+
+  // Send email reply
+  async sendEmailReply(toEmail, subject, body, originalMessageId = null, attachments = []) {
+    try {
+      const transporter = this.initializeSMTP();
+      
+      const mailOptions = {
+        from: this.imapConfig.user,
+        to: toEmail,
+        subject: subject,
+        text: body,
+        html: body,
+        inReplyTo: originalMessageId,
+        references: originalMessageId ? [originalMessageId] : undefined,
+        attachments: attachments.map(att => ({
+          filename: att.filename,
+          path: att.s3Url || att.path,
+          contentType: att.contentType
+        }))
+      };
+
+      console.log('Sending email reply:', {
+        to: toEmail,
+        subject: subject,
+        hasAttachments: attachments.length > 0
+      });
+
+      const result = await transporter.sendMail(mailOptions);
+      console.log('Email sent successfully:', result.messageId);
+      return result;
+    } catch (error) {
+      console.error('Error sending email reply:', error);
+      throw error;
+    }
   }
 
   connect() {

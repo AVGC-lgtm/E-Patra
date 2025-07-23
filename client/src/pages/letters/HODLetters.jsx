@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiEye, FiRefreshCw, FiSearch, FiFileText, FiEdit, FiMail, FiX } from 'react-icons/fi';
+import { FiEye, FiRefreshCw, FiSearch, FiFileText, FiEdit, FiMail, FiX, FiRotateCcw } from 'react-icons/fi';
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
@@ -25,16 +25,16 @@ const HODLetters = () => {
   const [userSignatures, setUserSignatures] = useState([]);
   const [loadingSignatures, setLoadingSignatures] = useState(false);
   const [sendingEmails, setSendingEmails] = useState(new Set()); // Track which letters are being sent
+  const [resendingLetters, setResendingLetters] = useState(new Set()); // Track which letters are being resent
 
-  // Status filter options with translations - REMOVED "sending for head sign"
- // Status filter options with translations - ADDED "sent to head"
-const statusOptions = [
-  { value: 'All', label: language === 'mr' ? 'सर्व स्थिती' : 'All Status' },
-  { value: 'sent to head', label: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'Sent to Head' },
-  { value: 'pending', label: language === 'mr' ? 'प्रलंबित' : 'Pending' },
-  { value: 'approved', label: language === 'mr' ? 'मंजूर' : 'Approved' },
-  { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' }
-];
+  // Status filter options with translations - ADDED "sent to head"
+  const statusOptions = [
+    { value: 'All', label: language === 'mr' ? 'सर्व स्थिती' : 'All Status' },
+    { value: 'sent to head', label: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'Sent to Head' },
+    { value: 'pending', label: language === 'mr' ? 'प्रलंबित' : 'Pending' },
+    { value: 'approved', label: language === 'mr' ? 'मंजूर' : 'Approved' },
+    { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' }
+  ];
 
   // Field labels for the view modal
   const fieldLabels = {
@@ -293,91 +293,174 @@ const statusOptions = [
     }
   };
 
-  // Fetch letters from API
- // Fetch letters from API
-const handleRefresh = async () => {
-  setLoading(true);
-  setError('');
-  try {
-    const token = localStorage.getItem('token');
+  // Function to handle resend letter back to InwardPatras
+  const handleResendLetter = async (letter) => {
+    const letterId = letter.id || letter._id;
     
-    const response = await axios.get('http://localhost:5000/api/patras', {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` })
-      },
-      timeout: 10000
-    });
-    
-    console.log('HOD Letters - Full API Response:', response.data);
-    
-    // Handle different response structures
-    let lettersData = [];
-    
-    if (response.data && response.data.patras && Array.isArray(response.data.patras)) {
-      // New API structure: { message, count, patras: [...] }
-      lettersData = response.data.patras;
-      console.log('HOD Letters - Using patras array from response');
-    } else if (response.data && Array.isArray(response.data)) {
-      // Direct array response: [...]
-      lettersData = response.data;
-      console.log('HOD Letters - Using direct array response');
-    } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-      // Alternative structure: { data: [...] }
-      lettersData = response.data.data;
-      console.log('HOD Letters - Using data array from response');
-    } else if (response.data && response.data.success && Array.isArray(response.data.data)) {
-      // Handle { success, message, data: [...] } structure
-      lettersData = response.data.data;
-      console.log('HOD Letters - Using data array from { success, message, data } response');
-    } else if (
-      response.data &&
-      response.data.data &&
-      response.data.data.patras &&
-      Array.isArray(response.data.data.patras)
-    ) {
-      // Handle { success, message, data: { patras: [...] } } structure
-      lettersData = response.data.data.patras;
-      console.log('HOD Letters - Using patras array from response.data.data.patras');
-    } else {
-      console.error('HOD Letters - Unexpected response structure:', response.data);
-      throw new Error('Invalid data format received from server');
-    }
-    
-    console.log('HOD Letters - All letters received:', lettersData.length);
-    console.log('HOD Letters - Letter statuses:', lettersData.map(l => ({ 
-      id: l.referenceNumber, 
-      status: l.letterStatus 
-    })));
-    
-    setLetters(lettersData);
-  } catch (err) {
-    const errorMessage = err.response?.data?.message || 
-                       err.response?.data?.error ||
-                       err.message || 
-                       'Failed to fetch letters. Please check your connection and try again.';
-    
-    // Handle authentication errors
-    if (err.response?.status === 401 || err.response?.data?.error === 'User not found') {
-      console.error('Authentication error:', err);
-      alert(language === 'mr' ? 
-        'आपली सत्र संपली आहे. कृपया पुन्हा लॉगिन करा.' : 
-        'Your session has expired. Please login again.');
-      localStorage.removeItem('token');
-      localStorage.removeItem('userInfo');
-      localStorage.removeItem('user');
-      navigate('/login');
+    // Check if already resending
+    if (resendingLetters.has(letterId)) {
       return;
     }
     
-    setError(errorMessage);
-    console.error('Error fetching letters:', err);
-    setLetters([]);
-  } finally {
-    setLoading(false);
-  }
-};
+    try {
+      // Show confirmation dialog
+      const confirmResend = window.confirm(
+        language === 'mr' 
+          ? `तुम्हाला खरोखर हे पत्र परत इनवर्ड पत्रांमध्ये पाठवायचे आहे का?\n\nसंदर्भ क्रमांक: ${letter.referenceNumber}\nकार्यालय: ${letter.officeSendingLetter}`
+          : `Are you sure you want to resend this letter back to Inward Letters?\n\nReference No: ${letter.referenceNumber}\nOffice: ${letter.officeSendingLetter}`
+      );
+      
+      if (!confirmResend) {
+        return;
+      }
+      
+      // Set loading state for this specific letter
+      setResendingLetters(prev => new Set(prev).add(letterId));
+      
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        alert(language === 'mr' ? 
+          'कृपया पुन्हा लॉगिन करा!' : 
+          'Please login again!');
+        navigate('/login');
+        return;
+      }
+
+      console.log('Resending letter:', {
+        letterId: letterId,
+        referenceNumber: letter.referenceNumber
+      });
+
+      // Update letter status back to "sending for head sign" to move it back to InwardPatras
+      const response = await axios.put(
+        `http://localhost:5000/api/patras/${letterId}/resend`,
+        {
+          newStatus: 'sending for head sign',
+          reason: 'Resent by HOD back to Inward Staff'
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.status === 200) {
+        const successMessage = language === 'mr' ? 
+          `पत्र यशस्वीरित्या इनवर्ड पत्रांमध्ये परत पाठवले गेले!\n\nसंदर्भ क्रमांक: ${letter.referenceNumber}` : 
+          `Letter successfully resent to Inward Letters!\n\nReference No: ${letter.referenceNumber}`;
+        
+        alert(successMessage);
+        
+        // Refresh letters to remove it from HOD list
+        handleRefresh();
+      }
+    } catch (error) {
+      console.error('Error resending letter:', error);
+      
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.message || 
+                          'Failed to resend letter';
+      
+      alert(language === 'mr' ? 
+        `पत्र परत पाठवण्यात त्रुटी: ${errorMessage}` : 
+        `Error resending letter: ${errorMessage}`);
+    } finally {
+      // Clear loading state for this letter
+      setResendingLetters(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(letterId);
+        return newSet;
+      });
+    }
+  };
+
+  // Fetch letters from API
+  const handleRefresh = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await axios.get('http://localhost:5000/api/patras', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        timeout: 10000
+      });
+      
+      console.log('HOD Letters - Full API Response:', response.data);
+      
+      // Handle different response structures
+      let lettersData = [];
+      
+      if (response.data && response.data.patras && Array.isArray(response.data.patras)) {
+        // New API structure: { message, count, patras: [...] }
+        lettersData = response.data.patras;
+        console.log('HOD Letters - Using patras array from response');
+      } else if (response.data && Array.isArray(response.data)) {
+        // Direct array response: [...]
+        lettersData = response.data;
+        console.log('HOD Letters - Using direct array response');
+      } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+        // Alternative structure: { data: [...] }
+        lettersData = response.data.data;
+        console.log('HOD Letters - Using data array from response');
+      } else if (response.data && response.data.success && Array.isArray(response.data.data)) {
+        // Handle { success, message, data: [...] } structure
+        lettersData = response.data.data;
+        console.log('HOD Letters - Using data array from { success, message, data } response');
+      } else if (
+        response.data &&
+        response.data.data &&
+        response.data.data.patras &&
+        Array.isArray(response.data.data.patras)
+      ) {
+        // Handle { success, message, data: { patras: [...] } } structure
+        lettersData = response.data.data.patras;
+        console.log('HOD Letters - Using patras array from response.data.data.patras');
+      } else {
+        console.error('HOD Letters - Unexpected response structure:', response.data);
+        throw new Error('Invalid data format received from server');
+      }
+      
+      console.log('HOD Letters - All letters received:', lettersData.length);
+      console.log('HOD Letters - Letter statuses:', lettersData.map(l => ({ 
+        id: l.referenceNumber, 
+        status: l.letterStatus 
+      })));
+      
+      setLetters(lettersData);
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || 
+                         err.response?.data?.error ||
+                         err.message || 
+                         'Failed to fetch letters. Please check your connection and try again.';
+      
+      // Handle authentication errors
+      if (err.response?.status === 401 || err.response?.data?.error === 'User not found') {
+        console.error('Authentication error:', err);
+        alert(language === 'mr' ? 
+          'आपली सत्र संपली आहे. कृपया पुन्हा लॉगिन करा.' : 
+          'Your session has expired. Please login again.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('userInfo');
+        localStorage.removeItem('user');
+        navigate('/login');
+        return;
+      }
+      
+      setError(errorMessage);
+      console.error('Error fetching letters:', err);
+      setLetters([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Fetch data on component mount
   useEffect(() => {
@@ -410,147 +493,144 @@ const handleRefresh = async () => {
   };
 
   // Filter letters based on search term and status
-  // Only show letters that have been sent to HOD (pending, approved, rejected)
-// Filter letters based on search term and status
-// Only show letters that have been sent to HOD (sent to head, pending, approved, rejected)
-const filteredLetters = letters.filter(letter => {
-  const letterStatus = letter.letterStatus || letter.letter_status || letter.status || '';
-  
-  // Debug logging
-  console.log('HOD Filter - Letter:', letter.referenceNumber, 'Status:', letterStatus);
-  
-  // Exclude letters with "sending for head sign" status
-  if (isSendingForHeadSign(letterStatus)) {
-    console.log('HOD Filter - Excluding letter:', letter.referenceNumber, 'Status is sending for head sign');
-    return false;
-  }
-  
-  // FIXED: Include letters with sent to head, pending, approved, or rejected status
-  const statusLower = letterStatus.toLowerCase();
-  const allowedStatuses = [
-    'sent to head',        // ✅ When staff sends to HOD
-    'pending',             // ✅ When HOD needs to review
-    'approved',            // ✅ When HOD approves
-    'rejected',            // ✅ When HOD rejects
-    'प्रमुखांकडे पाठवले',    // ✅ Marathi for "sent to head"
-    'प्रलंबित',            // ✅ Marathi for "pending"
-    'मंजूर',               // ✅ Marathi for "approved"
-    'नाकारले'              // ✅ Marathi for "rejected"
-  ];
-  
-  const hasAllowedStatus = allowedStatuses.some(s => 
-    statusLower === s.toLowerCase() || letterStatus === s
-  );
-  
-  if (!hasAllowedStatus && letterStatus !== '') {
-    console.log('HOD Filter - Excluding letter:', letter.referenceNumber, 'Status not allowed:', letterStatus);
-    return false;
-  }
+  // Only show letters that have been sent to HOD (sent to head, pending, approved, rejected)
+  const filteredLetters = letters.filter(letter => {
+    const letterStatus = letter.letterStatus || letter.letter_status || letter.status || '';
+    
+    // Debug logging
+    console.log('HOD Filter - Letter:', letter.referenceNumber, 'Status:', letterStatus);
+    
+    // Exclude letters with "sending for head sign" status
+    if (isSendingForHeadSign(letterStatus)) {
+      console.log('HOD Filter - Excluding letter:', letter.referenceNumber, 'Status is sending for head sign');
+      return false;
+    }
+    
+    // FIXED: Include letters with sent to head, pending, approved, or rejected status
+    const statusLower = letterStatus.toLowerCase();
+    const allowedStatuses = [
+      'sent to head',        // ✅ When staff sends to HOD
+      'pending',             // ✅ When HOD needs to review
+      'approved',            // ✅ When HOD approves
+      'rejected',            // ✅ When HOD rejects
+      'प्रमुखांकडे पाठवले',    // ✅ Marathi for "sent to head"
+      'प्रलंबित',            // ✅ Marathi for "pending"
+      'मंजूर',               // ✅ Marathi for "approved"
+      'नाकारले'              // ✅ Marathi for "rejected"
+    ];
+    
+    const hasAllowedStatus = allowedStatuses.some(s => 
+      statusLower === s.toLowerCase() || letterStatus === s
+    );
+    
+    if (!hasAllowedStatus && letterStatus !== '') {
+      console.log('HOD Filter - Excluding letter:', letter.referenceNumber, 'Status not allowed:', letterStatus);
+      return false;
+    }
 
-  const searchableFields = [
-    letter.referenceNumber,
-    letter.senderNameAndDesignation,
-    letter.officeSendingLetter,
-    letter.subject
-  ].join(' ').toLowerCase();
+    const searchableFields = [
+      letter.referenceNumber,
+      letter.senderNameAndDesignation,
+      letter.officeSendingLetter,
+      letter.subject
+    ].join(' ').toLowerCase();
 
-  const matchesSearch = searchTerm === '' || 
-    searchableFields.includes(searchTerm.toLowerCase());
-  
-  const matchesStatus = statusFilter === 'All' || 
-    statusLower === statusFilter.toLowerCase() ||
-    (statusFilter === 'sent to head' && (statusLower === 'sent to head' || letterStatus === 'प्रमुखांकडे पाठवले')) ||
-    (statusFilter === 'pending' && (statusLower === 'pending' || letterStatus === 'प्रलंबित')) ||
-    (statusFilter === 'approved' && (statusLower === 'approved' || letterStatus === 'मंजूर')) ||
-    (statusFilter === 'rejected' && (statusLower === 'rejected' || letterStatus === 'नाकारले'));
+    const matchesSearch = searchTerm === '' || 
+      searchableFields.includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'All' || 
+      statusLower === statusFilter.toLowerCase() ||
+      (statusFilter === 'sent to head' && (statusLower === 'sent to head' || letterStatus === 'प्रमुखांकडे पाठवले')) ||
+      (statusFilter === 'pending' && (statusLower === 'pending' || letterStatus === 'प्रलंबित')) ||
+      (statusFilter === 'approved' && (statusLower === 'approved' || letterStatus === 'मंजूर')) ||
+      (statusFilter === 'rejected' && (statusLower === 'rejected' || letterStatus === 'नाकारले'));
 
-  const shouldInclude = matchesSearch && matchesStatus && hasAllowedStatus;
-  if (shouldInclude) {
-    console.log('HOD Filter - Including letter:', letter.referenceNumber, 'Status:', letterStatus);
-  }
-  
-  return shouldInclude;
-});
+    const shouldInclude = matchesSearch && matchesStatus && hasAllowedStatus;
+    if (shouldInclude) {
+      console.log('HOD Filter - Including letter:', letter.referenceNumber, 'Status:', letterStatus);
+    }
+    
+    return shouldInclude;
+  });
 
   const totalPages = Math.ceil(filteredLetters.length / recordsPerPage);
   const paginatedLetters = filteredLetters.slice((currentPage - 1) * recordsPerPage, currentPage * recordsPerPage);
 
   // Helper function to get status badge styling
- // Helper function to get status badge styling
-const getStatusBadge = (status) => {
-  const statusLower = status?.toLowerCase() || 'pending';
-  
-  const statusConfig = {
-    'sent to head': {
-      bg: 'bg-blue-100',
-      text: 'text-blue-800',
-      label: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'Sent to Head'
-    },
-    'प्रमुखांकडे पाठवले': {
-      bg: 'bg-blue-100',
-      text: 'text-blue-800',
-      label: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'Sent to Head'
-    },
-    pending: {
-      bg: 'bg-yellow-100',
-      text: 'text-yellow-800',
-      label: language === 'mr' ? 'प्रलंबित' : 'Pending'
-    },
-    'प्रलंबित': {
-      bg: 'bg-yellow-100',
-      text: 'text-yellow-800',
-      label: language === 'mr' ? 'प्रलंबित' : 'Pending'
-    },
-    approved: {
-      bg: 'bg-green-100',
-      text: 'text-green-800',
-      label: language === 'mr' ? 'मंजूर' : 'Approved'
-    },
-    'मंजूर': {
-      bg: 'bg-green-100',
-      text: 'text-green-800',
-      label: language === 'mr' ? 'मंजूर' : 'Approved'
-    },
-    rejected: {
-      bg: 'bg-red-100',
-      text: 'text-red-800',
-      label: language === 'mr' ? 'नाकारले' : 'Rejected'
-    },
-    'नाकारले': {
-      bg: 'bg-red-100',
-      text: 'text-red-800',
-      label: language === 'mr' ? 'नाकारले' : 'Rejected'
-    },
-    'sending for head sign': {
-      bg: 'bg-orange-100',
-      text: 'text-orange-800',
-      label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी' : 'For Head Sign'
-    },
-    'प्रमुख स्वाक्षरीसाठी': {
-      bg: 'bg-orange-100',
-      text: 'text-orange-800',
-      label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी' : 'For Head Sign'
-    }
-  };
+  const getStatusBadge = (status) => {
+    const statusLower = status?.toLowerCase() || 'pending';
+    
+    const statusConfig = {
+      'sent to head': {
+        bg: 'bg-blue-100',
+        text: 'text-blue-800',
+        label: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'Sent to Head'
+      },
+      'प्रमुखांकडे पाठवले': {
+        bg: 'bg-blue-100',
+        text: 'text-blue-800',
+        label: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'Sent to Head'
+      },
+      pending: {
+        bg: 'bg-yellow-100',
+        text: 'text-yellow-800',
+        label: language === 'mr' ? 'प्रलंबित' : 'Pending'
+      },
+      'प्रलंबित': {
+        bg: 'bg-yellow-100',
+        text: 'text-yellow-800',
+        label: language === 'mr' ? 'प्रलंबित' : 'Pending'
+      },
+      approved: {
+        bg: 'bg-green-100',
+        text: 'text-green-800',
+        label: language === 'mr' ? 'मंजूर' : 'Approved'
+      },
+      'मंजूर': {
+        bg: 'bg-green-100',
+        text: 'text-green-800',
+        label: language === 'mr' ? 'मंजूर' : 'Approved'
+      },
+      rejected: {
+        bg: 'bg-red-100',
+        text: 'text-red-800',
+        label: language === 'mr' ? 'नाकारले' : 'Rejected'
+      },
+      'नाकारले': {
+        bg: 'bg-red-100',
+        text: 'text-red-800',
+        label: language === 'mr' ? 'नाकारले' : 'Rejected'
+      },
+      'sending for head sign': {
+        bg: 'bg-orange-100',
+        text: 'text-orange-800',
+        label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी' : 'For Head Sign'
+      },
+      'प्रमुख स्वाक्षरीसाठी': {
+        bg: 'bg-orange-100',
+        text: 'text-orange-800',
+        label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी' : 'For Head Sign'
+      }
+    };
 
-  // Check for exact match first
-  if (statusConfig[status]) {
+    // Check for exact match first
+    if (statusConfig[status]) {
+      return (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig[status].bg} ${statusConfig[status].text}`}>
+          {statusConfig[status].label}
+        </span>
+      );
+    }
+
+    // Then check lowercase
+    const config = statusConfig[statusLower] || statusConfig.pending;
+    
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig[status].bg} ${statusConfig[status].text}`}>
-        {statusConfig[status].label}
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
+        {config.label}
       </span>
     );
-  }
-
-  // Then check lowercase
-  const config = statusConfig[statusLower] || statusConfig.pending;
-  
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
-      {config.label}
-    </span>
-  );
-};
+  };
 
   // Handle attach sign action
   const handleAttachSign = async (letterId) => {
@@ -847,6 +927,9 @@ const getStatusBadge = (status) => {
                     <th scope="col" className="px-8 py-4 text-center text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                       {language === 'mr' ? 'ईमेल पाठवा' : 'Send Mail'}
                     </th>
+                    <th scope="col" className="px-8 py-4 text-center text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
+                      {language === 'mr' ? 'परत पाठवा' : 'Resend'}
+                    </th>
                     <th scope="col" className="px-8 py-4 text-right text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                       {language === 'mr' ? 'क्रिया' : 'Actions'}
                     </th>
@@ -906,6 +989,37 @@ const getStatusBadge = (status) => {
                         ) : (
                           <span className="text-gray-400 text-xs">
                             {language === 'mr' ? 'पाठवले नाही' : 'Not Sent'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-8 py-4 whitespace-nowrap text-center text-sm font-medium">
+                        {/* Resend Button - Show for all letters except approved ones */}
+                        {letter.letterStatus !== 'approved' && letter.letterStatus !== 'मंजूर' ? (
+                          <button
+                            onClick={() => handleResendLetter(letter)}
+                            disabled={resendingLetters.has(letter.id || letter._id)}
+                            className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                              resendingLetters.has(letter.id || letter._id)
+                                ? 'bg-gray-400 text-white cursor-not-allowed'
+                                : 'bg-orange-600 text-white hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500'
+                            }`}
+                            title={language === 'mr' ? 'पत्र परत इनवर्ड पत्रांमध्ये पाठवा' : 'Resend letter back to Inward Letters'}
+                          >
+                            {resendingLetters.has(letter.id || letter._id) ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                {language === 'mr' ? 'पाठवत आहे...' : 'Resending...'}
+                              </>
+                            ) : (
+                              <>
+                                <FiRotateCcw className="mr-2 h-4 w-4" />
+                                {language === 'mr' ? 'परत पाठवा' : 'Resend'}
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">
+                            {language === 'mr' ? 'मंजूर' : 'Approved'}
                           </span>
                         )}
                       </td>

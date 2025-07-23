@@ -439,3 +439,199 @@ exports.testConnection = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+// Get email details for replying (from EmailRecords database)
+exports.getEmailDetails = async (req, res) => {
+  try {
+    const { emailId } = req.params;
+    
+    if (!emailId) {
+      return res.status(400).json({ success: false, error: 'Email ID is required' });
+    }
+
+    // Get email from EmailRecords database
+    const emailRecord = await EmailRecord.findByPk(emailId);
+    
+    if (!emailRecord) {
+      return res.status(404).json({ success: false, error: 'Email not found' });
+    }
+
+    // Extract email address from the "from" field
+    let fromEmail = '';
+    if (emailRecord.from) {
+      const emailMatch = emailRecord.from.match(/<(.+?)>/);
+      if (emailMatch) {
+        fromEmail = emailMatch[1];
+      } else {
+        // If no angle brackets, try to extract email from the text
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+        const match = emailRecord.from.match(emailRegex);
+        if (match) {
+          fromEmail = match[0];
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      email: {
+        id: emailRecord.id,
+        messageId: emailRecord.messageId,
+        subject: emailRecord.subject,
+        from: emailRecord.from,
+        fromEmail: fromEmail,
+        date: emailRecord.date,
+        text: emailRecord.text,
+        html: emailRecord.html,
+        attachments: emailRecord.attachments || [],
+        referenceNumber: emailRecord.referenceNumber
+      }
+    });
+  } catch (error) {
+    console.error('Error getting email details:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Get all emails for a specific reference number
+exports.getEmailsByReference = async (req, res) => {
+  try {
+    const { referenceNumber } = req.params;
+    
+    console.log('🔍 Searching for emails with reference number:', referenceNumber);
+    
+    if (!referenceNumber) {
+      return res.status(400).json({ success: false, error: 'Reference number is required' });
+    }
+
+    const emails = await EmailRecord.findAll({
+      where: { referenceNumber },
+      order: [['date', 'ASC']]
+    });
+
+    console.log(`📧 Found ${emails.length} emails for reference ${referenceNumber}`);
+    emails.forEach((email, index) => {
+      console.log(`  ${index + 1}. Subject: ${email.subject}, From: ${email.from}, Date: ${email.date}`);
+    });
+
+    res.json({
+      success: true,
+      data: emails.map(email => ({
+        id: email.id,
+        messageId: email.messageId,
+        subject: email.subject,
+        from: email.from,
+        date: email.date,
+        text: email.text,
+        html: email.html,
+        attachments: email.attachments || [],
+        referenceNumber: email.referenceNumber
+      }))
+    });
+  } catch (error) {
+    console.error('Error getting emails by reference:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Send email reply
+exports.sendEmailReply = async (req, res) => {
+  try {
+    const { 
+      emailId,           // ID of the EmailRecord to reply to
+      toEmail,           // Email address to send reply to
+      subject,           // Custom subject
+      body,              // Custom body
+      attachments = [],  // Optional attachments
+      referenceNumber    // Reference number for linking
+    } = req.body;
+
+    // Validate required fields
+    if (!emailId || !toEmail || !subject || !body) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'emailId, toEmail, subject, and body are required' 
+      });
+    }
+
+    // Get the original email record
+    const originalEmail = await EmailRecord.findByPk(emailId);
+    if (!originalEmail) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Original email not found' 
+      });
+    }
+
+    await ensureImapConnected();
+
+    console.log('Sending email reply:', {
+      emailId,
+      toEmail,
+      subject,
+      bodyLength: body.length,
+      originalMessageId: originalEmail.messageId,
+      attachmentsCount: attachments.length,
+      referenceNumber: referenceNumber || originalEmail.referenceNumber
+    });
+
+    // Send the email
+    const result = await imapService.sendEmailReply(
+      toEmail,
+      subject,
+      body,
+      originalEmail.messageId, // Use original message ID for threading
+      attachments
+    );
+
+    // Create a record of the sent email
+    const replyReferenceNumber = referenceNumber || originalEmail.referenceNumber;
+    if (replyReferenceNumber) {
+      try {
+        const patraExists = await InwardPatra.findOne({ 
+          where: { referenceNumber: replyReferenceNumber } 
+        });
+        
+        if (patraExists) {
+          await EmailRecord.create({
+            referenceNumber: replyReferenceNumber,
+            subject: subject,
+            from: imapConfig.user,
+            date: new Date(),
+            text: body,
+            html: body,
+            messageId: result.messageId,
+            inReplyTo: originalEmail.messageId,
+            references: originalEmail.messageId,
+            attachments: attachments.map(att => ({
+              filename: att.filename,
+              contentType: att.contentType,
+              size: att.size,
+              s3Url: att.s3Url
+            }))
+          });
+          
+          console.log(`✅ Reply email record created for reference ${replyReferenceNumber}`);
+        }
+      } catch (dbError) {
+        console.error('Error saving reply email record:', dbError);
+        // Don't fail the email send if database save fails
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Email reply sent successfully',
+      messageId: result.messageId,
+      referenceNumber: replyReferenceNumber,
+      originalEmailId: emailId
+    });
+
+  } catch (error) {
+    console.error('Error sending email reply:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to send email reply' 
+    });
+  }
+};
