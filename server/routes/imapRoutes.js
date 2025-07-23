@@ -10,4 +10,9 @@ router.get('/fetch-all', imapController.fetchAllEmails);
 router.get('/search-by-reference', imapController.searchByReferenceNumber);
 router.get('/inward-patra-with-replies', imapController.getInwardPatraWithReplies);
 
-module.exports = router; 
+// New routes for email reply functionality (working with EmailRecords)
+router.get('/email/:emailId', imapController.getEmailDetails);
+router.get('/emails/reference/:referenceNumber', imapController.getEmailsByReference);
+router.post('/reply', imapController.sendEmailReply);
+
+module.exports = router;           

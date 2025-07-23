@@ -811,6 +811,123 @@ const getEmailConversation = async (req, res) => {
   }
 };
 
+
+
+
+// Add this method to your InwardPatraController.js file
+
+
+// Updated resendLetter method for InwardPatraController.js
+
+// Resend letter back to Inward Letters (HOD action)
+const resendLetter = async (req, res) => {
+  const { id } = req.params;
+  const { newStatus, reason } = req.body;
+
+  // Start a database transaction for data consistency
+  const transaction = await sequelize.transaction();
+
+  try {
+    // Find the patra
+    const patra = await InwardPatra.findByPk(id, { transaction });
+    
+    if (!patra) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Patra not found' });
+    }
+
+    // Validate current status - only allow resending if not already approved
+    if (patra.letterStatus === 'approved' || patra.letterStatus === 'मंजूर') {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        error: 'Cannot resend an approved letter',
+        message: 'Approved letters cannot be sent back to Inward Letters'
+      });
+    }
+
+    // Get current resend count
+    const currentResendCount = patra.resendCount || 0;
+
+    // Update the letter status and add metadata about the resend action
+    const updateData = {
+      letterStatus: newStatus || 'sending for head sign',
+      previousStatus: patra.letterStatus,
+      resendReason: reason || 'Resent by HOD back to Inward Staff',
+      resendAt: new Date(),
+      resendBy: req.user?.id || null, // If you have auth middleware that sets req.user
+      resendByEmail: req.user?.email || null,
+      resendByName: req.user?.name || null,
+      resendByRole: 'HOD',
+      resendCount: currentResendCount + 1 // Increment resend count
+    };
+
+    await patra.update(updateData, { transaction });
+
+    // Log the resend action (optional - for audit trail)
+    console.log(`Letter ${patra.referenceNumber} resent by HOD. Resend count: ${updateData.resendCount}`);
+
+    // Create an audit log entry if you have an audit table
+    /*
+    if (AuditLog) {
+      await AuditLog.create({
+        action: 'LETTER_RESEND',
+        entityType: 'InwardPatra',
+        entityId: patra.id,
+        referenceNumber: patra.referenceNumber,
+        previousStatus: patra.letterStatus,
+        newStatus: updateData.letterStatus,
+        reason: updateData.resendReason,
+        resendCount: updateData.resendCount,
+        performedBy: req.user?.id,
+        performedByEmail: req.user?.email,
+        performedAt: new Date()
+      }, { transaction });
+    }
+    */
+
+    // Commit the transaction
+    await transaction.commit();
+
+    // Fetch the updated patra with all associations
+    const updatedPatra = await InwardPatra.findByPk(id, {
+      include: [
+        getUserInclude(),
+        getUploadedFileInclude(),
+        getCoveringLetterInclude(),
+        getEmailRecordsInclude()
+      ]
+    });
+
+    return res.status(200).json({ 
+      success: true,
+      message: 'Letter successfully resent to Inward Letters',
+      data: {
+        letterStatus: updatedPatra.letterStatus,
+        previousStatus: updateData.previousStatus,
+        resendReason: updateData.resendReason,
+        resendAt: updateData.resendAt,
+        resendCount: updatedPatra.resendCount,
+        patra: updatedPatra
+      }
+    });
+
+  } catch (error) {
+    // Rollback transaction on error
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    
+    console.error('Error resending letter:', error);
+    return res.status(500).json({ 
+      error: 'Server error', 
+      message: 'Failed to resend letter',
+      details: error.message 
+    });
+  }
+};
+
+
+
 module.exports = {
   createPatra,
   getAllPatras,
@@ -820,6 +937,7 @@ module.exports = {
   deletePatraById,
   updatePatraById,
   getPatraByUserIdAndPatraId,
+  resendLetter,
   updateLetterStatus,
   sendToHOD,
   approveLetter,

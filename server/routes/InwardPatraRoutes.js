@@ -28,6 +28,10 @@ router.put('/:id/send-to-hod', patraController.sendToHOD);
 // Approve letter (HOD action) (MUST BE BEFORE /:id route)
 router.put('/:id/approve', patraController.approveLetter);
 
+// Resend letter back to Inward Letters (HOD action) (MUST BE BEFORE /:id route)
+router.put('/:id/resend', patraController.resendLetter);
+
+
 // Get a Patra by ID with complete covering letter data
 router.get('/:id', patraController.getPatraById);
 

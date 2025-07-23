@@ -77,5 +77,10 @@ module.exports.imap = {
   host: 'imap.gmail.com',
   port: 993,
   tls: true,
-  tlsOptions: { rejectUnauthorized: false }
+  tlsOptions: { rejectUnauthorized: false },
+  // SMTP settings for sending emails
+  smtpHost: 'smtp.gmail.com',
+  smtpPort: 587,
+  smtpSecure: false,
+  checkInterval: 30000 // Check for new emails every 30 seconds
 };

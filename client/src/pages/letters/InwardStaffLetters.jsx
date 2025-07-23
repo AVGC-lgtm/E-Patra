@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink, FiFileText, FiSend, FiDownload, FiTrash2, FiPlus, FiUpload, FiMail } from 'react-icons/fi';
+import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink, FiFileText, FiSend, FiDownload, FiTrash2, FiPlus, FiUpload, FiMail, FiEdit, FiRotateCcw, FiCornerUpLeft } from 'react-icons/fi';
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
@@ -36,7 +36,21 @@ const InwardStaffLetters = () => {
   const [generatingCoveringLetter, setGeneratingCoveringLetter] = useState(false);
   const [replyModalOpen, setReplyModalOpen] = useState(false);
   const [selectedReplies, setSelectedReplies] = useState([]);
-  
+  const [emailReplyModalOpen, setEmailReplyModalOpen] = useState(false);
+  const [selectedEmailForReply, setSelectedEmailForReply] = useState(null);
+  const [replyFormData, setReplyFormData] = useState({
+    subject: '',
+    body: ''
+  });
+  const [sendingReply, setSendingReply] = useState(false);
+  const [coveringLetterModalOpen, setCoveringLetterModalOpen] = useState(false);
+  const [selectedLetterForCovering, setSelectedLetterForCovering] = useState(null);
+  const [signaturesModalOpen, setSignaturesModalOpen] = useState(false);
+  const [userSignatures, setUserSignatures] = useState([]);
+  const [loadingSignatures, setLoadingSignatures] = useState(false);
+  const [sendingEmails, setSendingEmails] = useState(new Set()); // Track which letters are being sent
+  const [resendingLetters, setResendingLetters] = useState(new Set()); // Track which letters are being resent
+
   // Status filter options with translations
   const statusOptions = [
     { value: 'All', label: language === 'mr' ? 'सर्व स्थिती' : 'All Status' },
@@ -1039,13 +1053,289 @@ const InwardStaffLetters = () => {
     window.open(url, '_blank');
   };
 
+  // Function to clean email text
   function cleanEmailText(text) {
+    if (!text) return '';
     return text
-      .split('\n')
-      .map(line => line.replace(/^>+\s?/, '').trim()) // Remove leading > and whitespace
-      .filter(line => line && !line.startsWith('This is an automated notification')) // Remove notification lines
-      .join('\n');
+      .replace(/>/g, '')
+      .replace(/^\s*>\s*/gm, '')
+      .replace(/\n\s*\n/g, '\n\n')
+      .trim();
   }
+
+  // Function to split reply and original email content
+  function splitReplyAndOriginal(text) {
+    if (!text) return { reply: '', original: '' };
+    
+    const lines = text.split('\n');
+    const replyLines = [];
+    const originalLines = [];
+    let inOriginal = false;
+    
+    for (const line of lines) {
+      if (line.includes('On ') && line.includes(' wrote:') && line.includes('@')) {
+        inOriginal = true;
+        originalLines.push(line);
+      } else if (inOriginal) {
+        originalLines.push(line);
+      } else {
+        replyLines.push(line);
+      }
+    }
+    
+    return {
+      reply: cleanEmailText(replyLines.join('\n')),
+      original: cleanEmailText(originalLines.join('\n'))
+    };
+  }
+
+  // Function to handle reply button click
+  const handleReplyClick = (email) => {
+    setSelectedEmailForReply(email);
+    
+    // Pre-fill the reply form with default values
+    const defaultSubject = `Re: ${email.subject || 'Inward Letter Reply'}`;
+    const defaultBody = `Dear ${extractNameFromEmail(email.from)},\n\nThank you for your email.\n\nBest regards,\nPolice Department`;
+    
+    setReplyFormData({
+      subject: defaultSubject,
+      body: defaultBody
+    });
+    
+    setEmailReplyModalOpen(true);
+  };
+
+  // Function to extract name from email address
+  const extractNameFromEmail = (fromField) => {
+    if (!fromField) return 'Sir/Madam';
+    
+    // Try to extract name from "Name <email>" format
+    const nameMatch = fromField.match(/^"([^"]+)"\s*</);
+    if (nameMatch) {
+      return nameMatch[1];
+    }
+    
+    // Try to extract name from "Name <email>" format without quotes
+    const nameMatch2 = fromField.match(/^([^<]+)\s*</);
+    if (nameMatch2) {
+      return nameMatch2[1].trim();
+    }
+    
+    // Extract email address and use it
+    const emailMatch = fromField.match(/<(.+?)>/);
+    if (emailMatch) {
+      return emailMatch[1].split('@')[0];
+    }
+    
+    return 'Sir/Madam';
+  };
+
+  // Function to extract email address from from field
+  const extractEmailAddress = (fromField) => {
+    if (!fromField) return '';
+    
+    const emailMatch = fromField.match(/<(.+?)>/);
+    if (emailMatch) {
+      return emailMatch[1];
+    }
+    
+    // If no angle brackets, try to find email in the text
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+    const match = fromField.match(emailRegex);
+    if (match) {
+      return match[0];
+    }
+    
+    return '';
+  };
+
+  // Function to handle reply form submission
+  const handleReplySubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!selectedEmailForReply) {
+      alert(language === 'mr' ? 'ईमेल निवडले नाही' : 'No email selected');
+      return;
+    }
+
+    const toEmail = extractEmailAddress(selectedEmailForReply.from);
+    if (!toEmail) {
+      alert(language === 'mr' ? 'प्राप्तकर्त्याची ईमेल सापडली नाही' : 'Recipient email not found');
+      return;
+    }
+
+    setSendingReply(true);
+    
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await axios.post(
+        'http://localhost:5000/api/imap/reply',
+        {
+          emailId: selectedEmailForReply.id,
+          toEmail: toEmail,
+          subject: replyFormData.subject,
+          body: replyFormData.body,
+          referenceNumber: selectedEmailForReply.referenceNumber
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.success) {
+        alert(language === 'mr' ? 
+          'ईमेल यशस्वीरित्या पाठवले गेले!' : 
+          'Email sent successfully!');
+        
+        // Close modals and reset form
+        setEmailReplyModalOpen(false);
+        setReplyModalOpen(false);
+        setReplyFormData({ subject: '', body: '' });
+        setSelectedEmailForReply(null);
+        
+        // Refresh the letters to show updated email records
+        handleRefresh();
+      } else {
+        throw new Error(response.data.error || 'Failed to send email');
+      }
+    } catch (error) {
+      console.error('Error sending reply:', error);
+      alert(language === 'mr' ? 
+        `ईमेल पाठवण्यात त्रुटी: ${error.message}` : 
+        `Error sending email: ${error.message}`);
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
+  // Function to handle reply form input changes
+  const handleReplyFormChange = (e) => {
+    const { name, value } = e.target;
+    setReplyFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Function to check if an email has been replied to
+  const hasBeenRepliedTo = (email, thread) => {
+    if (!email || !thread) return false;
+    
+    // Don't hide reply button for the parent email (first email in thread)
+    // Only hide reply button for child emails
+    if (email.id === thread.original.id) {
+      return false; // This is the parent, always show reply button
+    }
+    
+    // Hide reply button for all child emails
+    return true;
+  };
+
+  // Function to check if an email is a reply
+  const isReplyEmail = (email) => {
+    if (!email) return false;
+    const subject = email.subject || '';
+    return subject.toLowerCase().includes('re:') && subject.toLowerCase().startsWith('re:');
+  };
+
+  // Function to get the original subject from a reply
+  const getOriginalSubjectFromReply = (replySubject) => {
+    if (!replySubject) return '';
+    return replySubject.replace(/^re:\s*/i, '').trim();
+  };
+
+  const extractCleanSubject = (subject) => {
+    if (!subject) return '';
+    // Remove common reply prefixes and clean the subject
+    return subject
+      .replace(/^re:\s*/gi, '')
+      .replace(/^fw:\s*/gi, '')
+      .replace(/^fwd:\s*/gi, '')
+      .trim()
+      .toLowerCase();
+  };
+
+  // Function to determine if an email should show reply button
+  const shouldShowReplyButton = (email, thread) => {
+    if (!email || !thread) return false;
+    
+    // Don't show reply button if this email has already been replied to
+    if (hasBeenRepliedTo(email, thread)) {
+      return false;
+    }
+    
+    // Show reply button only for the parent email (first email in the thread)
+    if (email.id === thread.original.id) {
+      return true; // This is the parent email, show reply button
+    }
+    
+    // Hide reply button for all child emails
+    return false;
+  };
+
+  // Function to organize emails in conversation threads (simple and clear version)
+  const organizeEmailsInThreadImproved = (emails) => {
+    if (!emails || emails.length === 0) return [];
+    
+    console.log('=== Email Organization Debug ===');
+    console.log('Total emails received:', emails.length);
+    console.log('Emails:', emails.map(e => ({ 
+      subject: e.subject, 
+      from: e.from, 
+      date: e.date, 
+      referenceNumber: e.referenceNumber 
+    })));
+    
+    // Sort all emails by date (oldest first)
+    const sortedEmails = [...emails].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // The FIRST email is ALWAYS the parent
+    const parentEmail = sortedEmails[0];
+    
+    // ALL other emails are children
+    const childEmails = sortedEmails.slice(1);
+    
+    console.log('Parent Email:', parentEmail.subject);
+    console.log('Child Emails:', childEmails.map(e => e.subject));
+    console.log('=====================================');
+    
+    // Create a SINGLE thread with parent and children
+    const thread = {
+      conversationKey: `single_thread_${parentEmail.id}`,
+      original: parentEmail,
+      replies: childEmails.map(email => ({
+        email: email,
+        children: []
+      })),
+      emailsWithReplies: new Set(childEmails.map(e => e.id)),
+      allEmails: sortedEmails
+    };
+    
+    console.log('Created single thread:', thread);
+    
+    return [thread]; // Return array with single thread
+  };
+
+  // Fallback function for organizing emails
+  const organizeEmailsInThread = (emails) => {
+    try {
+      return organizeEmailsInThreadImproved(emails);
+    } catch (error) {
+      console.error('Error organizing emails in thread:', error);
+      // Fallback: return emails as individual threads
+      return emails.map(email => ({
+        conversationKey: email.id,
+        original: email,
+        replies: [],
+        emailsWithReplies: new Set(),
+        allEmails: [email]
+      }));
+    }
+  };
 
   return (
     <div className="p-6">
@@ -1210,69 +1500,101 @@ const InwardStaffLetters = () => {
                         )}
                       </td>
                       <td className="px-8 py-4 whitespace-nowrap text-right text-sm font-medium flex items-center justify-end space-x-2">
-                        {/* Details button */}
-                        <button
-                          onClick={() => {
-                            setSelectedLetter(letter);
-                            setViewModalOpen(true);
-                          }}
-                          className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors shadow-sm"
-                          title={language === 'mr' ? 'तपशील पहा' : 'View Details'}
-                        >
-                          <FiEye className="h-4 w-4" />
-                          <span className="ml-1">{language === 'mr' ? 'तपशील' : 'Details'}</span>
-                        </button>
-                        
-                        {/* View Covering Letter button */}
-                        <button
-                          onClick={() => hasCoveringLetter(letter) ? viewCoveringLetter(letter) : null}
-                          className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded transition-colors shadow-sm ${
-                            hasCoveringLetter(letter) 
-                              ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
-                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                          }`}
-                          title={
-                            hasCoveringLetter(letter) 
-                              ? (language === 'mr' ? 'कव्हरिंग लेटर पहा' : 'View Covering Letter') 
-                              : (language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'No covering letter available')
-                          }
-                          disabled={!hasCoveringLetter(letter)}
-                        >
-                          <FiFileText className="h-4 w-4" />
-                          <span className="ml-1">{language === 'mr' ? 'कव्हर लेटर' : 'Cover Letter'}</span>
-                        </button>
-                        
-                        {/* Download button */}
-                        <button
-                          onClick={() => hasAttachments(letter) ? handleFileDownload(letter) : null}
-                          className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded transition-colors shadow-sm relative ${
-                            hasAttachments(letter) 
-                              ? 'bg-green-600 text-white hover:bg-green-700' 
-                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                          }`}
-                          title={
-                            hasAttachments(letter) 
-                              ? (language === 'mr' ? 'फाईल डाउनलोड करा' : 'Download File') 
-                              : (language === 'mr' ? 'कोणतीही फाईल संलग्न नाही' : 'No file attached')
-                          }
-                          disabled={!hasAttachments(letter)}
-                        >
-                          <FiDownload className="h-4 w-4" />
-                          <span className="ml-1">{language === 'mr' ? 'डाउनलोड' : 'Download'}</span>
+                          {/* Details button */}
+                          <button
+                            onClick={() => {
+                              setSelectedLetter(letter);
+                              setViewModalOpen(true);
+                            }}
+                            className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors shadow-sm"
+                            title={language === 'mr' ? 'तपशील पहा' : 'View Details'}
+                          >
+                            <FiEye className="h-4 w-4" />
+                            <span className="ml-1">{language === 'mr' ? 'तपशील' : 'Details'}</span>
+                          </button>
                           
-                          {/* Show badge if multiple files */}
-                          {letter.letterFiles && letter.letterFiles.length > 1 && (
-                            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center font-bold">
-                              {letter.letterFiles.length}
-                            </span>
-                          )}
-                        </button>
+                          {/* View Covering Letter button */}
+                          <button
+                            onClick={() => hasCoveringLetter(letter) ? viewCoveringLetter(letter) : null}
+                            className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded transition-colors shadow-sm ${
+                              hasCoveringLetter(letter) 
+                                ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
+                            title={
+                              hasCoveringLetter(letter) 
+                                ? (language === 'mr' ? 'कव्हरिंग लेटर पहा' : 'View Covering Letter') 
+                                : (language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'No covering letter available')
+                            }
+                            disabled={!hasCoveringLetter(letter)}
+                          >
+                            <FiFileText className="h-4 w-4" />
+                            <span className="ml-1">{language === 'mr' ? 'कव्हर लेटर' : 'Cover Letter'}</span>
+                          </button>
+                          
+                          {/* Download button */}
+                          <button
+                            onClick={() => hasAttachments(letter) ? handleFileDownload(letter) : null}
+                            className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded transition-colors shadow-sm relative ${
+                              hasAttachments(letter) 
+                                ? 'bg-green-600 text-white hover:bg-green-700' 
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
+                            title={
+                              hasAttachments(letter) 
+                                ? (language === 'mr' ? 'फाईल डाउनलोड करा' : 'Download File') 
+                                : (language === 'mr' ? 'कोणतीही फाईल संलग्न नाही' : 'No file attached')
+                            }
+                            disabled={!hasAttachments(letter)}
+                          >
+                            <FiDownload className="h-4 w-4" />
+                            <span className="ml-1">{language === 'mr' ? 'डाउनलोड' : 'Download'}</span>
+                            
+                            {/* Show badge if multiple files */}
+                            {letter.letterFiles && letter.letterFiles.length > 1 && (
+                              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center font-bold">
+                                {letter.letterFiles.length}
+                              </span>
+                            )}
+                          </button>
                         
                         {/* Reply button */}
                         <button
-                          onClick={() => {
-                            setSelectedReplies(letter.EmailRecords || []);
-                            setReplyModalOpen(true);
+                          onClick={async () => {
+                            try {
+                              console.log('🔍 Fetching emails for reference:', letter.referenceNumber);
+                              
+                              // Fetch all emails for this reference number to get complete conversation
+                              const token = localStorage.getItem('token');
+                              const response = await axios.get(`http://localhost:5000/api/imap/emails/reference/${letter.referenceNumber}`, {
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  'Accept': 'application/json',
+                                  ...(token && { 'Authorization': `Bearer ${token}` })
+                                }
+                              });
+                              
+                              console.log('📧 API Response:', response.data);
+                              
+                              if (response.data && response.data.success) {
+                                const allEmails = response.data.data || [];
+                                console.log('📧 Emails found:', allEmails.length);
+                                console.log('📧 Email details:', allEmails);
+                                setSelectedReplies(allEmails);
+                                setReplyModalOpen(true);
+                              } else {
+                                console.log('⚠️ API returned success: false, falling back to EmailRecords');
+                                // Fallback to existing EmailRecords if API fails
+                                setSelectedReplies(letter.EmailRecords || []);
+                                setReplyModalOpen(true);
+                              }
+                            } catch (error) {
+                              console.error('❌ Error fetching emails:', error);
+                              console.error('❌ Error response:', error.response?.data);
+                              // Fallback to existing EmailRecords
+                              setSelectedReplies(letter.EmailRecords || []);
+                              setReplyModalOpen(true);
+                            }
                           }}
                           className={`relative inline-flex items-center px-3 py-1.5 bg-yellow-600 text-white text-xs font-medium rounded hover:bg-yellow-700 transition-colors shadow-sm`}
                           title={language === 'mr' ? 'प्राप्त ईमेल पहा' : 'View Received Replies'}
@@ -2188,7 +2510,7 @@ const InwardStaffLetters = () => {
 
       {replyModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8 relative max-h-[90vh] overflow-y-auto border border-yellow-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-8 relative max-h-[90vh] overflow-y-auto border border-yellow-200">
             <button
               className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 bg-gray-100 rounded-full p-1 shadow"
               onClick={() => setReplyModalOpen(false)}
@@ -2198,49 +2520,225 @@ const InwardStaffLetters = () => {
             <h2 className="text-xl font-bold mb-4 text-yellow-700 text-center">
               {language === 'mr' ? 'प्राप्त ईमेल्स' : 'Received Replies'}
             </h2>
+            <div className="text-center text-sm text-gray-600 mb-4">
+              {language === 'mr' 
+                ? 'मूळ ईमेल आणि त्याचे उत्तरे' 
+                : 'Original Email and Its Replies'}
+            </div>
             {selectedReplies.length === 0 ? (
               <div className="text-center text-gray-500">
                 {language === 'mr' ? 'कोणतेही उत्तर प्राप्त झाले नाही.' : 'No replies received.'}
               </div>
             ) : (
               <div className="space-y-6">
-                {selectedReplies.map((reply, idx) => (
-                  <div key={idx} className="mb-8 rounded-lg border border-yellow-200 bg-yellow-50 shadow-sm p-4">
-                    {/* Header: Subject, Sender, Date */}
-                    <div className="mb-2">
-                      <div className="font-bold text-lg text-yellow-900 mb-1">
-                        {reply.subject || (language === 'mr' ? 'विषय उपलब्ध नाही' : 'No Subject')}
-                      </div>
-                      <div className="text-sm text-gray-700">
-                        <span className="font-medium">{language === 'mr' ? 'प्रेषक:' : 'From:'}</span> {reply.from}
-                        <span className="mx-2">|</span>
-                        <span className="font-medium">{language === 'mr' ? 'दिनांक:' : 'Date:'}</span> {new Date(reply.date).toLocaleString()}
-                      </div>
-                    </div>
-                    {/* Email Body */}
-                    <div className="bg-white rounded p-3 my-3 text-gray-800 whitespace-pre-line border border-gray-200">
-                      {cleanEmailText(reply.text)}
-                    </div>
-                    {/* Attachments */}
-                    {reply.attachments && reply.attachments.length > 0 && (
-                      <div className="mt-3">
-                        <div className="font-semibold text-gray-800 mb-1">
-                          {language === 'mr' ? 'संलग्नक:' : 'Attachments:'}
+                {organizeEmailsInThread(selectedReplies).map((thread, threadIdx) => (
+                  <div key={threadIdx} className="border border-gray-200 rounded-lg overflow-hidden mb-6">
+                    {/* Thread Header */}
+                    <div className="bg-blue-50 border-b border-gray-200 p-3">
+                      <div className="flex justify-between items-center">
+                        <div className="text-sm font-medium text-blue-800">
+                          {language === 'mr' ? 'मूळ ईमेल' : 'Original Email'}
+                          {thread.original.referenceNumber && (
+                            <span className="ml-2 text-blue-600">
+                              ({language === 'mr' ? 'संदर्भ:' : 'Ref:'} {thread.original.referenceNumber})
+                            </span>
+                          )}
                         </div>
-                        <ul className="list-disc ml-6">
-                          {reply.attachments.map((att, i) => (
-                            <li key={i}>
-                              <a
-                                href={att.s3Url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-700 hover:underline font-medium"
-                              >
-                                {att.filename}
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="text-xs text-blue-600">
+                          {language === 'mr' 
+                            ? `${thread.replies.length} मुलांचे उत्तरे` 
+                            : `${thread.replies.length} child replies`}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Original Email */}
+                    <div className="bg-yellow-50 border-b border-gray-200 p-4 relative">
+                      {/* Original Email Indicator */}
+                      <div className="absolute -top-2 -left-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">O</span>
+                      </div>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="font-bold text-lg text-yellow-900 mb-1">
+                            {thread.original.subject || (language === 'mr' ? 'विषय उपलब्ध नाही' : 'No Subject')}
+                          </div>
+                          <div className="text-sm text-gray-700">
+                            <span className="font-medium">{language === 'mr' ? 'प्रेषक:' : 'From:'}</span> {thread.original.from}
+                            <span className="mx-2">|</span>
+                            <span className="font-medium">{language === 'mr' ? 'दिनांक:' : 'Date:'}</span> {new Date(thread.original.date).toLocaleString()}
+                          </div>
+                        </div>
+                        
+                        {/* Reply Button - Only show if not replied to */}
+                        {shouldShowReplyButton(thread.original, thread) && (
+                          <button
+                            onClick={() => handleReplyClick(thread.original)}
+                            className="ml-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                          >
+                            <FiCornerUpLeft className="mr-2 h-4 w-4" />
+                            {language === 'mr' ? 'उत्तर द्या' : 'Reply'}
+                          </button>
+                        )}
+                      </div>
+                      
+                      {/* Original Email Body */}
+                      <div className="bg-white rounded p-3 mt-3 text-gray-800 whitespace-pre-line border border-gray-200">
+                        {cleanEmailText(thread.original.text)}
+                      </div>
+                      
+                      {/* Original Email Attachments */}
+                      {thread.original.attachments && thread.original.attachments.length > 0 && (
+                        <div className="mt-3">
+                          <div className="font-semibold text-gray-800 mb-1">
+                            {language === 'mr' ? 'संलग्नक:' : 'Attachments:'}
+                          </div>
+                          <ul className="list-disc ml-6">
+                            {thread.original.attachments.map((att, i) => (
+                              <li key={i}>
+                                <a
+                                  href={att.s3Url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-700 hover:underline font-medium"
+                                >
+                                  {att.filename}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Child Reply Emails */}
+                    {thread.replies.length > 0 && (
+                      <div className="bg-gray-50">
+                        <div className="p-3 bg-green-50 border-b border-gray-200">
+                          <div className="text-sm font-medium text-green-800">
+                            {language === 'mr' ? 'उत्तरे:' : 'Replies:'}
+                          </div>
+                        </div>
+                        {thread.replies.map((reply, replyIdx) => (
+                          <div key={replyIdx} className="border-l-4 border-blue-400 ml-4 p-4 bg-white m-4 rounded-r-lg shadow-sm relative">
+                            {/* Child indicator */}
+                            <div className="absolute -left-2 top-4 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                              <span className="text-white text-xs font-bold">{replyIdx + 1}</span>
+                            </div>
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="font-semibold text-lg text-blue-900 mb-1">
+                                  {reply.email.subject || (language === 'mr' ? 'विषय उपलब्ध नाही' : 'No Subject')}
+                                </div>
+                                <div className="text-sm text-gray-700">
+                                  <span className="font-medium">{language === 'mr' ? 'प्रेषक:' : 'From:'}</span> {reply.email.from}
+                                  <span className="mx-2">|</span>
+                                  <span className="font-medium">{language === 'mr' ? 'दिनांक:' : 'Date:'}</span> {new Date(reply.email.date).toLocaleString()}
+                                </div>
+                              </div>
+                              
+                              {/* Reply Button for reply emails - Only show if not replied to */}
+                              {shouldShowReplyButton(reply.email, thread) && (
+                                <button
+                                  onClick={() => handleReplyClick(reply.email)}
+                                  className="ml-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                                >
+                                  <FiCornerUpLeft className="mr-2 h-4 w-4" />
+                                  {language === 'mr' ? 'उत्तर द्या' : 'Reply'}
+                                </button>
+                              )}
+                            </div>
+                            
+                            {/* Reply Email Body */}
+                            <div className="bg-gray-50 rounded p-3 mt-3 text-gray-800 whitespace-pre-line border border-gray-200">
+                              {cleanEmailText(reply.email.text)}
+                            </div>
+                            
+                            {/* Reply Email Attachments */}
+                            {reply.email.attachments && reply.email.attachments.length > 0 && (
+                              <div className="mt-3">
+                                <div className="font-semibold text-gray-800 mb-1">
+                                  {language === 'mr' ? 'संलग्नक:' : 'Attachments:'}
+                                </div>
+                                <ul className="list-disc ml-6">
+                                  {reply.email.attachments.map((att, i) => (
+                                    <li key={i}>
+                                      <a
+                                        href={att.s3Url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-700 hover:underline font-medium"
+                                      >
+                                        {att.filename}
+                                      </a>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            
+                            {/* Nested Replies (children of this reply) */}
+                            {reply.children && reply.children.length > 0 && (
+                              <div className="mt-4">
+                                {reply.children.map((childReply, childIdx) => (
+                                  <div key={childIdx} className="border-l-4 border-green-400 ml-4 p-4 bg-green-50 m-4 rounded-r-lg shadow-sm">
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="font-semibold text-lg text-green-900 mb-1">
+                                          {childReply.email.subject || (language === 'mr' ? 'विषय उपलब्ध नाही' : 'No Subject')}
+                                        </div>
+                                        <div className="text-sm text-gray-700">
+                                          <span className="font-medium">{language === 'mr' ? 'प्रेषक:' : 'From:'}</span> {childReply.email.from}
+                                          <span className="mx-2">|</span>
+                                          <span className="font-medium">{language === 'mr' ? 'दिनांक:' : 'Date:'}</span> {new Date(childReply.email.date).toLocaleString()}
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Reply Button for nested replies */}
+                                      {shouldShowReplyButton(childReply.email, thread) && (
+                                        <button
+                                          onClick={() => handleReplyClick(childReply.email)}
+                                          className="ml-4 inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+                                        >
+                                          <FiCornerUpLeft className="mr-2 h-4 w-4" />
+                                          {language === 'mr' ? 'उत्तर द्या' : 'Reply'}
+                                        </button>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Nested Reply Email Body */}
+                                    <div className="bg-white rounded p-3 mt-3 text-gray-800 whitespace-pre-line border border-gray-200">
+                                      {cleanEmailText(childReply.email.text)}
+                                    </div>
+                                    
+                                    {/* Nested Reply Email Attachments */}
+                                    {childReply.email.attachments && childReply.email.attachments.length > 0 && (
+                                      <div className="mt-3">
+                                        <div className="font-semibold text-gray-800 mb-1">
+                                          {language === 'mr' ? 'संलग्नक:' : 'Attachments:'}
+                                        </div>
+                                        <ul className="list-disc ml-6">
+                                          {childReply.email.attachments.map((att, i) => (
+                                            <li key={i}>
+                                              <a
+                                                href={att.s3Url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-700 hover:underline font-medium"
+                                              >
+                                                {att.filename}
+                                              </a>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -2250,8 +2748,104 @@ const InwardStaffLetters = () => {
           </div>
         </div>
       )}
-    </div>
-  );
-};
 
-export default InwardStaffLetters;
+      {/* Email Reply Modal */}
+      {emailReplyModalOpen && selectedEmailForReply && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8 relative max-h-[90vh] overflow-y-auto border border-blue-200">
+            <button
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 bg-gray-100 rounded-full p-1 shadow"
+              onClick={() => {
+                setEmailReplyModalOpen(false);
+                setSelectedEmailForReply(null);
+                setReplyFormData({ subject: '', body: '' });
+              }}
+            >
+              <FiX className="h-6 w-6" />
+            </button>
+            
+            <h2 className="text-xl font-bold mb-6 text-blue-700 text-center">
+              {language === 'mr' ? 'ईमेल उत्तर द्या' : 'Reply to Email'}
+            </h2>
+            
+            {/* Original Email Info */}
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <h3 className="font-semibold text-gray-800 mb-2">
+                {language === 'mr' ? 'मूळ ईमेल:' : 'Original Email:'}
+              </h3>
+              <div className="text-sm text-gray-600">
+                <p><strong>{language === 'mr' ? 'प्रेषक:' : 'From:'}</strong> {selectedEmailForReply.from}</p>
+                <p><strong>{language === 'mr' ? 'विषय:' : 'Subject:'}</strong> {selectedEmailForReply.subject}</p>
+                <p><strong>{language === 'mr' ? 'दिनांक:' : 'Date:'}</strong> {new Date(selectedEmailForReply.date).toLocaleString()}</p>
+              </div>
+            </div>
+            
+            {/* Reply Form */}
+            <form onSubmit={handleReplySubmit} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {language === 'mr' ? 'विषय:' : 'Subject:'}
+                </label>
+                <input
+                  type="text"
+                  name="subject"
+                  value={replyFormData.subject}
+                  onChange={handleReplyFormChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {language === 'mr' ? 'संदेश:' : 'Message:'}
+                </label>
+                <textarea
+                  name="body"
+                  value={replyFormData.body}
+                  onChange={handleReplyFormChange}
+                  rows={8}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-vertical"
+                  required
+                />
+              </div>
+              
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmailReplyModalOpen(false);
+                    setSelectedEmailForReply(null);
+                    setReplyFormData({ subject: '', body: '' });
+                  }}
+                  className="px-6 py-2 bg-gray-500 text-white rounded-lg font-semibold hover:bg-gray-600 transition-colors"
+                >      
+                  {language === 'mr' ? 'रद्द करा' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={sendingReply}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  {sendingReply ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      {language === 'mr' ? 'पाठवत आहे...' : 'Sending...'}
+                    </>
+                  ) : (
+                    <>
+                      <FiSend className="mr-2 h-4 w-4" />
+                      {language === 'mr' ? 'उत्तर पाठवा' : 'Send Reply'}
+                    </>
+                  )}
+                </button>            
+              </div>               
+            </form>       
+          </div>  
+        </div>            
+      )} 
+    </div>                                                                                                                                                        
+  );      
+};              
+                    
+export default InwardStaffLetters;                                                               

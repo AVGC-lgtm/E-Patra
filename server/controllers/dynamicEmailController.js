@@ -821,7 +821,7 @@ class DynamicEmailController {
               designation = 'SP';
               break;
             case 'sdpo':
-              receiverEmail = process.env.SDPO_EMAIL || 'punddipak444@gmail.com';
+              receiverEmail = process.env.SDPO_EMAIL || 'bhushanbankar3377@gmail.com';
               receiverName = 'Sub-Divisional Police Officer';
               designation = 'SDPO';
               break;

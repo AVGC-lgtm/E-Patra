@@ -20,6 +20,7 @@ const dynamicEmailRoutes = require('./routes/dynamicEmailRoutes');
 const headRoutes = require('./routes/headRoutes');
 const imapRoutes = require('./routes/imapRoutes');
 const { startImapListenerAuto } = require('./controllers/imapController');
+// const emailReplyRoutes = require('./routes/emailReplyRoutes');
 
 const app = express();
 
@@ -107,6 +108,8 @@ app.use('/api', emailSenderReceiverRoutes);
 app.use('/api/dynamic-email', dynamicEmailRoutes);
 app.use('/api/head', headRoutes);
 app.use('/api/imap', imapRoutes);
+// app.use('/api/email-reply', emailReplyRoutes);
+
 
 
 // Email configuration verification on startup
