@@ -1,4 +1,4 @@
-// controllers/InwardPatraController.js - Updated with EmailRecord inclusion
+// controllers/InwardPatraController.js - Updated with Word document support in responses
 const { InwardPatra, CoveringLetter, User, File, Head, EmailRecord } = require('../models/associations');
 const sequelize = require('../config/database');
 
@@ -25,7 +25,7 @@ const generateReferenceNumber = async () => {
   return referenceNumber;
 };
 
-// Common include configuration for covering letter
+// Common include configuration for covering letter with Word document support
 const getCoveringLetterInclude = () => ({
   model: CoveringLetter,
   as: 'coveringLetter',
@@ -56,14 +56,35 @@ const getUploadedFileInclude = () => ({
   required: false
 });
 
-// NEW: Common include configuration for email records
+// Common include configuration for email records
 const getEmailRecordsInclude = () => ({
   model: EmailRecord,
-  as: 'EmailRecords', // This should match the association name
+  as: 'EmailRecords',
   attributes: ['id', 'subject', 'from', 'date', 'text', 'html', 'messageId', 'inReplyTo', 'references', 'attachments', 'referenceNumber', 'createdAt'],
   required: false,
-  order: [['date', 'DESC']] // Order emails by date, newest first
+  order: [['date', 'DESC']]
 });
+
+// Helper function to format covering letter data with Word document URLs
+const formatCoveringLetterData = (coveringLetter) => {
+  if (!coveringLetter) return null;
+  
+  return {
+    ...coveringLetter.toJSON(),
+    // Ensure all document URLs are included
+    documentUrls: {
+      pdf: coveringLetter.pdfUrl || null,
+      html: coveringLetter.htmlUrl || null,
+      word: coveringLetter.wordUrl || null // NEW: Include Word document URL
+    },
+    // File information
+    fileInfo: {
+      s3FileName: coveringLetter.s3FileName || null,
+      s3WordFileName: coveringLetter.s3WordFileName || null, // NEW: Include Word filename
+      attachedFile: coveringLetter.attachedFile || null
+    }
+  };
+};
 
 // Create a new Patra (InwardPatra) with auto-generated covering letter
 const createPatra = async (req, res) => {
@@ -135,7 +156,7 @@ const createPatra = async (req, res) => {
       coveringLetterId: null // Initially null
     }, { transaction });
 
-    // AUTO-GENERATE COVERING LETTER
+    // AUTO-GENERATE COVERING LETTER WITH WORD DOCUMENT
     try {
       const coveringLetter = await coveringLetterControllerInstance.autoGenerateCoveringLetter(
         newPatra.id, 
@@ -143,7 +164,11 @@ const createPatra = async (req, res) => {
         transaction
       );
       
-      console.log('Covering letter generated automatically:', coveringLetter.id);
+      console.log('Covering letter generated automatically with Word document:', {
+        id: coveringLetter.id,
+        pdfUrl: coveringLetter.pdfUrl,
+        wordUrl: coveringLetter.wordUrl
+      });
       
       // UPDATE THE PATRA WITH COVERING LETTER ID
       await newPatra.update({
@@ -159,18 +184,26 @@ const createPatra = async (req, res) => {
           getUserInclude(),
           getUploadedFileInclude(),
           getCoveringLetterInclude(),
-          getEmailRecordsInclude() // Include email records
+          getEmailRecordsInclude()
         ]
       });
       
       return res.status(201).json({
-        message: 'Patra created successfully with covering letter',
+        message: 'Patra created successfully with covering letter (PDF + Word)',
         referenceNumber: referenceNumber,
         patraId: newPatra.id,
         letterStatus: newPatra.letterStatus,
         coveringLetterId: coveringLetter.id,
         coveringLetterGenerated: true,
-        patra: completePatra
+        documentUrls: {
+          pdf: coveringLetter.pdfUrl,
+          html: coveringLetter.htmlUrl,
+          word: coveringLetter.wordUrl // NEW: Include Word document URL
+        },
+        patra: {
+          ...completePatra.toJSON(),
+          coveringLetter: formatCoveringLetterData(completePatra.coveringLetter)
+        }
       });
 
     } catch (coveringLetterError) {
@@ -198,7 +231,7 @@ const createPatra = async (req, res) => {
   }
 };
 
-// Get all Patras with their complete covering letters data and email records
+// Get all Patras with their complete covering letters data including Word documents
 const getAllPatras = async (req, res) => {
   try {
     const { page = 1, limit = 10, status, classification, includeEmails = 'true' } = req.query;
@@ -228,44 +261,35 @@ const getAllPatras = async (req, res) => {
       offset: parseInt(offset)
     });
 
-    // Debug: Log the structure of the first patra
+    // Debug: Log the structure of the first patra with Word document info
     if (patras.rows.length > 0) {
-      console.log('🔍 Debug: First patra structure:');
+      console.log('🔍 Debug: First patra structure with Word document support:');
       console.log('  - ID:', patras.rows[0].id);
       console.log('  - Reference Number:', patras.rows[0].referenceNumber);
       console.log('  - Has uploadedFile:', !!patras.rows[0].uploadedFile);
       console.log('  - Has coveringLetter:', !!patras.rows[0].coveringLetter);
       console.log('  - Email Records count:', patras.rows[0].EmailRecords ? patras.rows[0].EmailRecords.length : 0);
       
-      if (patras.rows[0].uploadedFile) {
-        console.log('  - Uploaded file details:', {
-          id: patras.rows[0].uploadedFile.id,
-          originalName: patras.rows[0].uploadedFile.originalName,
-          fileUrl: patras.rows[0].uploadedFile.fileUrl
-        });
-      }
-      
       if (patras.rows[0].coveringLetter) {
-        console.log('  - Covering letter details:', {
-          id: patras.rows[0].coveringLetter.id,
-          hasAttachedFile: !!patras.rows[0].coveringLetter.attachedFile
+        console.log('  - Covering letter document URLs:', {
+          pdf: !!patras.rows[0].coveringLetter.pdfUrl,
+          html: !!patras.rows[0].coveringLetter.htmlUrl,
+          word: !!patras.rows[0].coveringLetter.wordUrl
         });
-        
-        if (patras.rows[0].coveringLetter.attachedFile) {
-          console.log('  - Covering letter file details:', {
-            id: patras.rows[0].coveringLetter.attachedFile.id,
-            originalName: patras.rows[0].coveringLetter.attachedFile.originalName,
-            fileUrl: patras.rows[0].coveringLetter.attachedFile.fileUrl
-          });
-        }
       }
     }
 
+    // Format the response with Word document URLs
+    const formattedPatras = patras.rows.map(patra => ({
+      ...patra.toJSON(),
+      coveringLetter: formatCoveringLetterData(patra.coveringLetter)
+    }));
+
     return res.status(200).json({
       success: true,
-      message: 'Patras retrieved successfully',
+      message: 'Patras retrieved successfully with Word document support',
       data: {
-        patras: patras.rows,
+        patras: formattedPatras,
         totalCount: patras.count,
         currentPage: parseInt(page),
         totalPages: Math.ceil(patras.count / limit)
@@ -277,7 +301,7 @@ const getAllPatras = async (req, res) => {
   }
 };
 
-// Get a Patra by ID with complete covering letter data and email records
+// Get a Patra by ID with complete covering letter data including Word documents
 const getPatraById = async (req, res) => {
   const { id } = req.params;
 
@@ -287,7 +311,7 @@ const getPatraById = async (req, res) => {
         getUserInclude(),
         getUploadedFileInclude(),
         getCoveringLetterInclude(),
-        getEmailRecordsInclude(), // Include email records
+        getEmailRecordsInclude(),
         {
           model: Head,
           as: 'heads',
@@ -309,8 +333,11 @@ const getPatraById = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Patra retrieved successfully',
-      data: patra
+      message: 'Patra retrieved successfully with Word document support',
+      data: {
+        ...patra.toJSON(),
+        coveringLetter: formatCoveringLetterData(patra.coveringLetter)
+      }
     });
   } catch (error) {
     console.error('Error fetching Patra by ID:', error);
@@ -318,7 +345,7 @@ const getPatraById = async (req, res) => {
   }
 };
 
-// Get Patra by reference number with complete covering letter data and email records
+// Get Patra by reference number with complete covering letter data including Word documents
 const getPatraByReferenceNumber = async (req, res) => {
   const { referenceNumber } = req.params;
 
@@ -329,7 +356,7 @@ const getPatraByReferenceNumber = async (req, res) => {
         getUserInclude(),
         getUploadedFileInclude(),
         getCoveringLetterInclude(),
-        getEmailRecordsInclude() // Include email records
+        getEmailRecordsInclude()
       ]
     });
 
@@ -339,8 +366,11 @@ const getPatraByReferenceNumber = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Patra retrieved successfully',
-      data: patra
+      message: 'Patra retrieved successfully with Word document support',
+      data: {
+        ...patra.toJSON(),
+        coveringLetter: formatCoveringLetterData(patra.coveringLetter)
+      }
     });
   } catch (error) {
     console.error('Error fetching Patra by reference number:', error);
@@ -348,7 +378,7 @@ const getPatraByReferenceNumber = async (req, res) => {
   }
 };
 
-// Get Patra by user ID with complete covering letter data and email records
+// Get Patra by user ID with complete covering letter data including Word documents
 const getPatraByUserId = async (req, res) => {
   const { userId } = req.params;
   const { includeEmails = 'true' } = req.query;
@@ -376,12 +406,18 @@ const getPatraByUserId = async (req, res) => {
       return res.status(404).json({ error: 'No Patra found for this user' });
     }
 
+    // Format the response with Word document URLs
+    const formattedPatras = patras.map(patra => ({
+      ...patra.toJSON(),
+      coveringLetter: formatCoveringLetterData(patra.coveringLetter)
+    }));
+
     return res.status(200).json({
       success: true,
-      message: 'Patras retrieved successfully',
+      message: 'Patras retrieved successfully with Word document support',
       data: {
         count: patras.length,
-        patras: patras
+        patras: formattedPatras
       }
     });
   } catch (error) {
@@ -390,7 +426,7 @@ const getPatraByUserId = async (req, res) => {
   }
 };
 
-// Delete a Patra by ID
+// Delete a Patra by ID (now includes Word document cleanup)
 const deletePatraById = async (req, res) => {
   const { id } = req.params;
 
@@ -410,7 +446,7 @@ const deletePatraById = async (req, res) => {
       transaction 
     });
 
-    // Delete associated covering letter
+    // Delete associated covering letter (this will also handle Word document cleanup via the covering letter controller)
     await CoveringLetter.destroy({ 
       where: { patraId: id },
       transaction 
@@ -430,7 +466,7 @@ const deletePatraById = async (req, res) => {
     
     return res.status(200).json({ 
       success: true,
-      message: 'Patra and associated data deleted successfully' 
+      message: 'Patra and associated data deleted successfully (including Word documents)' 
     });
   } catch (error) {
     if (!transaction.finished) {
@@ -530,14 +566,17 @@ const updatePatraById = async (req, res) => {
         getUserInclude(),
         getUploadedFileInclude(),
         getCoveringLetterInclude(),
-        getEmailRecordsInclude() // Include email records
+        getEmailRecordsInclude()
       ]
     });
 
     return res.status(200).json({ 
       success: true,
       message: 'Patra updated successfully', 
-      data: updatedPatra 
+      data: {
+        ...updatedPatra.toJSON(),
+        coveringLetter: formatCoveringLetterData(updatedPatra.coveringLetter)
+      }
     });
   } catch (error) {
     console.error('Error updating Patra by ID:', error);
@@ -545,7 +584,7 @@ const updatePatraById = async (req, res) => {
   }
 };
 
-// Get Patra by user ID and Patra ID with complete covering letter data and email records
+// Get Patra by user ID and Patra ID with complete covering letter data including Word documents
 const getPatraByUserIdAndPatraId = async (req, res) => {
   const { userId, patraId } = req.params;
 
@@ -556,7 +595,7 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
         getUserInclude(),
         getUploadedFileInclude(),
         getCoveringLetterInclude(),
-        getEmailRecordsInclude() // Include email records
+        getEmailRecordsInclude()
       ]
     });
 
@@ -566,8 +605,11 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Patra retrieved successfully',
-      data: patra
+      message: 'Patra retrieved successfully with Word document support',
+      data: {
+        ...patra.toJSON(),
+        coveringLetter: formatCoveringLetterData(patra.coveringLetter)
+      }
     });
   } catch (error) {
     console.error('Error fetching Patra by user ID and Patra ID:', error);
@@ -598,7 +640,7 @@ const updateLetterStatus = async (req, res) => {
         getUserInclude(),
         getUploadedFileInclude(),
         getCoveringLetterInclude(),
-        getEmailRecordsInclude() // Include email records
+        getEmailRecordsInclude()
       ]
     });
 
@@ -607,7 +649,10 @@ const updateLetterStatus = async (req, res) => {
       message: 'Letter status updated successfully', 
       data: {
         letterStatus: updatedPatra.letterStatus,
-        patra: updatedPatra
+        patra: {
+          ...updatedPatra.toJSON(),
+          coveringLetter: formatCoveringLetterData(updatedPatra.coveringLetter)
+        }
       }
     });
   } catch (error) {
@@ -674,7 +719,7 @@ const approveLetter = async (req, res) => {
   }
 };
 
-// NEW: Get only covering letters with complete data
+// Get only covering letters with complete data (including Word documents)
 const getAllCoveringLetters = async (req, res) => {
   try {
     const { page = 1, limit = 10, status, letterType } = req.query;
@@ -709,11 +754,14 @@ const getAllCoveringLetters = async (req, res) => {
       offset: parseInt(offset)
     });
 
+    // Format covering letters with Word document URLs
+    const formattedCoveringLetters = coveringLetters.rows.map(letter => formatCoveringLetterData(letter));
+
     return res.status(200).json({
       success: true,
-      message: 'Covering letters retrieved successfully',
+      message: 'Covering letters retrieved successfully with Word document support',
       data: {
-        coveringLetters: coveringLetters.rows,
+        coveringLetters: formattedCoveringLetters,
         totalCount: coveringLetters.count,
         currentPage: parseInt(page),
         totalPages: Math.ceil(coveringLetters.count / limit)
@@ -725,7 +773,7 @@ const getAllCoveringLetters = async (req, res) => {
   }
 };
 
-// FIXED: Get covering letter by ID with proper associations
+// Get covering letter by ID with proper associations (including Word documents)
 const getCoveringLetterById = async (req, res) => {
   const { id } = req.params;
 
@@ -769,8 +817,8 @@ const getCoveringLetterById = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Covering letter retrieved successfully',
-      data: coveringLetter
+      message: 'Covering letter retrieved successfully with Word document support',
+      data: formatCoveringLetterData(coveringLetter)
     });
   } catch (error) {
     console.error('Error fetching covering letter by ID:', error);
@@ -778,7 +826,7 @@ const getCoveringLetterById = async (req, res) => {
   }
 };
 
-// NEW: Get email conversation history for a specific InwardPatra
+// Get email conversation history for a specific InwardPatra
 const getEmailConversation = async (req, res) => {
   const { referenceNumber } = req.params;
 
@@ -825,5 +873,5 @@ module.exports = {
   approveLetter,
   getAllCoveringLetters,
   getCoveringLetterById,
-  getEmailConversation, // Export new function
+  getEmailConversation,
 };

@@ -1,4 +1,4 @@
-// models/CoveringLetter.js - Fixed with proper associations
+// models/CoveringLetter.js - Enhanced with wordUrl field
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
@@ -59,6 +59,11 @@ const CoveringLetter = sequelize.define('CoveringLetter', {
     type: DataTypes.TEXT,
     allowNull: true,
     comment: 'S3 URL for HTML version'
+  },
+  wordUrl: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'S3 URL for Word document version'
   },
   s3FileName: {
     type: DataTypes.STRING,

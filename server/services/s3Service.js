@@ -1,7 +1,8 @@
-// services/s3Service.js - SIMPLIFIED VERSION with Clean Frontend Signature Upload
-const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+// services/s3Service.js - CORRECTED VERSION with proper विषय format
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { PDFDocument, rgb } = require('pdf-lib');
 const puppeteer = require('puppeteer');
+const { Document, Packer, Paragraph, TextRun, Header, ImageRun, AlignmentType, HeadingLevel, Table, TableRow, TableCell } = require('docx');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -9,7 +10,6 @@ require('dotenv').config();
 // Try different fetch methods based on Node.js version
 let fetch;
 try {
-  // For Node.js 18+ (built-in fetch)
   fetch = globalThis.fetch;
   if (!fetch) {
     throw new Error('Built-in fetch not available');
@@ -17,7 +17,6 @@ try {
   console.log('Using built-in fetch');
 } catch (e) {
   try {
-    // For older Node.js versions (node-fetch)
     fetch = require('node-fetch');
     console.log('Using node-fetch');
   } catch (e2) {
@@ -53,8 +52,35 @@ class S3Service {
     }
   }
 
-  // Determine वर्ग classification based on letterType
+  // Get image buffer for Word documents
+  getImageBuffer(imagePath) {
+    try {
+      const fullPath = path.join(__dirname, '..', imagePath);
+      if (fs.existsSync(fullPath)) {
+        return fs.readFileSync(fullPath);
+      }
+      console.warn(`Image not found at path: ${fullPath}`);
+      return null;
+    } catch (error) {
+      console.error('Error reading image buffer:', error);
+      return null;
+    }
+  }
+
+  // CORRECTED: Determine वर्ग classification based on letterType (returns only वर्ग)
   determineVargClassification(letterType) {
+    switch(letterType) {
+      case 'NA':
+        return 'ब वर्ग';
+      case 'FORWARD':
+        return 'क वर्ग';
+      default:
+        return 'अ वर्ग';
+    }
+  }
+
+  // CORRECTED: Determine वर्ग classification for letterhead (includes अर्ज)
+  determineVargClassificationForHeader(letterType) {
     switch(letterType) {
       case 'NA':
         return 'ब वर्ग अर्ज';
@@ -65,147 +91,260 @@ class S3Service {
     }
   }
 
-  // Determine right header text based on letterType
+  // CORRECTED: Determine right header text based on letterType
   determineRightHeaderText(letterType) {
     switch(letterType) {
       case 'NA':
-        return 'कक्ष ३(२) प्रत्यक्ष भेट';
+        return 'कक्ष ३(३) प्रत्यक्ष भेट';
       case 'FORWARD':
-        return 'कक्ष ३(४) मा.जिल्हाधिकारी/सैनिक';
-      default:
-        return 'कक्ष ३(१)मा.पोमस अर्ज.';
+        return 'कक्ष ३(४) मा. जिल्हाधिकारी/सैनिक';
+      case 'GOVERNMENT': // मा. गह/शासन/पालकमंत्री
+        return 'कक्ष३ (२) मा. गह/शासन/पालकमंत्री';
+      case 'POLICE_COMMISSIONER': // मा. पोमनि अजे.
+        return 'कक्ष ३(१) मा. पोमनि अजे.';
+      case 'LOCAL': // स्थानिक अर्ज
+        return 'कक्ष ३(५) स्थानिक अर्ज';
+      default: // मा. पोमसं अर्ज
+        return 'कक्ष ३(१) मा. पोमसं अर्ज';
     }
   }
 
-  // Enhanced extractComplainantName function with better patterns
+  // ENHANCED: Extract complainant name with comprehensive patterns
   extractComplainantName(letterData) {
+    console.log('🔍 Extracting complainant name from:', {
+      hasComplainantName: !!letterData.complainantName,
+      hasSenderName: !!letterData.senderName,
+      hasExtractedText: !!letterData.extractedText,
+      extractedTextLength: letterData.extractedText?.length || 0
+    });
+
     let name = 'अर्जदाराचे नाव';
     
-    // Priority order: use pre-extracted name if available and valid
-    if (letterData.complainantName && 
-        letterData.complainantName !== 'अर्जदार' && 
-        letterData.complainantName !== 'अर्जदाराचे नाव' &&
-        letterData.complainantName.length > 2) {
+    // Priority 1: Use pre-extracted name if available and valid
+    if (letterData.complainantName && this.isValidName(letterData.complainantName)) {
       name = letterData.complainantName;
-    } else if (letterData.senderName && 
-               letterData.senderName !== 'अर्जदार' && 
-               letterData.senderName !== 'अर्जदाराचे नाव' &&
-               letterData.senderName.length > 2) {
+      console.log('✅ Using pre-extracted complainantName:', name);
+    } 
+    // Priority 2: Use sender name if available and valid
+    else if (letterData.senderName && this.isValidName(letterData.senderName)) {
       name = letterData.senderName;
-    } else if (letterData.extractedText) {
-      // Use enhanced extraction logic
+      console.log('✅ Using pre-extracted senderName:', name);
+    } 
+    // Priority 3: Extract from text
+    else if (letterData.extractedText) {
+      console.log('🔍 Attempting to extract name from text...');
       name = this.extractNameFromText(letterData.extractedText);
+      console.log('📝 Extracted name from text:', name);
     }
     
     // Final cleaning and validation
-    name = this.cleanAndValidateName(name);
+    const cleanedName = this.cleanAndValidateName(name);
+    console.log('✨ Final cleaned name:', cleanedName);
     
-    return name;
+    return cleanedName;
   }
 
-  // Enhanced name extraction from text with comprehensive patterns
+  // ENHANCED: Check if a name is valid
+  isValidName(name) {
+    if (!name || typeof name !== 'string') return false;
+    
+    const trimmedName = name.trim();
+    
+    // Invalid if too short
+    if (trimmedName.length < 3) return false;
+    
+    // Invalid if matches default placeholders
+    const invalidNames = [
+      'अर्जदार', 'अर्जदाराचे नाव', 'तक्रारदार', 'तक्रारदाराचे नाव', 
+      'आवेदक', 'नाव', 'नावे', 'तुमचे नाव', 'व्यक्ती'
+    ];
+    
+    if (invalidNames.includes(trimmedName.toLowerCase())) return false;
+    
+    // Invalid if only numbers or punctuation
+    if (/^[\d\s\.\,\-\:\;\!\@\#\$\%\^\&\*\(\)\_\+\=\[\]\{\}\|\\\"\'\<\>\?\/\`\~]+$/.test(trimmedName)) return false;
+    
+    return true;
+  }
+
+  // SIGNIFICANTLY ENHANCED: Name extraction with more comprehensive patterns
   extractNameFromText(extractedText) {
     if (!extractedText) return 'अर्जदाराचे नाव';
     
-    // Clean text for better matching
-    const cleanText = extractedText.replace(/\s+/g, ' ').trim();
+    console.log('📄 Processing text for name extraction...');
     
-    // Comprehensive name extraction patterns (ordered by priority)
+    // Clean and normalize text
+    const cleanText = extractedText
+      .replace(/\s+/g, ' ')
+      .replace(/\n+/g, '\n')
+      .trim();
+    
+    console.log('🧹 Cleaned text length:', cleanText.length);
+    
+    // COMPREHENSIVE name extraction patterns (ordered by priority and specificity)
     const namePatterns = [
-      // Pattern 1: तक्रारदार - Name (most common)
-      /तक्रारदार\s*[-:–—]?\s*(.+?)(?:\n|।|,|\s+रा\.|\s+वय|\s+रह|\s+यांच)/i,
+      // Pattern 1: Direct name patterns with clear markers
+      { 
+        pattern: /तक्रारदार\s*[-:–—]?\s*(.+?)(?:\s*रा\.|\s*वय|\s*ता\.|\s*यांच|\s*मोबा|\s*फोन|\n|।|,)/i, 
+        type: 'तक्रारदार' 
+      },
+      { 
+        pattern: /अर्जदार\s*[-:–—]?\s*(.+?)(?:\s*रा\.|\s*वय|\s*ता\.|\s*यांच|\s*मोबा|\s*फोन|\n|।|,)/i, 
+        type: 'अर्जदार' 
+      },
+      { 
+        pattern: /आवेदक\s*[-:–—]?\s*(.+?)(?:\s*रा\.|\s*वय|\s*ता\.|\s*यांच|\s*मोबा|\s*फोन|\n|।|,)/i, 
+        type: 'आवेदक' 
+      },
       
-      // Pattern 2: अर्जदार - Name
-      /अर्जदार\s*[-:–—]?\s*(.+?)(?:\n|।|,|\s+रा\.|\s+वय|\s+रह|\s+यांच)/i,
+      // Pattern 2: Formal titles
+      { 
+        pattern: /(?:श्री|श्रीमती)\s+([^,\n।]+?)(?:\s*रा\.|\s*वय|\s*ता\.|\s*यांच|\s*मोबा|\s*फोन|\n|।|,)/i, 
+        type: 'श्री/श्रीमती' 
+      },
       
-      // Pattern 3: श्री/श्रीमती Name (formal titles)
-      /(?:श्री|श्रीमती)\s+([^,\n।]+?)(?:\s+रा\.|\s+वय|\s+ता\.|\s+यांच|\s+मोबा|\s+फोन|\n|।|,)/i,
+      // Pattern 3: Name field patterns
+      { 
+        pattern: /(?:नाव|नावे)\s*[-:–—]?\s*(.+?)(?:\s*रा\.|\s*वय|\s*ता\.|\s*यांच|\n|।|,)/i, 
+        type: 'नाव फील्ड' 
+      },
       
-      // Pattern 4: नाव/नावे - Name
-      /(?:नाव|नावे)\s*[-:–—]?\s*(.+?)(?:\n|।|,|\s+रा\.|\s+वय|\s+यांच)/i,
+      // Pattern 4: Possessive patterns
+      { 
+        pattern: /(.+?)\s+यांच्या\s+(?:तक्रार|अर्ज)/i, 
+        type: 'यांच्या possessive' 
+      },
+      { 
+        pattern: /(.+?)\s+यांचे\s+(?:तक्रार|अर्ज)/i, 
+        type: 'यांचे possessive' 
+      },
+      { 
+        pattern: /(.+?)\s+यांनी\s+(?:दिलेल्या|केलेल्या)/i, 
+        type: 'यांनी possessive' 
+      },
       
-      // Pattern 5: आवेदक - Name
-      /आवेदक\s*[-:–—]?\s*(.+?)(?:\n|।|,|\s+रा\.|\s+वय|\s+यांच)/i,
+      // Pattern 5: Subject line patterns
+      { 
+        pattern: /विषय.*?(.+?)\s+यांच्या\s+तक्रार/i, 
+        type: 'विषय line' 
+      },
       
-      // Pattern 6: Name at beginning with address/age marker
-      /^(.+?)\s+(?:रा\.|वय|ता\.)/m,
+      // Pattern 6: Address-based patterns
+      { 
+        pattern: /^(.+?)\s+(?:रा\.|राहणार|वय|ता\.)/m, 
+        type: 'Address marker' 
+      },
       
-      // Pattern 7: Name with यांच्या/यांचे/यांनी (possessive forms)
-      /(.+?)\s+यांच्या\s+तक्रार|(.+?)\s+यांचे\s+अर्ज|(.+?)\s+यांनी\s+दिलेल्या/i,
+      // Pattern 7: Phone/mobile based patterns
+      { 
+        pattern: /(.+?)(?:\s+मोबा|\s+फोन)\s*(?:नं\.?)?\s*[-:–—]?\s*\d/i, 
+        type: 'Phone marker' 
+      },
       
-      // Pattern 8: Name before phone/mobile
-      /(.+?)(?:\s+मोबा|\s+फोन)\s*(?:नं\.?)?\s*[-:–—]?\s*\d/i,
+      // Pattern 8: Common suffix patterns
+      { 
+        pattern: /(.+?)\s+(?:साहेब|जी|ची|चे|च्या)\s+(?:तक्रार|अर्ज)/i, 
+        type: 'Suffix pattern' 
+      },
       
-      // Pattern 9: Name in subject line format
-      /विषय.*?(.+?)\s+यांच्या\s+तक्रार/i,
+      // Pattern 9: Line-based extraction (first meaningful line)
+      { 
+        pattern: /^([^।\n,]+?)(?:\s*रा\.|\s*वय|\s*ता\.|\s*मोबा|\s*फोन)/m, 
+        type: 'First line' 
+      },
       
-      // Pattern 10: Name with common suffixes
-      /(.+?)\s+(?:साहेब|जी|ची|चे|च्या)\s+(?:तक्रार|अर्ज)/i
+      // Pattern 10: Complaint context
+      { 
+        pattern: /(?:तक्रार\s+करणारी\s+व्यक्ती|तक्रार\s+करणाऱ्या\s+व्यक्तीचे\s+नाव)\s*[-:–—]?\s*(.+?)(?:\n|।|,)/i, 
+        type: 'तक्रार करणारी व्यक्ती' 
+      }
     ];
     
     let extractedName = 'अर्जदाराचे नाव';
+    let matchedPattern = 'none';
     
     // Try each pattern until we find a valid match
-    for (const pattern of namePatterns) {
+    for (let i = 0; i < namePatterns.length; i++) {
+      const { pattern, type } = namePatterns[i];
       const match = cleanText.match(pattern);
+      
       if (match) {
         // Get the first non-empty capturing group
         const nameCandidate = match[1] || match[2] || match[3];
+        
         if (nameCandidate && nameCandidate.trim()) {
-          extractedName = nameCandidate.trim();
-          break;
+          const candidateName = nameCandidate.trim();
+          
+          // Validate the candidate
+          if (this.isValidName(candidateName)) {
+            extractedName = candidateName;
+            matchedPattern = `${type} (Pattern ${i + 1})`;
+            console.log(`✅ Found name using ${matchedPattern}:`, extractedName);
+            break;
+          } else {
+            console.log(`❌ Invalid candidate from ${type}:`, candidateName);
+          }
         }
       }
     }
 
+    if (matchedPattern === 'none') {
+      console.log('❌ No valid name found using any pattern');
+    }
+    
     return extractedName;
   }
 
-  // Enhanced name cleaning and validation
+  // ENHANCED: Name cleaning with better validation
   cleanAndValidateName(name) {
     if (!name) return 'अर्जदाराचे नाव';
     
-    // Remove common prefixes
-    name = name.replace(/^(तक्रारदार|अर्जदार|आवेदक|श्री|श्रीमती|मा\.|डॉ\.|प्रा\.)\s*/i, '');
+    console.log('🧽 Cleaning name:', name);
     
-    // Remove common suffixes and possessive forms
-    name = name.replace(/\s*(यांचे|यांची|यांच्या|यांनी|साहेब|जी|ची|चे|च्या|बाबत|विषयी).*$/i, '');
+    // Remove common prefixes (more comprehensive)
+    let cleanedName = name.replace(/^(तक्रारदार|अर्जदार|आवेदक|श्री|श्रीमती|मा\.|डॉ\.|प्रा\.|कुमारी)\s*/i, '');
+    
+    // Remove common suffixes and possessive forms  
+    cleanedName = cleanedName.replace(/\s*(यांचे|यांची|यांच्या|यांना|यांनी|साहेब|जी|ची|चे|च्या|चा|बाबत|विषयी|संदर्भात|अनुषंगाने).*$/i, '');
     
     // Remove punctuation and clean up
-    name = name.replace(/[,\.\-–—:;]/g, '').trim();
-    name = name.replace(/\s+/g, ' ');
+    cleanedName = cleanedName.replace(/[,\.\-–—:;]/g, '').trim();
+    cleanedName = cleanedName.replace(/\s+/g, ' ');
     
-    // Remove unwanted words that might be captured
+    // Remove unwanted words (more comprehensive)
     const unwantedWords = [
-      'तुमचे', 'तुमच्या', 'आपले', 'आपल्या', 'नाव', 'नावे', 
-      'रा', 'वय', 'ता', 'मोबा', 'फोन', 'येथे', 'येथील', 'तक्रार', 
-      'अर्ज', 'बाबत', 'विषयी', 'संदर्भात', 'अनुषंगाने'
+      'तुमचे', 'तुमच्या', 'आपले', 'आपल्या', 'नाव', 'नावे', 'व्यक्ती', 'व्यक्तीचे',
+      'रा', 'वय', 'ता', 'मोबा', 'फोन', 'येथे', 'येथील', 'तक्रार', 'कडे', 'कडून',
+      'अर्ज', 'बाबत', 'विषयी', 'संदर्भात', 'अनुषंगाने', 'करणारी', 'करणाऱ्या'
     ];
     
     for (const word of unwantedWords) {
-      name = name.replace(new RegExp(`\\b${word}\\b`, 'gi'), '').trim();
+      cleanedName = cleanedName.replace(new RegExp(`\\b${word}\\b`, 'gi'), '').trim();
+      cleanedName = cleanedName.replace(/\s+/g, ' '); // Clean up extra spaces
     }
     
     // Final cleanup
-    name = name.replace(/\s+/g, ' ').trim();
+    cleanedName = cleanedName.replace(/\s+/g, ' ').trim();
     
-    // Validation checks
-    if (!name || 
-        name.length < 2 || 
-        name === 'तुमचे नाव' || 
-        name === 'नाव' ||
-        name.match(/^\d+$/) || // Only numbers
-        name.match(/^[,\.\-–—:;\s]+$/) // Only punctuation
+    // Final validation
+    if (!cleanedName || 
+        cleanedName.length < 2 || 
+        cleanedName === 'तुमचे नाव' || 
+        cleanedName === 'नाव' ||
+        cleanedName.match(/^\d+$/) || // Only numbers
+        cleanedName.match(/^[,\.\-–—:;\s]+$/) // Only punctuation
        ) {
+      console.log('❌ Name failed final validation:', cleanedName);
       return 'अर्जदाराचे नाव';
     }
     
     // Truncate if too long
-    if (name.length > 50) {
-      name = name.substring(0, 50) + '...';
+    if (cleanedName.length > 50) {
+      cleanedName = cleanedName.substring(0, 50) + '...';
     }
     
-    return name;
+    console.log('✨ Final cleaned name:', cleanedName);
+    return cleanedName;
   }
 
   // Convert application type to Marathi
@@ -224,58 +363,23 @@ class S3Service {
     }
   }
 
-  // Enhanced subject line generation with complaint type detection
-  generateSubjectLine(letterType, complainantName, letterData = null) {
-    // Extract complaint type if letterData is available
-    let complaintType = '';
-    if (letterData && letterData.extractedText) {
-      complaintType = this.extractComplaintType(letterData.extractedText);
-    }
+  // CORRECTED: Generate subject line based on वर्ग classification only
+  generateSubjectLine(letterType, complainantName = null, letterData = null) {
+    // Get वर्ग classification
+    const vargClassification = this.determineVargClassification(letterType);
     
-    // Generate base subject with complaint type
-    let baseSubject = `${complainantName} यांच्या तक्रार अर्जाबाबत`;
-    if (complaintType) {
-      baseSubject = `${complainantName} यांच्या ${complaintType} तक्रार अर्जाबाबत`;
-    }
-    
-    // Generate subject based on letter type
+    // Generate subject based on वर्ग and letterType only
     switch(letterType) {
       case 'NAR':
-        return `${baseSubject} - कार्यवाही न करण्याबाबत (NAR)`;
-      case 'NA':
-        return `${baseSubject} - आवश्यक कार्यवाही (NA)`;
-      case 'FORWARD':
-        return `${baseSubject} - पुढील कार्यवाहीसाठी पाठवणे`;
       case 'ACKNOWLEDGMENT':
-        return `${baseSubject} - पोच पावती (ACK)`;
+        return `${vargClassification} तक्रारी अर्जाबाबत (NAR)`;
+      case 'NA':
+        return `${vargClassification} तक्रारी अर्जाबाबत (NA)`;
+      case 'FORWARD':
+        return `${vargClassification} तक्रारी अर्जाबाबत (NAR)`; // Can be (NA) based on requirement
       default:
-        return `${baseSubject} - ${letterType}`;
+        return `${vargClassification} तक्रारी अर्जाबाबत (NAR)`;
     }
-  }
-
-  // Extract complaint type for better subject generation
-  extractComplaintType(extractedText) {
-    if (!extractedText) return '';
-    
-    const complaintTypes = [
-      { pattern: /पोलीस\s*अत्याचार/i, type: 'पोलीस अत्याचार' },
-      { pattern: /गैरव्यवहार/i, type: 'गैरव्यवहार' },
-      { pattern: /दुर्लक्ष/i, type: 'दुर्लक्ष' },
-      { pattern: /अन्याय/i, type: 'अन्याय' },
-      { pattern: /चुकीची\s*कार्यवाही/i, type: 'चुकीची कार्यवाही' },
-      { pattern: /अयोग्य\s*वर्तन/i, type: 'अयोग्य वर्तन' },
-      { pattern: /तपासात\s*दुर्लक्ष/i, type: 'तपासात दुर्लक्ष' },
-      { pattern: /भ्रष्टाचार/i, type: 'भ्रष्टाचार' },
-      { pattern: /गैरकारभार/i, type: 'गैरकारभार' }
-    ];
-    
-    for (const { pattern, type } of complaintTypes) {
-      if (pattern.test(extractedText)) {
-        return type;
-      }
-    }
-    
-    return '';
   }
 
   // Generate table data for covering letter
@@ -305,225 +409,826 @@ class S3Service {
     ];
   }
 
-  // SIMPLIFIED: Download PDF from S3 URL using AWS SDK
-  async downloadPDFFromS3(pdfUrl) {
+  // Generate Word document with logos and proper formatting
+  async generateWordDocument(letterContent, letterData) {
     try {
-      console.log('📥 Downloading PDF from S3:', pdfUrl);
+      console.log('📝 Generating Word document with logos...');
       
-      if (!pdfUrl || typeof pdfUrl !== 'string') {
-        throw new Error('Invalid PDF URL provided');
-      }
-
-      // Extract bucket and key from URL
-      let bucketName, key;
-      try {
-        if (pdfUrl.includes('.s3.')) {
-          const urlParts = pdfUrl.replace('https://', '').split('/');
-          bucketName = urlParts[0].split('.s3.')[0];
-          key = urlParts.slice(1).join('/');
-        } else if (pdfUrl.includes('s3.amazonaws.com')) {
-          const urlParts = pdfUrl.replace('https://s3.amazonaws.com/', '').split('/');
-          bucketName = urlParts[0];
-          key = urlParts.slice(1).join('/');
-        } else {
-          throw new Error('Unrecognized S3 URL format');
-        }
-      } catch (parseError) {
-        throw new Error(`Failed to parse S3 URL: ${parseError.message}`);
-      }
+      const currentYear = new Date().getFullYear();
+      const today = new Date();
+      const formattedDate = `${today.getDate().toString().padStart(2, '0')} / ${(today.getMonth() + 1).toString().padStart(2, '0')} / ${today.getFullYear()}`;
       
-      console.log('📊 S3 Download details:', { bucketName, key });
+      const complainantName = this.extractComplainantName(letterData);
+      const subjectLine = this.generateSubjectLine(letterData.letterType); // CORRECTED: No complainant name needed
+      const vargClassification = this.determineVargClassificationForHeader(letterData.letterType); // CORRECTED: Use header version
+      const rightHeaderText = this.determineRightHeaderText(letterData.letterType);
       
-      if (!bucketName || !key) {
-        throw new Error('Could not extract bucket name or key from URL');
-      }
-
-      const command = new GetObjectCommand({
-        Bucket: bucketName,
-        Key: key
+      // Get logo buffers
+      const leftLogoBuffer = this.getImageBuffer('png/leftlogo.png');
+      const rightLogoBuffer = this.getImageBuffer('png/rightlogo.png');
+      
+      const doc = new Document({
+        sections: [{
+          properties: {
+            page: {
+              margin: {
+                top: 1134,
+                right: 1134,
+                bottom: 1134,
+                left: 1134,
+              },
+            },
+          },
+          children: [
+            // Letterhead with logos
+            new Table({
+              width: {
+                size: 100,
+                type: 'pct',
+              },
+              rows: [
+                new TableRow({
+                  children: [
+                    // Left logo cell
+                    new TableCell({
+                      children: leftLogoBuffer ? [
+                        new Paragraph({
+                          children: [
+                            new ImageRun({
+                              data: leftLogoBuffer,
+                              transformation: {
+                                width: 60,
+                                height: 60,
+                              },
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ] : [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "महाराष्ट्र पोलीस",
+                              bold: true,
+                              size: 16,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                      width: { size: 15, type: 'pct' },
+                    }),
+                    // Center header cell
+                    new TableCell({
+                      children: [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "पोलीस अधिक्षक कार्यालय, अहिल्यानगर",
+                              bold: true,
+                              size: 32,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "(अर्ज शाखा)",
+                              bold: true,
+                              size: 24,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: `${vargClassification}                                                                                   ${rightHeaderText}`,
+                              size: 20,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                      width: { size: 70, type: 'pct' },
+                    }),
+                    // Right logo cell
+                    new TableCell({
+                      children: rightLogoBuffer ? [
+                        new Paragraph({
+                          children: [
+                            new ImageRun({
+                              data: rightLogoBuffer,
+                              transformation: {
+                                width: 60,
+                                height: 60,
+                              },
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ] : [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "🏛️",
+                              size: 40,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                      width: { size: 15, type: 'pct' },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Reference section
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `अर्ज क्रमांक :- ${letterData.letterNumber}/${currentYear}, अर्ज शाखा,        जावक क्र. - /${currentYear},        दि. ${formattedDate}`,
+                  size: 22,
+                }),
+              ],
+            }),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Subject line
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `विषय :- ${subjectLine}`,
+                  bold: true,
+                  size: 26,
+                }),
+              ],
+              alignment: AlignmentType.CENTER,
+            }),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Reference number line
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "उ.नि.पो.अ./पो.नि/स.पो.नि./ ___________________________",
+                  size: 22,
+                }),
+              ],
+              alignment: AlignmentType.CENTER,
+            }),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Letter content
+            ...letterContent.split('\n').filter(line => line.trim()).map(line => 
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: line.trim(),
+                    size: 22,
+                  }),
+                ],
+              })
+            ),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Data table
+            new Table({
+              width: {
+                size: 100,
+                type: 'pct',
+              },
+              rows: [
+                // Header row
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      children: [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "अर्ज क्रमांक",
+                              bold: true,
+                              size: 22,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                    }),
+                    new TableCell({
+                      children: [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "अर्ज प्रकार",
+                              bold: true,
+                              size: 22,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                    }),
+                    new TableCell({
+                      children: [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "अर्जदाराचे नाव",
+                              bold: true,
+                              size: 22,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                    }),
+                    new TableCell({
+                      children: [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "जावक क्रमांक",
+                              bold: true,
+                              size: 22,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                // Data rows
+                ...this.generateTableData(letterData, complainantName).map(rowData => 
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: rowData.applicationNumber,
+                                size: 20,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: rowData.applicationType,
+                                size: 20,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text:"",
+                                size: 20,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: rowData.outwardNumber,
+                                size: 20,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                      }),
+                    ],
+                  })
+                ),
+              ],
+            }),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Closing content
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "मा.पोलीस अधिक्षक सो,",
+                  bold: true,
+                  size: 22,
+                }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "    आदेश अनुसरणे",
+                  bold: true,
+                  size: 22,
+                }),
+              ],
+            }),
+            
+            // Spacing for signature
+            new Paragraph({ text: "" }),
+            new Paragraph({ text: "" }),
+            
+            // Officer signature
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "अर्ज शाखा प्रभारी अधिकारी,",
+                  bold: true,
+                  size: 22,
+                }),
+              ],
+              alignment: AlignmentType.RIGHT,
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "पोलीस अधिक्षक कार्यालय, अहिल्यानगर",
+                  bold: true,
+                  size: 22,
+                }),
+              ],
+              alignment: AlignmentType.RIGHT,
+            }),
+          ],
+        }],
       });
-      
-      try {
-        const response = await s3Client.send(command);
-        
-        const chunks = [];
-        for await (const chunk of response.Body) {
-          chunks.push(chunk);
-        }
-        const buffer = Buffer.concat(chunks);
-        
-        if (buffer.length === 0) {
-          throw new Error('Downloaded PDF is empty');
-        }
-        
-        console.log('✅ PDF downloaded successfully, size:', buffer.length, 'bytes');
-        return buffer;
-        
-      } catch (awsError) {
-        console.error('❌ AWS SDK download failed:', awsError.message);
-        throw awsError;
-      }
-      
-    } catch (error) {
-      console.error('❌ Error downloading PDF from S3:', error);
-      
-      // Fallback to fetch if AWS SDK fails
-      if (fetch) {
-        try {
-          console.log('🔄 Trying fallback fetch method...');
-          const response = await fetch(pdfUrl);
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-          
-          const arrayBuffer = await response.arrayBuffer();
-          if (arrayBuffer.byteLength === 0) {
-            throw new Error('Downloaded PDF is empty via fetch');
-          }
-          
-          console.log('✅ PDF downloaded successfully via fetch, size:', arrayBuffer.byteLength, 'bytes');
-          return arrayBuffer;
-        } catch (fetchError) {
-          console.error('❌ Fetch fallback also failed:', fetchError);
-          throw new Error(`Both AWS SDK and fetch failed. AWS SDK: ${error.message}, Fetch: ${fetchError.message}`);
-        }
-      } else {
-        throw new Error(`AWS SDK failed and fetch not available: ${error.message}`);
-      }
-    }
-  }
 
-  // SIMPLIFIED: Convert base64 signature to image buffer 
-  base64ToImageBuffer(base64String) {
-    try {
-      console.log('🖼️ Converting base64 to image buffer...');
-      
-      if (!base64String || typeof base64String !== 'string') {
-        throw new Error('Signature data is missing or invalid type');
-      }
-      
-      if (base64String.length < 50) {
-        throw new Error(`Signature data is too small (${base64String.length} chars)`);
-      }
-      
-      // Remove data URL prefix if present
-      let base64Data = base64String;
-      if (base64String.startsWith('data:')) {
-        const parts = base64String.split(',');
-        if (parts.length !== 2) {
-          throw new Error('Invalid data URL format');
-        }
-        base64Data = parts[1];
-      }
-      
-      if (!base64Data || base64Data.length < 20) {
-        throw new Error(`No valid base64 data found`);
-      }
-      
-      const buffer = Buffer.from(base64Data, 'base64');
-      console.log('✅ Signature converted to buffer, size:', buffer.length, 'bytes');
-      
+      const buffer = await Packer.toBuffer(doc);
+      console.log('✅ Word document generated successfully with logos');
       return buffer;
-      
+
     } catch (error) {
-      console.error('❌ Error converting base64 to buffer:', error);
-      throw new Error(`Invalid signature format: ${error.message}`);
+      console.error('❌ Error generating Word document:', error);
+      throw new Error(`Word document generation failed: ${error.message}`);
     }
   }
 
-  // MAIN: Add simple signature to existing PDF (NO positioning logic)
-  async addSignatureToPDF(pdfUrl, signatureBase64, signerName = null) {
+  // Generate Word document with signature
+  async generateWordDocumentWithSignature(letterContent, letterData, signatureBase64, signerName) {
     try {
-      console.log('🖊️ Starting simple PDF signature overlay process...');
-
-      // Enhanced input validation
-      if (!pdfUrl || typeof pdfUrl !== 'string') {
-        throw new Error('PDF URL is required and must be a valid string');
-      }
+      console.log('🖊️📝 Generating Word document with signature...');
       
-      if (!signatureBase64 || typeof signatureBase64 !== 'string') {
-        throw new Error('Signature data is required and must be a valid string');
-      }
-
-      // Download existing PDF from S3
-      console.log('📥 Downloading original PDF...');
-      const pdfBuffer = await this.downloadPDFFromS3(pdfUrl);
-      
-      // Load the PDF document using PDF-lib
-      console.log('📖 Loading PDF document...');
-      const pdfDoc = await PDFDocument.load(pdfBuffer);
-      console.log('✅ PDF loaded successfully, pages:', pdfDoc.getPageCount());
-      
-      // Convert signature to image buffer
-      console.log('🖼️ Processing signature image...');
-      const signatureImageBytes = this.base64ToImageBuffer(signatureBase64);
-      
-      // Embed the signature image (try PNG first, fallback to JPG)
-      console.log('📎 Embedding signature image...');
-      let signatureImage;
-      try {
-        signatureImage = await pdfDoc.embedPng(signatureImageBytes);
-        console.log('✅ Signature embedded as PNG');
-      } catch (pngError) {
-        console.log('⚠️ PNG embedding failed, trying JPG...');
+      // Convert base64 signature to buffer
+      let signatureBuffer = null;
+      if (signatureBase64) {
         try {
-          signatureImage = await pdfDoc.embedJpg(signatureImageBytes);
-          console.log('✅ Signature embedded as JPG');
-        } catch (jpgError) {
-          throw new Error(`Unsupported signature image format`);
+          const base64Data = signatureBase64.includes(',') ? signatureBase64.split(',')[1] : signatureBase64;
+          signatureBuffer = Buffer.from(base64Data, 'base64');
+        } catch (error) {
+          console.warn('⚠️ Could not process signature for Word document:', error.message);
         }
       }
 
-      // Get the last page (where signature typically goes)
-      const pages = pdfDoc.getPages();
-      const lastPage = pages[pages.length - 1];
-      const { width, height } = lastPage.getSize();
-
-      // SIMPLIFIED: Fixed signature dimensions and position
-      const signatureWidth = 80;
-      const signatureHeight = 30;
-      const x = 455;
-      const y = 320; 
-
-      console.log('📍 Simple signature positioning:', { x, y, signatureWidth, signatureHeight });
-
-      // Add signature image to the page
-      lastPage.drawImage(signatureImage, {
-        x: x,
-        y: y,
-        width: signatureWidth,
-        height: signatureHeight,
+      const currentYear = new Date().getFullYear();
+      const today = new Date();
+      const formattedDate = `${today.getDate().toString().padStart(2, '0')} / ${(today.getMonth() + 1).toString().padStart(2, '0')} / ${today.getFullYear()}`;
+      
+      const complainantName = this.extractComplainantName(letterData);
+      const subjectLine = this.generateSubjectLine(letterData.letterType); // CORRECTED: No complainant name needed
+      const vargClassification = this.determineVargClassificationForHeader(letterData.letterType); // CORRECTED: Use header version
+      const rightHeaderText = this.determineRightHeaderText(letterData.letterType);
+      
+      // Get logo buffers
+      const leftLogoBuffer = this.getImageBuffer('png/leftlogo.png');
+      const rightLogoBuffer = this.getImageBuffer('png/rightlogo.png');
+      
+      // Create signature elements
+      const signatureElements = [];
+      if (signatureBuffer) {
+        try {
+          signatureElements.push(
+            new Paragraph({
+              children: [
+                new ImageRun({
+                  data: signatureBuffer,
+                  transformation: {
+                    width: 120,
+                    height: 50,
+                  },
+                }),
+              ],
+              alignment: AlignmentType.RIGHT,
+            })
+          );
+        } catch (imgError) {
+          console.warn('⚠️ Could not add signature image to Word document:', imgError.message);
+        }
+      }
+      
+      const doc = new Document({
+        sections: [{
+          properties: {
+            page: {
+              margin: {
+                top: 1134,
+                right: 1134,
+                bottom: 1134,
+                left: 1134,
+              },
+            },
+          },
+          children: [
+            // Letterhead with logos
+            new Table({
+              width: {
+                size: 100,
+                type: 'pct',
+              },
+              rows: [
+                new TableRow({
+                  children: [
+                    // Left logo cell
+                    new TableCell({
+                      children: leftLogoBuffer ? [
+                        new Paragraph({
+                          children: [
+                            new ImageRun({
+                              data: leftLogoBuffer,
+                              transformation: {
+                                width: 60,
+                                height: 60,
+                              },
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ] : [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "महाराष्ट्र पोलीस",
+                              bold: true,
+                              size: 16,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                      width: { size: 15, type: 'pct' },
+                    }),
+                    // Center header cell
+                    new TableCell({
+                      children: [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "पोलीस अधिक्षक कार्यालय, अहिल्यानगर",
+                              bold: true,
+                              size: 32,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "(अर्ज शाखा)",
+                              bold: true,
+                              size: 24,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: `${vargClassification}                                                                                   ${rightHeaderText}`,
+                              size: 20,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                      width: { size: 70, type: 'pct' },
+                    }),
+                    // Right logo cell
+                    new TableCell({
+                      children: rightLogoBuffer ? [
+                        new Paragraph({
+                          children: [
+                            new ImageRun({
+                              data: rightLogoBuffer,
+                              transformation: {
+                                width: 60,
+                                height: 60,
+                              },
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ] : [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "🏛️",
+                              size: 40,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                      width: { size: 15, type: 'pct' },
+                    }),
+                  ],
+                }),
+              ],
+            }),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Reference section
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `अर्ज क्रमांक :- ${letterData.letterNumber}/${currentYear}, अर्ज शाखा,        जावक क्र. - /${currentYear},        दि. ${formattedDate}`,
+                  size: 22,
+                }),
+              ],
+            }),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Subject line
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `विषय :- ${subjectLine}`,
+                  bold: true,
+                  size: 26,
+                }),
+              ],
+              alignment: AlignmentType.CENTER,
+            }),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Reference number line
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "उ.नि.पो.अ./पो.नि/स.पो.नि./ ___________________________",
+                  size: 22,
+                }),
+              ],
+              alignment: AlignmentType.CENTER,
+            }),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Letter content
+            ...letterContent.split('\n').filter(line => line.trim()).map(line => 
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: line.trim(),
+                    size: 22,
+                  }),
+                ],
+              })
+            ),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Data table
+            new Table({
+              width: {
+                size: 100,
+                type: 'pct',
+              },
+              rows: [
+                // Header row
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      children: [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "अर्ज क्रमांक",
+                              bold: true,
+                              size: 22,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                    }),
+                    new TableCell({
+                      children: [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "अर्ज प्रकार",
+                              bold: true,
+                              size: 22,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                    }),
+                    new TableCell({
+                      children: [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "अर्जदाराचे नाव",
+                              bold: true,
+                              size: 22,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                    }),
+                    new TableCell({
+                      children: [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "जावक क्रमांक",
+                              bold: true,
+                              size: 22,
+                            }),
+                          ],
+                          alignment: AlignmentType.CENTER,
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+                // Data rows
+                ...this.generateTableData(letterData, complainantName).map(rowData => 
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: rowData.applicationNumber,
+                                size: 20,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: rowData.applicationType,
+                                size: 20,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: rowData.applicantName,
+                                size: 20,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                      }),
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({
+                                text: rowData.outwardNumber,
+                                size: 20,
+                              }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                      }),
+                    ],
+                  })
+                ),
+              ],
+            }),
+            
+            // Spacing
+            new Paragraph({ text: "" }),
+            
+            // Closing content
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "मा.पोलीस अधिक्षक सो,",
+                  bold: true,
+                  size: 22,
+                }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "    आदेश अनुसरणे",
+                  bold: true,
+                  size: 22,
+                }),
+              ],
+            }),
+            
+            // Spacing for signature
+            new Paragraph({ text: "" }),
+            
+            // Signature section
+            ...signatureElements,
+            
+            // Officer signature
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: signerName || 'अर्ज शाखा प्रभारी अधिकारी',
+                  bold: true,
+                  size: 22,
+                }),
+              ],
+              alignment: AlignmentType.RIGHT,
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "पोलीस अधिक्षक कार्यालय, अहिल्यानगर",
+                  bold: true,
+                  size: 22,
+                }),
+              ],
+              alignment: AlignmentType.RIGHT,
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: formattedDate,
+                  size: 20,
+                }),
+              ],
+              alignment: AlignmentType.RIGHT,
+            }),
+          ],
+        }],
       });
-      console.log('✅ Signature image added successfully');
 
-      // Save the modified PDF
-      const modifiedPdfBytes = await pdfDoc.save();
-      console.log('✅ PDF saved with signature, new size:', modifiedPdfBytes.length, 'bytes');
-
-      // Generate new filename for signed PDF
-      const originalFilename = pdfUrl.split('/').pop().replace(/\?.*$/, '');
-      const timestamp = Date.now();
-      const signedFilename = originalFilename.replace('.pdf', `-signed-${timestamp}.pdf`);
-
-      // Upload signed PDF to S3
-      const signedPdfUrl = await this.uploadToS3(
-        Buffer.from(modifiedPdfBytes), 
-        signedFilename, 
-        'application/pdf'
-      );
-
-      return {
-        signedPdfUrl: signedPdfUrl,
-        fileName: signedFilename,
-        signedAt: new Date(),
-        signedBy: signerName || 'Officer',
-        originalUrl: pdfUrl,
-        success: true
-      };
+      const buffer = await Packer.toBuffer(doc);
+      console.log('✅ Word document with signature generated successfully');
+      return buffer;
 
     } catch (error) {
-      console.error('❌ Error adding signature to PDF:', error);
-      throw new Error(`Failed to add signature to PDF: ${error.message}`);
+      console.error('❌ Error generating Word document with signature:', error);
+      throw new Error(`Word document with signature generation failed: ${error.message}`);
     }
   }
 
@@ -583,12 +1288,12 @@ class S3Service {
     const rightLogo = this.getImageBase64('png/rightlogo.png');
     
     // Determine classifications
-    const vargClassification = this.determineVargClassification(letterData.letterType);
+    const vargClassification = this.determineVargClassificationForHeader(letterData.letterType); // CORRECTED: Use header version
     const rightHeaderText = this.determineRightHeaderText(letterData.letterType);
     const complainantName = this.extractComplainantName(letterData);
     
-    // Use enhanced subject line generation
-    const subjectLine = this.generateSubjectLine(letterData.letterType, complainantName, letterData);
+    // Use corrected subject line generation
+    const subjectLine = this.generateSubjectLine(letterData.letterType); // CORRECTED: No complainant name needed
     
     const tableData = this.generateTableData(letterData, complainantName);
     
@@ -936,7 +1641,7 @@ class S3Service {
                     <tr>
                         <td>${row.applicationNumber}</td>
                         <td>${row.applicationType}</td>
-                        <td>${row.applicantName}</td>
+                        <td></td>
                         <td>${row.outwardNumber}</td>
                     </tr>
                     `).join('')}
@@ -1090,6 +1795,14 @@ class S3Service {
                             }
                         }, 2000);
                     }
+
+                    if (result.wordUrl) {
+                        setTimeout(() => {
+                            if (confirm('Word फाइल डाउनलोड करायची?')) {
+                                window.open(result.wordUrl, '_blank');
+                            }
+                        }, 3000);
+                    }
                 } else {
                     showError('त्रुटी: ' + (result.error || 'अपडेट करण्यात अयशस्वी'));
                 }
@@ -1209,10 +1922,10 @@ class S3Service {
     const rightLogo = this.getImageBase64('png/rightlogo.png');
     
     // Determine classifications
-    const vargClassification = this.determineVargClassification(letterData.letterType);
+    const vargClassification = this.determineVargClassificationForHeader(letterData.letterType); // CORRECTED: Use header version
     const rightHeaderText = this.determineRightHeaderText(letterData.letterType);
     const complainantName = this.extractComplainantName(letterData);
-    const subjectLine = this.generateSubjectLine(letterData.letterType, complainantName, letterData);
+    const subjectLine = this.generateSubjectLine(letterData.letterType); // CORRECTED: No complainant name needed
     const tableData = this.generateTableData(letterData, complainantName);
     
     return `
@@ -1411,7 +2124,7 @@ class S3Service {
                 <tr>
                     <td>${row.applicationNumber}</td>
                     <td>${row.applicationType}</td>
-                    <td>${row.applicantName}</td>
+                    <td></td>
                     <td>${row.outwardNumber}</td>
                 </tr>
                 `).join('')}
@@ -1440,10 +2153,10 @@ class S3Service {
     `;
   }
   
-  // Enhanced method to generate covering letter with simple signature support
+  // Enhanced method to generate covering letter with Word document support
   async generateAndUploadSignedCoveringLetter(letterContent, letterData, signatureBase64 = null, signerName = null) {
     try {
-      console.log('📄 Generating covering letter with simple signature support...', {
+      console.log('📄 Generating covering letter with Word document and signature support...', {
         hasSignature: !!signatureBase64,
         signerName,
         letterNumber: letterData.letterNumber
@@ -1474,22 +2187,30 @@ class S3Service {
       
       await browser.close();
       
+      // Generate Word document with/without signature
+      let wordBuffer;
+      if (signatureBase64) {
+        wordBuffer = await this.generateWordDocumentWithSignature(letterContent, letterData, signatureBase64, signerName);
+      } else {
+        wordBuffer = await this.generateWordDocument(letterContent, letterData);
+      }
+      
       // Determine filename suffix
       const suffix = signatureBase64 ? '-signed' : '';
       const timestamp = Date.now();
       
       // Upload PDF to S3
-      const fileName = `covering-letters/${letterData.letterNumber}${suffix}-${timestamp}.pdf`;
+      const pdfFileName = `covering-letters/${letterData.letterNumber}${suffix}-${timestamp}.pdf`;
       const pdfCommand = new PutObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
-        Key: fileName,
+        Key: pdfFileName,
         Body: pdfBuffer,
         ContentType: 'application/pdf',
       });
       
       await s3Client.send(pdfCommand);
       
-      // Upload HTML to S3 as well
+      // Upload HTML to S3
       const htmlFileName = `covering-letters/${letterData.letterNumber}${suffix}-${timestamp}.html`;
       const htmlCommand = new PutObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
@@ -1500,21 +2221,36 @@ class S3Service {
       
       await s3Client.send(htmlCommand);
       
-      // Generate URLs
-      const pdfUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
-      const htmlUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${htmlFileName}`;
+      // Upload Word document to S3
+      const wordFileName = `covering-letters/${letterData.letterNumber}${suffix}-${timestamp}.docx`;
+      const wordCommand = new PutObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: wordFileName,
+        Body: wordBuffer,
+        ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
       
-      console.log('✅ Covering letter generated and uploaded successfully with simple signature:', {
+      await s3Client.send(wordCommand);
+      
+      // Generate URLs
+      const pdfUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${pdfFileName}`;
+      const htmlUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${htmlFileName}`;
+      const wordUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${wordFileName}`;
+      
+      console.log('✅ Covering letter generated and uploaded successfully with Word document:', {
         pdfUrl,
         htmlUrl,
+        wordUrl,
         signed: !!signatureBase64
       });
       
       return {
         pdfUrl: pdfUrl,
         htmlUrl: htmlUrl,
-        fileName: fileName,
+        wordUrl: wordUrl,
+        fileName: pdfFileName,
         htmlFileName: htmlFileName,
+        wordFileName: wordFileName,
         signed: !!signatureBase64,
         signedBy: signerName,
         signedAt: signatureBase64 ? new Date() : null
@@ -1526,10 +2262,10 @@ class S3Service {
     }
   }
   
-  // Generate PDF and upload to S3 with simple signature support
+  // Generate PDF and upload to S3 with Word document support
   async generateAndUploadCoveringLetter(letterContent, letterData) {
     try {
-      console.log('📄 Generating covering letter PDF with simple signature support...', {
+      console.log('📄 Generating covering letter with Word document support...', {
         letterNumber: letterData.letterNumber,
         letterType: letterData.letterType
       });
@@ -1572,20 +2308,26 @@ class S3Service {
         
         console.log('✅ PDF generated successfully, size:', pdfBuffer.length, 'bytes');
         
+        // Generate Word document
+        const wordBuffer = await this.generateWordDocument(letterContent, letterData);
+        console.log('✅ Word document generated successfully, size:', wordBuffer.length, 'bytes');
+        
+        const timestamp = Date.now();
+        
         // Upload PDF to S3
-        const fileName = `covering-letters/${letterData.letterNumber}-${Date.now()}.pdf`;
+        const pdfFileName = `covering-letters/${letterData.letterNumber}-${timestamp}.pdf`;
         const pdfCommand = new PutObjectCommand({
           Bucket: process.env.AWS_BUCKET_NAME,
-          Key: fileName,
+          Key: pdfFileName,
           Body: pdfBuffer,
           ContentType: 'application/pdf',
         });
         
         await s3Client.send(pdfCommand);
-        console.log('✅ PDF uploaded to S3:', fileName);
+        console.log('✅ PDF uploaded to S3:', pdfFileName);
         
-        // Upload HTML to S3 as well
-        const htmlFileName = `covering-letters/${letterData.letterNumber}-${Date.now()}.html`;
+        // Upload HTML to S3
+        const htmlFileName = `covering-letters/${letterData.letterNumber}-${timestamp}.html`;
         const htmlCommand = new PutObjectCommand({
           Bucket: process.env.AWS_BUCKET_NAME,
           Key: htmlFileName,
@@ -1596,15 +2338,30 @@ class S3Service {
         await s3Client.send(htmlCommand);
         console.log('✅ HTML uploaded to S3:', htmlFileName);
         
+        // Upload Word document to S3
+        const wordFileName = `covering-letters/${letterData.letterNumber}-${timestamp}.docx`;
+        const wordCommand = new PutObjectCommand({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: wordFileName,
+          Body: wordBuffer,
+          ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        });
+        
+        await s3Client.send(wordCommand);
+        console.log('✅ Word document uploaded to S3:', wordFileName);
+        
         // Generate URLs
-        const pdfUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+        const pdfUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${pdfFileName}`;
         const htmlUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${htmlFileName}`;
+        const wordUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${wordFileName}`;
         
         return {
           pdfUrl: pdfUrl,
           htmlUrl: htmlUrl,
-          fileName: fileName,
-          htmlFileName: htmlFileName
+          wordUrl: wordUrl, // ✅ INCLUDED WORD URL
+          fileName: pdfFileName,
+          htmlFileName: htmlFileName,
+          wordFileName: wordFileName // ✅ INCLUDED WORD FILENAME
         };
         
       } catch (puppeteerError) {
@@ -1688,6 +2445,26 @@ class S3Service {
         statusCode: error.$metadata?.httpStatusCode
       });
       throw new Error(`Failed to download file from S3: ${error.message}`);
+    }
+  }
+
+  // Delete file from S3
+  async deleteFromS3(fileName) {
+    try {
+      const deleteParams = {
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: fileName,
+      };
+
+      const command = new DeleteObjectCommand(deleteParams);
+      await s3Client.send(command);
+      
+      console.log(`🗑️ File deleted from S3: ${fileName}`);
+      return true;
+
+    } catch (error) {
+      console.error('❌ Error deleting from S3:', error);
+      throw new Error(`S3 delete failed: ${error.message}`);
     }
   }
 }
