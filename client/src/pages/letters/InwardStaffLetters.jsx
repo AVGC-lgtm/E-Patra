@@ -1277,7 +1277,7 @@ const InwardStaffLetters = () => {
     return false;
   };
 
-  // Function to organize emails in conversation threads (simple and clear version)
+  // Function to organize emails in conversation threads (multiple parents structure)
   const organizeEmailsInThreadImproved = (emails) => {
     if (!emails || emails.length === 0) return [];
     
@@ -1293,31 +1293,54 @@ const InwardStaffLetters = () => {
     // Sort all emails by date (oldest first)
     const sortedEmails = [...emails].sort((a, b) => new Date(a.date) - new Date(b.date));
     
-    // The FIRST email is ALWAYS the parent
-    const parentEmail = sortedEmails[0];
+    // Group emails by sender to identify different parents
+    const senderGroups = new Map();
     
-    // ALL other emails are children
-    const childEmails = sortedEmails.slice(1);
+    sortedEmails.forEach(email => {
+      const sender = email.from || '';
+      if (!senderGroups.has(sender)) {
+        senderGroups.set(sender, []);
+      }
+      senderGroups.get(sender).push(email);
+    });
     
-    console.log('Parent Email:', parentEmail.subject);
-    console.log('Child Emails:', childEmails.map(e => e.subject));
+    console.log('Sender Groups:', Array.from(senderGroups.keys()));
+    
+    const threads = [];
+    
+    // Create a thread for each sender (each sender is a potential parent)
+    senderGroups.forEach((senderEmails, sender) => {
+      // Sort emails from this sender by date
+      senderEmails.sort((a, b) => new Date(a.date) - new Date(b.date));
+      
+      // The first email from this sender is the parent
+      const parentEmail = senderEmails[0];
+      
+      // All other emails from this sender are children
+      const childEmails = senderEmails.slice(1);
+      
+      console.log(`Parent from ${sender}:`, parentEmail.subject);
+      console.log(`Children from ${sender}:`, childEmails.map(e => e.subject));
+      
+      // Create thread for this sender
+      const thread = {
+        conversationKey: `sender_${sender}_${parentEmail.id}`,
+        original: parentEmail,
+        replies: childEmails.map(email => ({
+          email: email,
+          children: []
+        })),
+        emailsWithReplies: new Set(childEmails.map(e => e.id)),
+        allEmails: senderEmails
+      };
+      
+      threads.push(thread);
+    });
+    
+    console.log('Created threads:', threads.length);
     console.log('=====================================');
     
-    // Create a SINGLE thread with parent and children
-    const thread = {
-      conversationKey: `single_thread_${parentEmail.id}`,
-      original: parentEmail,
-      replies: childEmails.map(email => ({
-        email: email,
-        children: []
-      })),
-      emailsWithReplies: new Set(childEmails.map(e => e.id)),
-      allEmails: sortedEmails
-    };
-    
-    console.log('Created single thread:', thread);
-    
-    return [thread]; // Return array with single thread
+    return threads;
   };
 
   // Fallback function for organizing emails
@@ -2522,8 +2545,8 @@ const InwardStaffLetters = () => {
             </h2>
             <div className="text-center text-sm text-gray-600 mb-4">
               {language === 'mr' 
-                ? 'मूळ ईमेल आणि त्याचे उत्तरे' 
-                : 'Original Email and Its Replies'}
+                ? 'पालक ईमेल्स आणि त्यांचे उत्तरे' 
+                : 'Parent Emails and Their Replies'}
             </div>
             {selectedReplies.length === 0 ? (
               <div className="text-center text-gray-500">
@@ -2537,12 +2560,15 @@ const InwardStaffLetters = () => {
                     <div className="bg-blue-50 border-b border-gray-200 p-3">
                       <div className="flex justify-between items-center">
                         <div className="text-sm font-medium text-blue-800">
-                          {language === 'mr' ? 'मूळ ईमेल' : 'Original Email'}
+                          {language === 'mr' ? `पालक ईमेल ${threadIdx + 1}` : `Parent Email ${threadIdx + 1}`}
                           {thread.original.referenceNumber && (
                             <span className="ml-2 text-blue-600">
                               ({language === 'mr' ? 'संदर्भ:' : 'Ref:'} {thread.original.referenceNumber})
                             </span>
                           )}
+                          <span className="ml-2 text-gray-600">
+                            ({thread.original.from})
+                          </span>
                         </div>
                         <div className="text-xs text-blue-600">
                           {language === 'mr' 
