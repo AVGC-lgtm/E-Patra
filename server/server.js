@@ -76,23 +76,6 @@ const corsOptions = {
 app.use(cors(corsOptions)); 
 app.use(express.json()); 
 
-// Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Create uploads directory if it doesn't exist
-const fs = require('fs');
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('Created uploads directory for file serving');
-}
-
-// Create temp directory for CSV imports if it doesn't exist
-const tempDir = path.join(__dirname, 'temp');
-if (!fs.existsSync(tempDir)) {
-  fs.mkdirSync(tempDir);
-  console.log('Created temp directory for file uploads');
-}
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -186,18 +169,6 @@ sequelize.sync({ force: false, alter: true })  // Automatically update the table
       // Start IMAP listener
       startImapListenerAuto(); // This will start the listener on server startup
 
-      console.log('✓ Application initialized successfully');
-      console.log('Available API endpoints:');
-      console.log('  - Auth: /api/auth');
-      console.log('  - Roles: /api/roles');
-      console.log('  - Patras: /api/patras');
-      console.log('  - Acknowledgments: /api/acknowledgments');
-      console.log('  - Police Stations: /api/police-stations');
-      console.log('  - Files: /api/files');
-      console.log('  - Email: /api/email');
-      console.log('  - Email Senders: /api/senders');
-      console.log('  - Email Receivers: /api/receivers');
-      console.log('  - Dynamic Email: /api/dynamic-email');
     });
   })
   .catch((err) => {
