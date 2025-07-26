@@ -20,10 +20,13 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Add user info to request object
+    // Add user info to request object (including role from JWT)
     req.user = {
       id: user.id,
-      email: user.email
+      email: user.email,
+      roleId: decoded.roleId,
+      roleName: decoded.roleName,
+      table: decoded.table
     };
 
     next();

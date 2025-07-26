@@ -31,7 +31,7 @@ const OutwardStaffLetters = () => {
   return (
     <BaseLetterComponent
       role="outward_staff"
-      apiEndpoint="http://localhost:5000/api/patras/outward"
+      apiEndpoint="http://localhost:5000/api/patras"
       additionalColumns={additionalColumns}
     />
   );

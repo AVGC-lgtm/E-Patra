@@ -1,17 +1,25 @@
+// routes/inwardPatraRoutes.js - Updated with OW reference number route and authentication
 const express = require('express');
 const patraController = require('../controllers/InwardPatraController');
+const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 
 // ===== PATRA ROUTES =====
 
+// Get forward-to options (utility route - MUST BE BEFORE other routes)
+router.get('/forward-to-options', patraController.getForwardToOptions);
+
 // Create a new Patra with auto-generated covering letter
 router.post('/', patraController.createPatra);
 
-// Get all Patras with complete covering letter data
-router.get('/', patraController.getAllPatras);
+// Get all Patras with complete covering letter data (with role-based filtering)
+router.get('/', authenticateToken, patraController.getAllPatras);
 
 // Get Patra by reference number (MUST BE BEFORE /:id route)
 router.get('/reference/:referenceNumber', patraController.getPatraByReferenceNumber);
+
+// NEW: Get Patra by OW reference number (MUST BE BEFORE /:id route)
+router.get('/ow-reference/:owReferenceNumber', patraController.getPatraByOwReferenceNumber);
 
 // Get Patra by user ID
 router.get('/user/:userId', patraController.getPatraByUserId);
@@ -30,7 +38,6 @@ router.put('/:id/approve', patraController.approveLetter);
 
 // Resend letter back to Inward Letters (HOD action) (MUST BE BEFORE /:id route)
 router.put('/:id/resend', patraController.resendLetter);
-
 
 // Get a Patra by ID with complete covering letter data
 router.get('/:id', patraController.getPatraById);

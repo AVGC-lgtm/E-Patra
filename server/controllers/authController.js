@@ -7,8 +7,14 @@ const authResponses = require('../responses/authResponses'); // Importing respon
 const multer = require('multer');
 const multerS3 = require('multer-s3');
 const { S3Client } = require('@aws-sdk/client-s3');
+// Import the professional email templates
+const {
+  getPasswordResetOTPTemplate,
+  getWelcomeEmailTemplate,
+  getPasswordChangedTemplate,
+  getAccountLockedTemplate
+} = require('../utils/emailTemplates'); // Adjust path as needed
 require('dotenv').config();
-
 
 // AWS S3 Configuration
 const s3Client = new S3Client({
@@ -55,39 +61,20 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Simple email templates for authentication
-const getPasswordResetOTPTemplate = (otp) => ({
-  subject: 'Password Reset OTP',
-  html: `<p>Your OTP for password reset is: <strong>${otp}</strong></p><p>This OTP will expire in 10 minutes.</p>`,
-  text: `Your OTP for password reset is: ${otp}. This OTP will expire in 10 minutes.`
-});
-
-const getWelcomeEmailTemplate = (email) => ({
-  subject: 'Welcome to E-Patra',
-  html: `<p>Welcome to E-Patra! Your account has been created successfully with email: ${email}</p>`,
-  text: `Welcome to E-Patra! Your account has been created successfully with email: ${email}`
-});
-
-const getPasswordChangedTemplate = () => ({
-  subject: 'Password Changed Successfully',
-  html: '<p>Your password has been changed successfully.</p>',
-  text: 'Your password has been changed successfully.'
-});
-
-// Register a new user
+// Register a new user - UPDATED TO USE roleId
 const register = async (req, res) => {
-  const { email, password, roleName, stationName } = req.body;
+  const { email, password, roleId } = req.body;
 
   // Validate required fields
-  if (!email || !password || !roleName) {
-    return res.status(400).json(authResponses.error('Email, password, and role name are required'));
+  if (!email || !password || !roleId) {
+    return res.status(400).json(authResponses.error('Email, password, and roleId are required'));
   }
 
   try {
-    // Check if the role exists
-    const role = await Role.findOne({ where: { roleName } });
+    // Check if the role exists by roleId
+    const role = await Role.findByPk(roleId);
     if (!role) {
-      return res.status(400).json(authResponses.error('Invalid role name'));
+      return res.status(400).json(authResponses.error('Invalid role ID'));
     }
 
     // Check if user already exists
@@ -103,11 +90,10 @@ const register = async (req, res) => {
     const user = await User.create({
       email,
       password: hashedPassword,
-      roleId: role.id,  // Associate the user with the roleId
-      stationName: stationName || null,  // Optional station name
+      roleId: roleId,  // Use the roleId directly from request
     });
 
-    // Send a welcome email
+    // Send a welcome email using the professional template
     try {
       const { subject, html, text } = getWelcomeEmailTemplate(email);
       await transporter.sendMail({
@@ -128,9 +114,16 @@ const register = async (req, res) => {
       include: [Role],  // Include Role model
     });
 
-    // Generate JWT token with roleId and roleName
+    // Generate JWT token with roleId, roleName, table, and categories
     const token = jwt.sign(
-      { id: userWithRole.id, email, roleId: userWithRole.roleId, roleName: userWithRole.Role.roleName, stationName: userWithRole.stationName },
+      { 
+        id: userWithRole.id, 
+        email, 
+        roleId: userWithRole.roleId, 
+        roleName: userWithRole.Role.roleName,
+        table: userWithRole.Role.table,
+        categories: userWithRole.Role.categories
+      },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -142,7 +135,6 @@ const register = async (req, res) => {
     return res.status(500).json(authResponses.error('Server error'));
   }
 };
-
 
 // Login user
 const login = async (req, res) => {
@@ -165,7 +157,8 @@ const login = async (req, res) => {
         email,
         roleId: user.roleId,
         roleName: user.Role.roleName,
-        stationName: user.stationName
+        table: user.Role.table,
+        categories: user.Role.categories
       },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
@@ -221,7 +214,7 @@ const forgotPassword = async (req, res) => {
 
     console.log('Sending OTP email to:', email);
     
-    // Send OTP email
+    // Send OTP email using the professional template
     try {
       const { subject, html, text } = getPasswordResetOTPTemplate(otp);
       await transporter.sendMail({
@@ -338,7 +331,7 @@ const resetPassword = async (req, res) => {
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
 
-    // Send password changed confirmation email
+    // Send password changed confirmation email using the professional template
     try {
       const { subject, html, text } = getPasswordChangedTemplate();
       await transporter.sendMail({
@@ -359,7 +352,6 @@ const resetPassword = async (req, res) => {
     return res.status(500).json(authResponses.error('Server error'));
   }
 };
-
 
 const updateSign = async (req, res) => {
   if (!req.file) {
@@ -417,15 +409,6 @@ const deleteSign = async (req, res) => {
     if (!user.sign) {
       return res.status(400).json({ error: 'No signature found to delete' });
     }
-
-    // TODO: Optionally delete the file from S3 here
-    // const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
-    // const key = user.sign.split('/').pop(); // Extract key from URL
-    // await s3Client.send(new DeleteObjectCommand({
-    //   Bucket: process.env.AWS_BUCKET_NAME,
-    //   Key: `signatures/${key}`
-    // }));
-
     // Remove the signature URL from the user
     user.sign = null;
     await user.save();

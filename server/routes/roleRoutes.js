@@ -1,24 +1,40 @@
 // routes/roleRoutes.js
 const express = require('express');
 const router = express.Router();
-const roleController = require('../controllers/roleController');
+const {
+  createRole,
+  updateRole, 
+  deleteRole,
+  getAllRoles,
+  getRolesByTable,
+  getRoleCategories,
+  getRolesForTable,
+  getRoleById
+} = require('../controllers/roleController');
 
 // Create a new role
-router.post('/', roleController.createRole);  
+router.post('/', createRole);
 
 // Get all roles
-router.get('/', roleController.getRoles);  
+router.get('/', getAllRoles);
 
-// Get a role by ID
-router.get('/:id', roleController.getRoleById);  
+// Get roles grouped by table (must come before /:roleId)
+router.get('/grouped/by-table', getRolesByTable);
 
-// Update a role by ID
-router.put('/:id', roleController.updateRoleById);  
+// Get categories for a specific role by role name
+router.get('/categories/:roleName', getRoleCategories);
 
-// Delete a role by ID
-router.delete('/:id', roleController.deleteRoleById);  
+// Get roles for a specific table
+router.get('/table/:tableName', getRolesForTable);
 
-// Delete all roles
-router.delete('/', roleController.deleteAllRoles);
+// Get role by ID (should come after specific routes)
+router.get('/:roleId', getRoleById);
+
+// Update a role
+router.put('/:roleId', updateRole);
+
+// Delete a role
+router.delete('/:roleId', deleteRole);
 
 module.exports = router;
+

@@ -40,6 +40,7 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
   const getActiveTab = () => {
     const path = location.pathname;
     if (path.includes('inward-letter')) return 'inward-letter';
+    if (path.includes('my-letters')) return 'my-letters';
     return 'dashboard';
   };
 
@@ -71,14 +72,70 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
     }
   };
 
-  // Simplified sidebar navigation items for inward users
+  // Simplified sidebar navigation items based on user role
   const { language } = useLanguage();
   const t = translations[language] || translations.en;
+  
+  const userRole = user?.role || 'user';
 
-  const navItems = [
-    { path: '/inward-dashboard', icon: '📊', label: language === 'mr' ? 'डॅशबोर्ड' : 'Dashboard', key: 'dashboard' },
-    { path: '/inward-dashboard/inward-letter', icon: '✉️', label: language === 'mr' ? 'आवक पत्र' : 'Inward Letter', key: 'inward-letter' }
-  ];
+  // Dynamic navigation items based on user role
+  const getNavItems = () => {
+    if (userRole === 'inward_user') {
+      return [
+        { path: '/inward-dashboard', icon: '📊', label: language === 'mr' ? 'डॅशबोर्ड' : 'Dashboard', key: 'dashboard' },
+        { path: '/inward-dashboard/inward-letter', icon: '✉️', label: language === 'mr' ? 'आवक पत्र' : 'Inward Letter', key: 'inward-letter' },
+        { path: '/inward-dashboard/my-letters', icon: '📋', label: language === 'mr' ? 'माझी पत्रे' : 'My Letters', key: 'my-letters' }
+      ];
+    } else {
+      // All other roles use outward-style navigation
+      return [
+        { path: '/outward-dashboard', icon: '📊', label: language === 'mr' ? 'डॅशबोर्ड' : 'Dashboard', key: 'dashboard' },
+        { path: '/outward-dashboard/outward-letters', icon: '📤', label: language === 'mr' ? 'पत्रे' : 'Letters', key: 'outward-letters' },
+        { path: '/outward-dashboard/track-application', icon: '🔍', label: language === 'mr' ? 'अर्ज ट्रॅक करा' : 'Track Application', key: 'track-application' }
+      ];
+    }
+  };
+
+  const navItems = getNavItems();
+
+  // Helper function to get role display name
+  const getRoleDisplayName = (role) => {
+    const roleNames = {
+      'outward_user': language === 'mr' ? 'जावक वापरकर्ता' : 'Outward User',
+      'inward_user': language === 'mr' ? 'आवक वापरकर्ता' : 'Inward User',
+      'head': language === 'mr' ? 'प्रमुख' : 'Head',
+      'sp': language === 'mr' ? 'पोलीस अधीक्षक' : 'Superintendent of Police',
+      'collector': language === 'mr' ? 'जिल्हाधिकारी' : 'Collector',
+      'dg_other': language === 'mr' ? 'डीजी' : 'Director General',
+      'home': language === 'mr' ? 'गृह विभाग' : 'Home Department',
+      'ig_nashik_other': language === 'mr' ? 'आयजी नाशिक' : 'Inspector General Nashik',
+      'shanik_local': language === 'mr' ? 'शैक्षणिक स्थानिक' : 'Educational Local',
+      'outside_police_station': language === 'mr' ? 'बाहेरील पोलीस स्टेशन' : 'Outside Police Station'
+    };
+    
+    return roleNames[role] || (language === 'mr' ? 'वापरकर्ता' : 'User');
+  };
+
+  // Helper function to get app title based on role
+  const getAppTitle = (role) => {
+    if (role === 'inward_user') {
+      return language === 'mr' ? 'ई-पत्रा' : 'E-Patra';
+    } else {
+      // For all other roles, show a more generic title
+      const roleTitles = {
+        'outward_user': language === 'mr' ? 'ई-पत्रा जावक' : 'E-Patra Outward',
+        'head': language === 'mr' ? 'ई-पत्रा प्रमुख' : 'E-Patra Head',
+        'sp': language === 'mr' ? 'ई-पत्रा एसपी' : 'E-Patra SP',
+        'collector': language === 'mr' ? 'ई-पत्रा कलेक्टर' : 'E-Patra Collector',
+        'dg_other': language === 'mr' ? 'ई-पत्रा डीजी' : 'E-Patra DG',
+        'home': language === 'mr' ? 'ई-पत्रा गृह' : 'E-Patra Home',
+        'ig_nashik_other': language === 'mr' ? 'ई-पत्रा आयजी' : 'E-Patra IG',
+        'shanik_local': language === 'mr' ? 'ई-पत्रा शैक्षणिक' : 'E-Patra Educational'
+      };
+      
+      return roleTitles[role] || (language === 'mr' ? 'ई-पत्रा' : 'E-Patra');
+    }
+  };
 
   // Get user initials for avatar
   const getUserInitials = (name) => {
@@ -114,16 +171,14 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
       {/* Desktop Sidebar */}
       <div 
         className={`${isDesktopSidebarOpen ? 'w-64' : 'w-20'} 
-                  hidden md:block fixed inset-y-0 left-0 z-40 bg-gradient-to-b from-green-800 to-green-900 text-white 
+                  hidden md:block fixed inset-y-0 left-0 z-40 bg-gradient-to-b from-blue-800 to-blue-900 text-white 
                   transition-all duration-300 ease-in-out h-full shadow-xl`}
       >
         <div className="p-4 relative h-full flex flex-col">
           <div className="flex items-center justify-center mb-8">
-            {isDesktopSidebarOpen ? (
-              <h1 className="text-xl font-bold text-white">{language === 'mr' ? 'ई-पत्रा' : 'E-Patra'}</h1>
-            ) : (
-              <h1 className="text-xl font-bold text-white">EP</h1>
-            )}
+            <h1 className="text-xl font-bold text-white">
+              {isDesktopSidebarOpen ? getAppTitle(userRole) : 'EP'}
+            </h1>
           </div>
     
           <nav className="flex-1">
@@ -133,8 +188,8 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
                 to={item.path} 
                 className={`flex items-center p-4 my-1 rounded-lg transition-all duration-200 ${
                   activeTab === item.key 
-                    ? 'bg-green-700 shadow-md' 
-                    : 'hover:bg-green-700 hover:bg-opacity-50'
+                    ? 'bg-blue-700 shadow-md' 
+                    : 'hover:bg-blue-700 hover:bg-opacity-50'
                 }`}
                 onClick={() => setActiveTab(item.key)}
               >
@@ -150,10 +205,10 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
 
           {/* Sidebar footer */}
           <div className="mt-auto pb-4">
-            <div className="border-t border-green-700 pt-4">
+            <div className="border-t border-blue-700 pt-4">
               <button 
                 onClick={onLogout}
-                className="flex items-center w-full p-3 rounded-lg hover:bg-green-700 transition-colors"
+                className="flex items-center w-full p-3 rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <span className={`${isDesktopSidebarOpen ? 'mr-3' : 'mx-auto'}`}>
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -178,15 +233,17 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
       {/* Mobile Sidebar */}
       <div 
         className={`${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
-                  md:hidden fixed inset-y-0 left-0 z-40 w-64 bg-gradient-to-b from-green-800 to-green-900 text-white 
+                  md:hidden fixed inset-y-0 left-0 z-40 w-64 bg-gradient-to-b from-blue-800 to-blue-900 text-white 
                   transition-transform duration-300 ease-in-out h-full shadow-xl`}
       >
         <div className="p-4 relative h-full flex flex-col">
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-xl font-bold">{language === 'mr' ? 'ई-पत्रा' : 'E-Patra'}</h1>
+            <h1 className="text-xl font-bold">
+              {getAppTitle(userRole)}
+            </h1>
             <button 
               onClick={() => setIsMobileSidebarOpen(false)}
-              className="p-2 text-white hover:bg-green-700 rounded-full transition-colors"
+              className="p-2 text-white hover:bg-blue-700 rounded-full transition-colors"
               aria-label="Close menu"
             >
               <svg 
@@ -213,8 +270,8 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
                 to={item.path} 
                 className={`flex items-center p-4 my-1 rounded-lg transition-all duration-200 ${
                   activeTab === item.key 
-                    ? 'bg-green-700 shadow-md' 
-                    : 'hover:bg-green-700 hover:bg-opacity-50'
+                    ? 'bg-blue-700 shadow-md' 
+                    : 'hover:bg-blue-700 hover:bg-opacity-50'
                 }`}
                 onClick={() => {
                   setActiveTab(item.key);
@@ -229,10 +286,10 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
 
           {/* Mobile sidebar footer */}
           <div className="mt-auto pb-4">
-            <div className="border-t border-green-700 pt-4">
+            <div className="border-t border-blue-700 pt-4">
               <button 
                 onClick={onLogout}
-                className="flex items-center w-full p-3 rounded-lg hover:bg-green-700 transition-colors"
+                className="flex items-center w-full p-3 rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -286,12 +343,14 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
                   onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
                   className="flex items-center space-x-2 focus:outline-none"
                 >
-                  <div className="h-10 w-10 rounded-full bg-green-600 flex items-center justify-center text-white font-semibold">
+                  <div className="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold">
                     {user ? getUserInitials(user.name) : 'U'}
                   </div>
                   <div className="hidden md:block text-left">
                     <p className="text-sm font-medium text-gray-700">{user?.name || 'User'}</p>
-                    <p className="text-xs text-gray-500 capitalize">{language === 'mr' ? 'आवक वापरकर्ता' : 'Inward User'}</p>
+                    <p className="text-xs text-gray-500 capitalize">
+                      {getRoleDisplayName(userRole)}
+                    </p>
                   </div>
                   <svg 
                     className={`w-4 h-4 text-gray-500 transition-transform ${isProfileDropdownOpen ? 'transform rotate-180' : ''}`}
@@ -314,7 +373,7 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
                       <p className="text-xs text-gray-500">{user?.email || ''}</p>
                     </div>
                     <div className="px-4 py-2 text-xs text-gray-700">
-                      {language === 'mr' ? 'भूमिका: आवक वापरकर्ता' : 'Role: Inward User'}
+                      {language === 'mr' ? 'भूमिका: ' : 'Role: '}{getRoleDisplayName(userRole)}
                     </div>
                     <div className="border-t border-gray-100"></div>
                     <button

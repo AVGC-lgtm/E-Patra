@@ -7,6 +7,7 @@ import translations from '../translations';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { format, parseISO } from "date-fns";
+import axios from 'axios';
 
 const NewLetter = () => {
   const [mainFiles, setMainFiles] = useState([]);
@@ -449,6 +450,20 @@ const NewLetter = () => {
   // Get language from context
   const { language: currentLanguage } = useLanguage();
   const t = translations[currentLanguage] || translations['en'];
+
+  // Helper function to get Marathi table names
+  const getMarathiTableName = (englishLabel) => {
+    const marathiMap = {
+      'DG Table': 'डीजी टेबल',
+      'IG Table': 'आयजी टेबल', 
+      'SP Table': 'एसपी टेबल',
+      'Collector Table': 'कलेक्टर टेबल',
+      'Home Table': 'होम टेबल',
+      'Shanik Table': 'शैक्षणिक टेबल',
+      'Admin Table': 'प्रशासक टेबल'
+    };
+    return marathiMap[englishLabel] || englishLabel;
+  };
   
   // Effect to handle language changes and update display values
   useEffect(() => {
@@ -456,6 +471,37 @@ const NewLetter = () => {
       setFormData(prev => ({ ...prev }));
     }
   }, [currentLanguage]);
+
+  // Fetch forward-to options on component mount
+  useEffect(() => {
+    const fetchForwardToOptions = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get('http://localhost:5000/api/patras/forward-to-options', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.data.success) {
+          setForwardToOptions(response.data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching forward-to options:', error);
+        // Set default options if API fails
+        setForwardToOptions([
+          { value: 'dg', label: 'DG Table' },
+          { value: 'ig', label: 'IG Table' },
+          { value: 'sp', label: 'SP Table' },
+          { value: 'collector', label: 'Collector Table' },
+          { value: 'home', label: 'Home Table' },
+          { value: 'shanik', label: 'Local Table' }
+        ]);
+      }
+    };
+
+    fetchForwardToOptions();
+  }, []);
   
   // Letter classification mapping for consistent language support
   const letterClassificationMap = {
@@ -526,24 +572,126 @@ const NewLetter = () => {
       { value: t.government_letter, label: t.government_letter },
       { value: t.government_reference, label: t.government_reference },
     ],
+    
+  
     'other_mail': [
-      { value: t.other_mail_confidential, label: t.other_mail_confidential },
-      { value: t.other_mail_sanction_offence, label: t.other_mail_sanction_offence },
-      { value: t.other_mail_deficiency, label: t.other_mail_deficiency },
-      { value: t.other_mail_hospital_record, label: t.other_mail_hospital_record },
-      { value: t.other_mail_accumulated_leave, label: t.other_mail_accumulated_leave },
-      { value: t.other_mail_parole_leave, label: t.other_mail_parole_leave },
-      { value: t.other_mail_weekly_diary, label: t.other_mail_weekly_diary },
-      { value: t.other_mail_daily_check, label: t.other_mail_daily_check },
-      { value: t.other_mail_fingerprint, label: t.other_mail_fingerprint },
-      { value: t.other_mail_medical_bill, label: t.other_mail_medical_bill },
-      { value: t.other_mail_tenant_verification, label: t.other_mail_tenant_verification },
-      { value: t.other_mail_leave_sanction, label: t.other_mail_leave_sanction },
-      { value: t.other_mail_warrant, label: t.other_mail_warrant },
-      { value: t.other_mail_explanation_absence, label: t.other_mail_explanation_absence },
-      { value: t.other_mail_death_summary_approval, label: t.other_mail_death_summary_approval },
-      { value: t.other_mail_viscera, label: t.other_mail_viscera },
+      // Main Categories
+      { value: 'other_mail_confidential', label: t.other_mail_confidential },
+      { value: 'other_mail_sanction_offence', label: t.other_mail_sanction_offence },
+      { value: 'other_mail_deficiency', label: t.other_mail_deficiency },
+      { value: 'other_mail_hospital_record', label: t.other_mail_hospital_record },
+      { value: 'other_mail_accumulated_leave', label: t.other_mail_accumulated_leave },
+      { value: 'other_mail_parole_leave', label: t.other_mail_parole_leave },
+      { value: 'other_mail_weekly_diary', label: t.other_mail_weekly_diary },
+      { value: 'other_mail_daily_check', label: t.other_mail_daily_check },
+      { value: 'other_mail_fingerprint', label: t.other_mail_fingerprint },
+      { value: 'other_mail_medical_bill', label: t.other_mail_medical_bill },
+      { value: 'other_mail_tenant_verification', label: t.other_mail_tenant_verification },
+      { value: 'other_mail_leave_sanction', label: t.other_mail_leave_sanction },
+      { value: 'other_mail_warrant', label: t.other_mail_warrant },
+      { value: 'other_mail_explanation_absence', label: t.other_mail_explanation_absence },
+      { value: 'other_mail_death_summary_approval', label: t.other_mail_death_summary_approval },
+      { value: 'other_mail_viscera', label: t.other_mail_viscera },
+      
+      // Departmental and Orders
+      { value: 'other_mail_departmental_inquiry', label: t.other_mail_departmental_inquiry },
+      { value: 'other_mail_final_order', label: t.other_mail_final_order },
+      
+      // Police and Administration
+      { value: 'other_mail_district_police_press_release', label: t.other_mail_district_police_press_release },
+      { value: 'other_mail_license', label: t.other_mail_license },
+      { value: 'other_mail_office_inspection', label: t.other_mail_office_inspection },
+      { value: 'other_mail_vip_visit', label: t.other_mail_vip_visit },
+      { value: 'other_mail_settlement', label: t.other_mail_settlement },
+      { value: 'other_mail_reward_punishment', label: t.other_mail_reward_punishment },
+      { value: 'other_mail_charge_officer_order', label: t.other_mail_charge_officer_order },
+      { value: 'other_mail_do', label: t.other_mail_do },
+      
+      // Cyber and Technical
+      { value: 'other_mail_cyber', label: t.other_mail_cyber },
+      { value: 'other_mail_cdr', label: t.other_mail_cdr },
+      { value: 'other_mail_caf', label: t.other_mail_caf },
+      { value: 'other_mail_sdr', label: t.other_mail_sdr },
+      { value: 'other_mail_imei', label: t.other_mail_imei },
+      { value: 'other_mail_dump_data', label: t.other_mail_dump_data },
+      { value: 'other_mail_it_act', label: t.other_mail_it_act },
+      { value: 'other_mail_facebook', label: t.other_mail_facebook },
+      { value: 'other_mail_online_fraud', label: t.other_mail_online_fraud },
+      { value: 'other_mail_self_immolation', label: t.other_mail_self_immolation },
+      { value: 'other_mail_human_rights', label: t.other_mail_human_rights },
+      { value: 'other_mail_pcr', label: t.other_mail_pcr },
+      
+      // Typist and Technical
+      { value: 'other_mail_steno', label: t.other_mail_steno },
+      { value: 'other_mail_typist', label: t.other_mail_typist },
+      { value: 'other_mail_cdr_sdr_caf', label: t.other_mail_cdr_sdr_caf },
+      
+      // Senior Mail
+      { value: 'other_mail_senior_sp', label: t.other_mail_senior_sp },
+      { value: 'other_mail_senior_sdpo', label: t.other_mail_senior_sdpo },
+      
+      // A-Class
+      { value: 'other_mail_a_class_pm', label: t.other_mail_a_class_pm },
+      { value: 'other_mail_a_class_cm', label: t.other_mail_a_class_cm },
+      { value: 'other_mail_a_class_deputy_cm', label: t.other_mail_a_class_deputy_cm },
+      { value: 'other_mail_a_class_home_minister', label: t.other_mail_a_class_home_minister },
+      { value: 'other_mail_a_class_mos_home', label: t.other_mail_a_class_mos_home },
+      { value: 'other_mail_a_class_guardian_minister', label: t.other_mail_a_class_guardian_minister },
+      { value: 'other_mail_a_class_union_minister', label: t.other_mail_a_class_union_minister },
+      { value: 'other_mail_a_class_mp', label: t.other_mail_a_class_mp },
+      { value: 'other_mail_a_class_mla', label: t.other_mail_a_class_mla },
+      { value: 'other_mail_a_class_other', label: t.other_mail_a_class_other },
+      
+      // Other Categories
+      { value: 'other_mail_general', label: t.other_mail_general },
+      { value: 'other_mail_treasury', label: t.other_mail_treasury },
+      { value: 'other_mail_commandant', label: t.other_mail_commandant },
+      { value: 'other_mail_principal_ptc', label: t.other_mail_principal_ptc },
+      { value: 'other_mail_c_class_commissioner', label: t.other_mail_c_class_commissioner },
+      { value: 'other_mail_application_report', label: t.other_mail_application_report },
+      { value: 'other_mail_appeal', label: t.other_mail_appeal },
+      { value: 'other_mail_in_service_training', label: t.other_mail_in_service_training },
+      { value: 'other_mail_building_branch', label: t.other_mail_building_branch },
+      { value: 'other_mail_pension', label: t.other_mail_pension },
+      { value: 'other_mail_vehicle_license', label: t.other_mail_vehicle_license },
+      { value: 'other_mail_payments', label: t.other_mail_payments },
+      { value: 'other_mail_lapses_case', label: t.other_mail_lapses_case },
+      { value: 'other_mail_pay_fixation', label: t.other_mail_pay_fixation },
+      { value: 'other_mail_transfer', label: t.other_mail_transfer },
     ],
+    
+    'other_application': [
+      // Main Categories
+      { value: t.other_application_general, label: t.other_application_general },
+      { value: t.other_application_local, label: t.other_application_local },
+      { value: t.other_application_anonymous, label: t.other_application_anonymous },
+      { value: t.other_application_district_soldier, label: t.other_application_district_soldier },
+      { value: t.other_application_moneylender_reference, label: t.other_application_moneylender_reference },
+      { value: t.other_application_lokshahi_reference, label: t.other_application_lokshahi_reference },
+      { value: t.other_application_confidential, label: t.other_application_confidential },
+      
+      // B Class Applications
+      { value: t.other_application_b_class_sp_ahmednagar, label: t.other_application_b_class_sp_ahmednagar },
+      { value: t.other_application_b_class_upper_sp_ahmednagar, label: t.other_application_b_class_upper_sp_ahmednagar },
+      
+      // C Class Applications
+      { value: t.other_application_c_class_commissioner, label: t.other_application_c_class_commissioner },
+      { value: t.other_application_c_class_district_collector, label: t.other_application_c_class_district_collector },
+      { value: t.other_application_c_class_sdpo_shrirampur, label: t.other_application_c_class_sdpo_shrirampur },
+      { value: t.other_application_c_class_sdpo_karjat, label: t.other_application_c_class_sdpo_karjat },
+      { value: t.other_application_c_class_sdpo_shirdi, label: t.other_application_c_class_sdpo_shirdi },
+      { value: t.other_application_c_class_sdpo_shevgaon, label: t.other_application_c_class_sdpo_shevgaon },
+      { value: t.other_application_c_class_all_police_stations, label: t.other_application_c_class_all_police_stations },
+      { value: t.other_application_c_class_all_branches, label: t.other_application_c_class_all_branches },
+      { value: t.other_application_c_class_sainik_board, label: t.other_application_c_class_sainik_board },
+      { value: t.other_application_c_class_senior_army_officer, label: t.other_application_c_class_senior_army_officer },
+      { value: t.other_application_c_class_lokshahi_din, label: t.other_application_c_class_lokshahi_din },
+      { value: t.other_application_c_class_sdpo_nagar_city, label: t.other_application_c_class_sdpo_nagar_city },
+      { value: t.other_application_c_class_sdpo_nagar_taluka, label: t.other_application_c_class_sdpo_nagar_taluka },
+      { value: t.other_application_c_class_sdpo_sangamner, label: t.other_application_c_class_sdpo_sangamner },
+    ],
+
+
     'right_to_public_services_act_2015': [
       { value: t.right_to_public_services_act_2015_arms_license, label: t.right_to_public_services_act_2015_arms_license },
       { value: t.right_to_public_services_act_2015_character_verification, label: t.right_to_public_services_act_2015_character_verification },
@@ -558,24 +706,47 @@ const NewLetter = () => {
       { value: t.right_to_public_services_act_2015_devsthan_b_class, label: t.right_to_public_services_act_2015_devsthan_b_class },
       { value: t.right_to_public_services_act_2015_other_licenses, label: t.right_to_public_services_act_2015_other_licenses },
     ],
+
+    'other_application': [
+      // Main Categories
+      { value: t.other_application_general, label: t.other_application_general },
+      { value: t.other_application_local, label: t.other_application_local },
+      { value: t.other_application_anonymous, label: t.other_application_anonymous },
+      { value: t.other_application_district_serviceman || t.other_application_district_soldier, label: t.other_application_district_serviceman || t.other_application_district_soldier },
+      { value: t.other_application_moneylending_related || t.other_application_moneylender_reference, label: t.other_application_moneylending_related || t.other_application_moneylender_reference },
+      { value: t.other_application_lokshahi_related || t.other_application_lokshahi_reference, label: t.other_application_lokshahi_related || t.other_application_lokshahi_reference },
+      { value: t.other_application_confidential, label: t.other_application_confidential },
+      
+      // B Class Applications
+      { value: t.other_application_b_class_sp_ahmednagar, label: t.other_application_b_class_sp_ahmednagar },
+      { value: t.other_application_b_class_upper_sp_ahmednagar, label: t.other_application_b_class_upper_sp_ahmednagar },
+      
+      // C Class Applications
+      { value: t.other_application_c_class_commissioner, label: t.other_application_c_class_commissioner },
+      { value: t.other_application_c_class_district_collector, label: t.other_application_c_class_district_collector },
+      { value: t.other_application_c_class_sdpo_shrirampur, label: t.other_application_c_class_sdpo_shrirampur },
+      { value: t.other_application_c_class_sdpo_karjat, label: t.other_application_c_class_sdpo_karjat },
+      { value: t.other_application_c_class_sdpo_shirdi, label: t.other_application_c_class_sdpo_shirdi },
+      { value: t.other_application_c_class_sdpo_shevgaon, label: t.other_application_c_class_sdpo_shevgaon },
+      { value: t.other_application_c_class_all_police_stations, label: t.other_application_c_class_all_police_stations },
+      { value: t.other_application_c_class_all_branches, label: t.other_application_c_class_all_branches },
+      { value: t.other_application_c_class_sainik_board, label: t.other_application_c_class_sainik_board },
+      { value: t.other_application_c_class_senior_army_officer, label: t.other_application_c_class_senior_army_officer },
+      { value: t.other_application_c_class_lokshahi_din, label: t.other_application_c_class_lokshahi_din },
+      { value: t.other_application_c_class_sdpo_nagar_city, label: t.other_application_c_class_sdpo_nagar_city },
+      { value: t.other_application_c_class_sdpo_nagar_taluka, label: t.other_application_c_class_sdpo_nagar_taluka },
+      { value: t.other_application_c_class_sdpo_sangamner, label: t.other_application_c_class_sdpo_sangamner },
+    ],
     'portal_application': [
       { value: t.portal_application_pm_pg, label: t.portal_application_pm_pg },
       { value: t.portal_application_aaple_sarkar, label: t.portal_application_aaple_sarkar },
       { value: t.portal_application_homd, label: t.portal_application_homd },
     ],
-    'other_application': [
-      { value: t.other_application_local, label: t.other_application_local },
-      { value: t.other_application_anonymous, label: t.other_application_anonymous },
-      { value: t.other_application_district_serviceman, label: t.other_application_district_serviceman },
-      { value: t.other_application_moneylending_related, label: t.other_application_moneylending_related },
-      { value: t.other_application_lokshahi_related, label: t.other_application_lokshahi_related },
-      { value: t.other_application_confidential, label: t.other_application_confidential },
-    ],
     'right_to_information': [
       { value: t.right_to_information, label: t.right_to_information },
     ],
   };
-  
+
 
   // Function to get branch name in current language
   const getBranchName = (branchKey) => {
@@ -601,6 +772,7 @@ const NewLetter = () => {
     letterDate: '',
     remarks: '',
     subject: '',
+    forwardTo: '',
     fileId: '',
     fileUrl: '',
     na: false,
@@ -610,6 +782,7 @@ const NewLetter = () => {
   // State to track if we're processing files
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [forwardToOptions, setForwardToOptions] = useState([]);
 
   // Helper function to get display value for classification
   const getClassificationDisplayValue = (key) => {
@@ -796,6 +969,7 @@ const NewLetter = () => {
         outwardLetterNumber: formData.outwardLetterNumber,
         numberOfCopies: parseInt(formData.numberOfCopies) || 0,
         letterStatus: 'sending for head sign',  // Updated status to match expected format
+        forwardTo: formData.forwardTo,
         NA: formData.na,
         NAR: formData.nar,
         userId: userId,
@@ -847,6 +1021,7 @@ const NewLetter = () => {
         letterDate: '',
         remarks: '',
         subject: '',
+        forwardTo: '',
         fileId: '',
         fileUrl: '',
         na: false,
@@ -1057,6 +1232,8 @@ const NewLetter = () => {
                 ))}
               </select>
             </div>
+
+
             
             {/* Date Fields */}
             <div className="space-y-2 w-full">
@@ -1142,6 +1319,30 @@ const NewLetter = () => {
                   {currentLanguage === 'mr' ? 'NAR' : 'NAR'}
                 </label>
               </div>
+            </div>
+          </div>
+
+          {/* Forward To Field - Moderately Attractive */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-5 shadow-sm">
+            <div className="space-y-3">
+              <label className="block text-sm font-bold text-blue-800 flex items-center gap-2">
+                📋 {currentLanguage === 'mr' ? 'यांना पाठवा' : 'Forward To'}
+              </label>
+              <select
+                name="forwardTo"
+                value={formData.forwardTo}
+                onChange={handleChange}
+                className="w-full min-h-[46px] px-4 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-blue-500 outline-none transition-all bg-white hover:border-blue-400 text-blue-900 font-medium shadow-sm"
+              >
+                <option value="" disabled hidden>
+                  {currentLanguage === 'mr' ? '-- टेबल निवडा --' : '-- Select Table --'}
+                </option>
+                {forwardToOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {currentLanguage === 'mr' ? getMarathiTableName(option.label) : option.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

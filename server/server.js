@@ -9,38 +9,97 @@ const roleRoutes = require('./routes/roleRoutes');
 const InwardPatraRoutes = require('./routes/InwardPatraRoutes');
 const sequelize = require('./config/database');
 const Role = require('./models/Role');  // Import Role model
-const PoliceStation = require('./models/PoliceStation');  // Import PoliceStation model
-const acknowledgmentRoutes = require('./routes/acknowledgmentRoutes');
-const policeStationRoutes = require('./routes/policeStationRoutes');  // Import PoliceStation routes
 const fileRoutes = require('./routes/fileRoutes');
 const coveringLetters = require('./routes/coveringLetterRoutes');
 const headRoutes = require('./routes/headRoutes');
-// const emailReplyRoutes = require('./routes/emailReplyRoutes');
 
 const app = express();
 
-// List of default roles you want to create
-const defaultRoles = ['inward_user', 'sp', 'head', 'outside_police_station'];
+// Define roles with exact structure as specified
+const defaultRolesStructure = [
+  {
+    roleName: 'inward_user',
+    table: 'inward',
+    categories: []
+  },
+  {
+    roleName: 'dg_other',
+    table: 'dg',
+    categories: ['other']
+  },
+  {
+    roleName: 'ig_nashik_other',
+    table: 'ig',
+    categories: ['other']
+  },
+  {
+    roleName: 'sp',
+    table: 'sp',
+    categories: ['A Class', 'B Class', 'C Class']
+  },
+  {
+    roleName: 'collector',
+    table: 'collector',
+    categories: ['Chief Minister', 'Democracy Cell', 'Soldier Welfare', 'Other']
+  },
+  {
+    roleName: 'home',
+    table: 'home',
+    categories: ['Government', 'Chief Minister', 'Guardian Minister', 'Other Minister', 'Portal', 'Apale Sarkar', 'Other']
+  },
+  {
+    roleName: 'shanik_local',
+    table: 'shanik',
+    categories: ['Local']
+  },
+  // Adding legacy roles for backward compatibility
+  {
+    roleName: 'head',
+    table: 'admin',
+    categories: []
+  },
+  {
+    roleName: 'outside_police_station',
+    table: 'external',
+    categories: []
+  }
+];
 
-// Create default roles if they don't exist
+// Create default roles with exact structure if they don't exist
 const createDefaultRoles = async () => {
   try {
-    // Check if the roles already exist
-    for (const roleName of defaultRoles) {
-      const roleExists = await Role.findOne({ where: { roleName } });
+    console.log('\n=== Creating/Updating Roles ===');
+    for (const roleData of defaultRolesStructure) {
+      const roleExists = await Role.findOne({ where: { roleName: roleData.roleName } });
       if (!roleExists) {
-        await Role.create({ roleName });
-        console.log(`Role ${roleName} created successfully.`);
+        await Role.create({
+          roleName: roleData.roleName,
+          table: roleData.table,
+          categories: roleData.categories
+        });
+        console.log(`✓ Role created: ${roleData.roleName} | Table: ${roleData.table} | Categories: [${roleData.categories.join(', ')}]`);
       } else {
-        console.log(`Role ${roleName} already exists.`);
+        // Update existing role if structure has changed
+        const needsUpdate = 
+          roleExists.table !== roleData.table || 
+          JSON.stringify(roleExists.categories) !== JSON.stringify(roleData.categories);
+        
+        if (needsUpdate) {
+          await roleExists.update({ 
+            table: roleData.table,
+            categories: roleData.categories
+          });
+          console.log(`✓ Role updated: ${roleData.roleName} | Table: ${roleData.table} | Categories: [${roleData.categories.join(', ')}]`);
+        } else {
+          console.log(`• Role exists: ${roleData.roleName}`);
+        }
       }
     }
+    console.log('=== Roles Setup Complete ===\n');
   } catch (error) {
     console.error('Error creating default roles:', error);
   }
 };
-
-
 
 // Middleware
 const corsOptions = {
@@ -52,21 +111,13 @@ const corsOptions = {
 app.use(cors(corsOptions)); 
 app.use(express.json()); 
 
-
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/patras', InwardPatraRoutes);
-app.use('/api/acknowledgments', acknowledgmentRoutes);
-app.use('/api', policeStationRoutes); 
 app.use('/api/files', fileRoutes);
 app.use('/api/letters', coveringLetters);
 app.use('/api/head', headRoutes);
-// app.use('/api/email-reply', emailReplyRoutes);
-
-
-
-
 
 // Define model associations
 const defineAssociations = () => {
@@ -111,15 +162,12 @@ sequelize.sync({ force: false, alter: true })  // Automatically update the table
     // Define model associations
     defineAssociations();
 
-    // Create default roles
+    // Create default roles with proper structure
     await createDefaultRoles();
-
-
 
     // Start the server after initial setup
     app.listen(process.env.PORT || 5000, async () => {
       console.log(`Server running on port ${process.env.PORT || 5000}`);
-
     });
   })
   .catch((err) => {

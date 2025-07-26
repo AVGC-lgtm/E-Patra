@@ -150,26 +150,26 @@ const InwardDashboard = () => {
     const approvedCount = statusCounts['approved'] || 0;
     const rejectedCount = statusCounts['rejected'] || 0;
     
-    // Update stats
+    // Update stats with proper change indicators
     setStats([
       {
         title: language === 'mr' ? "आजचे पत्र" : "Today's Letters",
         value: todayCount.toString(),
-        change: "",
+        change: "100%",
         icon: <FiMail />,
         color: "indigo",
       },
       {
         title: language === 'mr' ? "एकूण पत्रे" : "Total Letters",
         value: lettersData.length.toString(),
-        change: "",
+        change: "100%",
         icon: <FiFileText />,
         color: "green",
       },
       {
         title: language === 'mr' ? "प्रलंबित मंजुरी" : "Pending Approval",
         value: pendingCount.toString(),
-        change: "",
+        change: "0%",
         icon: <FiClock />,
         color: "amber",
       },
@@ -206,7 +206,7 @@ const InwardDashboard = () => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );
   }
@@ -238,7 +238,7 @@ const InwardDashboard = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
           {language === 'mr' ? 'माझे डॅशबोर्ड' : 'My Dashboard'}
         </h1>
         <p className="text-gray-500 mt-1">
@@ -386,13 +386,20 @@ const InwardDashboard = () => {
           <h3 className="text-lg font-semibold text-gray-800 mb-4">
             {language === 'mr' ? 'द्रुत क्रियाकलाप' : 'Quick Actions'}
           </h3>
-          <div className="flex justify-center">
+          <div className="flex justify-center space-x-4">
             <a
               href="/inward-dashboard/inward-letter"
-              className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors shadow-md"
+              className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md"
             >
               <FiFileText className="mr-2 h-5 w-5" />
               {language === 'mr' ? 'नवीन पत्र सबमिट करा' : 'Submit New Letter'}
+            </a>
+            <a
+              href="/inward-dashboard/my-letters"
+              className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
+            >
+              <FiClock className="mr-2 h-5 w-5" />
+              {language === 'mr' ? 'माझी पत्रे पहा' : 'View My Letters'}
             </a>
           </div>
         </div>

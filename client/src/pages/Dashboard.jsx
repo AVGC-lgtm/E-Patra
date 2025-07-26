@@ -172,26 +172,26 @@ const Dashboard = () => {
     const approvedCount = statusCounts['approved'] || 0;
     const rejectedCount = statusCounts['rejected'] || 0;
     
-    // Update stats
+    // Update stats with better change indicators
     setStats([
       {
         title: "Today's Letters",
         value: todayCount.toString(),
-        change: "",
+        change: todayCount > 0 ? `+${todayCount} today` : "No letters today",
         icon: <FiMail />,
         color: "indigo",
       },
       {
         title: "Total Letters",
         value: patrasData.length.toString(),
-        change: "",
+        change: `${patrasData.length} total`,
         icon: <FiFileText />,
         color: "green",
       },
       {
         title: "Pending Approval",
         value: pendingCount.toString(),
-        change: "",
+        change: pendingCount > 0 ? `${pendingCount} pending` : "All processed",
         icon: <FiClock />,
         color: "amber",
       },

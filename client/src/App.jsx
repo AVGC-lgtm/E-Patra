@@ -6,6 +6,10 @@ import ForgotPassword from "./components/Login/ForgotPassword";
 import DashboardLayout from './components/Dashboard/DashboardLayout';
 import SimpleDashboardLayout from './components/Dashboard/SimpleDashboardLayout';
 import Dashboard from './pages/Dashboard';
+import InwardDashboard from './pages/InwardDashboard';
+import MyInwardLetters from './pages/MyInwardLetters';
+import OutwardDashboard from './pages/OutwardDashboard';
+
 // Import role-specific letter components
 import InwardStaffLetters from './pages/letters/InwardStaffLetters';
 import OutwardStaffLetters from './pages/letters/OutwardStaffLetters';
@@ -18,6 +22,38 @@ import TrackApplication from './pages/TrackApplication';
 import InboxLetter from './pages/InboxLetter';
 import UploadSign from './pages/UploadSign';
 // Create a wrapper component that will use the useNavigate hook
+// Helper function to normalize role names
+const normalizeRole = (role) => {
+  if (!role) return 'user';
+  
+  const roleStr = role.toString().toLowerCase().trim();
+  
+  // Handle different variations of role names
+  const roleMap = {
+    'head': 'head',
+    'hod': 'head',
+    'sp': 'sp',
+    'superintendent': 'sp',
+    'inward_user': 'inward_user',
+    'inward': 'inward_user',
+    'outward_user': 'outward_user',
+    'outward': 'outward_user',
+    'outside_police_station': 'outside_police_station',
+    'police_station': 'outside_police_station',
+    'admin': 'admin',
+    // New roles from your system
+    'collector': 'collector',
+    'dg_other': 'dg_other',
+    'home': 'home',
+    'ig_nashik_other': 'ig_nashik_other',
+    'shanik_local': 'shanik_local'
+  };
+  
+  const normalizedRole = roleMap[roleStr] || roleStr;
+  
+  return normalizedRole;
+};
+
 const AppContent = () => {
   const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -35,10 +71,14 @@ const AppContent = () => {
           
           if (tokenData.exp > currentTime) {
             setIsLoggedIn(true);
-            setUserRole(tokenData.roleName || 'user');
+            
+            const rawRole = tokenData.roleName || 'user';
+            const normalizedRole = normalizeRole(rawRole);
+            setUserRole(normalizedRole);
           } else {
             // Token expired
             localStorage.removeItem('token');
+
           }
         } catch (error) {
           console.error('Error parsing token:', error);
@@ -56,7 +96,10 @@ const AppContent = () => {
       const tokenData = JSON.parse(atob(token.split('.')[1]));
       localStorage.setItem('token', token);
       setIsLoggedIn(true);
-      setUserRole(tokenData.roleName || 'user');
+      
+      const rawRole = tokenData.roleName || 'user';
+      const normalizedRole = normalizeRole(rawRole);
+      setUserRole(normalizedRole);
     } catch (error) {
       console.error('Error processing login:', error);
       alert('Error processing your login. Please try again.');
@@ -82,11 +125,13 @@ const AppContent = () => {
 
   // Get the appropriate layout based on user role
   const getLayout = (children) => {
-    // SP, Head, and Outside Police Station use the simple dashboard
-    if (['sp', 'head', 'outside_police_station'].includes(userRole)) {
+    // All users use the same SimpleDashboardLayout design
+    if ([
+      'inward_user', 'outward_user', 'sp', 'head', 'outside_police_station',
+      'collector', 'dg_other', 'home', 'ig_nashik_other', 'shanik_local'
+    ].includes(userRole)) {
       return (
         <SimpleDashboardLayout 
-          basePath="/dashboard" 
           onLogout={handleLogout}
         >
           {children}
@@ -130,11 +175,11 @@ const AppContent = () => {
         } />
         <Route path="/login" element={
           isLoggedIn ? (
-            <Navigate to={userRole === 'sp' ? '/dashboard/letters' : 
-              userRole === 'head' ? '/dashboard/letters' :
-              userRole === 'outside_police_station' ? '/dashboard/letters' : 
-              userRole === 'inward_user' ? '/dashboard/all-letters' :
-              '/dashboard'} 
+            <Navigate to={
+              userRole === 'inward_user' ? '/inward-dashboard' :
+              userRole === 'outward_user' ? '/outward-dashboard' :
+              '/outward-dashboard'  // All other roles use outward-dashboard design
+            } 
             replace />
           ) : (
             <div className="min-h-screen flex items-center justify-center p-4">
@@ -142,6 +187,39 @@ const AppContent = () => {
             </div>
           )
         } />
+
+        {/* Inward Dashboard Routes - Separate dashboard for inward users */}
+        <Route 
+          path="/inward-dashboard" 
+          element={
+            <ProtectedRoute roles={['inward_user']}>
+              <Outlet />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<InwardDashboard />} />
+          <Route path="inward-letter" element={<NewLetter />} />
+          <Route path="my-letters" element={<MyInwardLetters />} />
+        </Route>
+
+        {/* Outward Dashboard Routes - Dashboard for all non-inward users */}
+        <Route 
+          path="/outward-dashboard" 
+          element={
+            <ProtectedRoute roles={[
+              'outward_user', 'head', 'sp', 'collector', 'dg_other', 
+              'home', 'ig_nashik_other', 'shanik_local', 'outside_police_station'
+            ]}>
+              <Outlet />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<OutwardDashboard />} />
+          <Route path="outward-letters" element={<OutwardStaffLetters />} />
+          <Route path="track-application" element={<TrackApplication />}>
+            <Route path=":referenceNumber" element={<TrackApplication />} />
+          </Route>
+        </Route>
 
         {/* Main Dashboard Route */}
         <Route 
@@ -154,7 +232,7 @@ const AppContent = () => {
         >
           <Route index element={<Dashboard />} />
           
-          {/* Routes for different user roles */}
+          {/* Routes for different user roles - Keep existing routes for backward compatibility */}
           {userRole === 'inward_user' && (
             <>
               <Route path="new-letter" element={<NewLetter />} />
@@ -162,7 +240,7 @@ const AppContent = () => {
               <Route path="track-application" element={<TrackApplication />}>
                 <Route path=":referenceNumber" element={<TrackApplication />} />
               </Route>
-              <Route path = "inbox" element={<InboxLetter/>}></Route>
+              <Route path="inbox" element={<InboxLetter />} />
             </>
           )}
           
@@ -201,7 +279,11 @@ const AppContent = () => {
         <Route 
           path="/" 
           element={
-            <Navigate to={isLoggedIn ? '/dashboard' : '/login'} replace />
+            <Navigate to={isLoggedIn ? 
+              (userRole === 'inward_user' ? '/inward-dashboard' : 
+               '/outward-dashboard') : 
+              '/login'} 
+            replace />
           } 
         />
 

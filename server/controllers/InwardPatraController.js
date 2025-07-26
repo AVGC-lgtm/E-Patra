@@ -1,5 +1,5 @@
-// controllers/InwardPatraController.js - Updated with Word document support in responses
-const { InwardPatra, CoveringLetter, User, File, Head } = require('../models/associations');
+// controllers/InwardPatraController.js - Complete controller with Word document support and owReferenceNumber
+const { InwardPatra, CoveringLetter, User, File, Head, Role } = require('../models/associations');
 const sequelize = require('../config/database');
 
 const coveringLetterController = require('./coveringLetterController');
@@ -23,6 +23,27 @@ const generateReferenceNumber = async () => {
   }
 
   return referenceNumber;
+};
+
+// NEW FUNCTION: Generate unique OW reference number (OW + 8 digits)
+const generateOwReferenceNumber = async () => {
+  let owReferenceNumber;
+  let isUnique = false;
+
+  while (!isUnique) {
+    // Generate 8 random digits
+    const randomDigits = Math.floor(10000000 + Math.random() * 90000000).toString();
+    // Prepend "OW" to make it 10 characters total
+    owReferenceNumber = `OW${randomDigits}`;
+
+    // Check if this OW reference number already exists
+    const existingPatra = await InwardPatra.findOne({ where: { owReferenceNumber } });
+    if (!existingPatra) {
+      isUnique = true;
+    }
+  }
+
+  return owReferenceNumber;
 };
 
 // Common include configuration for covering letter with Word document support
@@ -56,8 +77,6 @@ const getUploadedFileInclude = () => ({
   required: false
 });
 
-
-
 // Helper function to format covering letter data with Word document URLs
 const formatCoveringLetterData = (coveringLetter) => {
   if (!coveringLetter) return null;
@@ -68,18 +87,18 @@ const formatCoveringLetterData = (coveringLetter) => {
     documentUrls: {
       pdf: coveringLetter.pdfUrl || null,
       html: coveringLetter.htmlUrl || null,
-      word: coveringLetter.wordUrl || null // NEW: Include Word document URL
+      word: coveringLetter.wordUrl || null // Include Word document URL
     },
     // File information
     fileInfo: {
       s3FileName: coveringLetter.s3FileName || null,
-      s3WordFileName: coveringLetter.s3WordFileName || null, // NEW: Include Word filename
+      s3WordFileName: coveringLetter.s3WordFileName || null, // Include Word filename
       attachedFile: coveringLetter.attachedFile || null
     }
   };
 };
 
-// Create a new Patra (InwardPatra) with auto-generated covering letter
+// Create a new Patra (InwardPatra) with auto-generated covering letter and OW reference number
 const createPatra = async (req, res) => {
   const {
     dateOfReceiptOfLetter,
@@ -97,7 +116,8 @@ const createPatra = async (req, res) => {
     NA,
     NAR,
     userId,
-    fileId
+    fileId,
+    forwardTo
   } = req.body;
 
   // Ensure subject is provided
@@ -125,11 +145,16 @@ const createPatra = async (req, res) => {
       validatedFileId = fileId;
     }
 
+    // Generate both reference numbers
     const referenceNumber = await generateReferenceNumber();
+    const owReferenceNumber = await generateOwReferenceNumber(); // NEW: Generate OW reference number
+
+    console.log('Generated reference numbers:', { referenceNumber, owReferenceNumber });
 
     // Create InwardPatra within transaction
     const newPatra = await InwardPatra.create({
       referenceNumber,
+      owReferenceNumber, // NEW: Add OW reference number
       dateOfReceiptOfLetter,
       officeSendingLetter,
       senderNameAndDesignation,
@@ -146,7 +171,8 @@ const createPatra = async (req, res) => {
       NAR: NAR || false,
       fileId: validatedFileId,
       userId: user.id,
-      coveringLetterId: null // Initially null
+      coveringLetterId: null, // Initially null
+      forwardTo: forwardTo || null // NEW: Add forwardTo field
     }, { transaction });
 
     // AUTO-GENERATE COVERING LETTER WITH WORD DOCUMENT
@@ -183,6 +209,7 @@ const createPatra = async (req, res) => {
       return res.status(201).json({
         message: 'Patra created successfully with covering letter (PDF + Word)',
         referenceNumber: referenceNumber,
+        owReferenceNumber: owReferenceNumber, // NEW: Include OW reference number in response
         patraId: newPatra.id,
         letterStatus: newPatra.letterStatus,
         coveringLetterId: coveringLetter.id,
@@ -190,7 +217,7 @@ const createPatra = async (req, res) => {
         documentUrls: {
           pdf: coveringLetter.pdfUrl,
           html: coveringLetter.htmlUrl,
-          word: coveringLetter.wordUrl // NEW: Include Word document URL
+          word: coveringLetter.wordUrl // Include Word document URL
         },
         patra: {
           ...completePatra.toJSON(),
@@ -233,14 +260,37 @@ const getAllPatras = async (req, res) => {
     if (status) whereClause.letterStatus = status;
     if (classification) whereClause.letterClassification = classification;
 
+    // Role-based filtering: Only show letters forwarded to user's table
+    if (req.user && req.user.roleName && req.user.table) {
+      // Map user's table to forwardTo values
+      const roleToTableMap = {
+        'dg_other': 'dg',
+        'ig_nashik_other': 'ig', 
+        'sp': 'sp',
+        'collector': 'collector',
+        'home': 'home',
+        'shanik_local': 'shanik',
+        'head': 'admin'
+      };
+
+      const userTable = roleToTableMap[req.user.roleName] || req.user.table;
+      
+      // Special cases: inward_user and outward_user see all letters
+      if (!['inward_user', 'outward_user'].includes(req.user.roleName)) {
+        whereClause[Op.or] = [
+          { forwardTo: userTable },
+          { forwardTo: null }, // Also show letters without forwardTo specified
+          { forwardTo: '' }    // Also show letters with empty forwardTo
+        ];
+      }
+    }
+
     // Build includes array based on query params
     const includes = [
       getUserInclude(),
       getUploadedFileInclude(),
       getCoveringLetterInclude()
     ];
-    
-
 
     const patras = await InwardPatra.findAndCountAll({
       where: whereClause,
@@ -255,9 +305,9 @@ const getAllPatras = async (req, res) => {
       console.log('🔍 Debug: First patra structure with Word document support:');
       console.log('  - ID:', patras.rows[0].id);
       console.log('  - Reference Number:', patras.rows[0].referenceNumber);
+      console.log('  - OW Reference Number:', patras.rows[0].owReferenceNumber); // NEW: Log OW reference
       console.log('  - Has uploadedFile:', !!patras.rows[0].uploadedFile);
       console.log('  - Has coveringLetter:', !!patras.rows[0].coveringLetter);
-
       
       if (patras.rows[0].coveringLetter) {
         console.log('  - Covering letter document URLs:', {
@@ -365,6 +415,38 @@ const getPatraByReferenceNumber = async (req, res) => {
   }
 };
 
+// NEW FUNCTION: Get Patra by OW Reference Number
+const getPatraByOwReferenceNumber = async (req, res) => {
+  const { owReferenceNumber } = req.params;
+
+  try {
+    const patra = await InwardPatra.findOne({
+      where: { owReferenceNumber },
+      include: [
+        getUserInclude(),
+        getUploadedFileInclude(),
+        getCoveringLetterInclude()
+      ]
+    });
+
+    if (!patra) {
+      return res.status(404).json({ error: 'Patra not found with this OW reference number' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Patra retrieved successfully with Word document support',
+      data: {
+        ...patra.toJSON(),
+        coveringLetter: formatCoveringLetterData(patra.coveringLetter)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching Patra by OW reference number:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
+  }
+};
+
 // Get Patra by user ID with complete covering letter data including Word documents
 const getPatraByUserId = async (req, res) => {
   const { userId } = req.params;
@@ -377,8 +459,6 @@ const getPatraByUserId = async (req, res) => {
       getUploadedFileInclude(),
       getCoveringLetterInclude()
     ];
-    
-
 
     const patras = await InwardPatra.findAll({
       where: { userId },
@@ -423,8 +503,6 @@ const deletePatraById = async (req, res) => {
       await transaction.rollback();
       return res.status(404).json({ error: 'Patra not found' });
     }
-
-
 
     // Delete associated covering letter (this will also handle Word document cleanup via the covering letter controller)
     await CoveringLetter.destroy({ 
@@ -482,7 +560,8 @@ const updatePatraById = async (req, res) => {
     updatedBy,
     updatedByEmail,
     updatedByName,
-    userRole
+    userRole,
+    forwardTo
   } = req.body;
 
   try {
@@ -537,6 +616,7 @@ const updatePatraById = async (req, res) => {
     if (updatedByEmail !== undefined) updateData.updatedByEmail = updatedByEmail;
     if (updatedByName !== undefined) updateData.updatedByName = updatedByName;
     if (userRole !== undefined) updateData.userRole = userRole;
+    if (forwardTo !== undefined) updateData.forwardTo = forwardTo;
 
     await patra.update(updateData);
     
@@ -696,123 +776,6 @@ const approveLetter = async (req, res) => {
   }
 };
 
-// Get only covering letters with complete data (including Word documents)
-const getAllCoveringLetters = async (req, res) => {
-  try {
-    const { page = 1, limit = 10, status, letterType } = req.query;
-    const offset = (page - 1) * limit;
-    
-    const whereClause = {};
-    if (status) whereClause.status = status;
-    if (letterType) whereClause.letterType = letterType;
-
-    const coveringLetters = await CoveringLetter.findAndCountAll({
-      where: whereClause,
-      include: [
-        {
-          model: InwardPatra,
-          as: 'InwardPatra',
-          attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber']
-        },
-        {
-          model: User,
-          as: 'User',
-          attributes: ['id', 'email']
-        },
-        {
-          model: File,
-          as: 'attachedFile',
-          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
-          required: false
-        }
-      ],
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset)
-    });
-
-    // Format covering letters with Word document URLs
-    const formattedCoveringLetters = coveringLetters.rows.map(letter => formatCoveringLetterData(letter));
-
-    return res.status(200).json({
-      success: true,
-      message: 'Covering letters retrieved successfully with Word document support',
-      data: {
-        coveringLetters: formattedCoveringLetters,
-        totalCount: coveringLetters.count,
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(coveringLetters.count / limit)
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching covering letters:', error);
-    return res.status(500).json({ error: 'Server error', details: error.message });
-  }
-};
-
-// Get covering letter by ID with proper associations (including Word documents)
-const getCoveringLetterById = async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const coveringLetter = await CoveringLetter.findByPk(id, {
-      include: [
-        {
-          model: InwardPatra,
-          as: 'InwardPatra',
-          attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber', 'letterDate']
-        },
-        {
-          model: User,
-          as: 'User',
-          attributes: ['id', 'email']
-        },
-        {
-          model: File,
-          as: 'attachedFile',
-          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
-          required: false
-        },
-        {
-          model: Head,
-          as: 'heads',
-          include: [
-            {
-              model: User,
-              as: 'User',
-              attributes: ['id', 'email']
-            }
-          ],
-          required: false
-        }
-      ]
-    });
-
-    if (!coveringLetter) {
-      return res.status(404).json({ error: 'Covering letter not found' });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Covering letter retrieved successfully with Word document support',
-      data: formatCoveringLetterData(coveringLetter)
-    });
-  } catch (error) {
-    console.error('Error fetching covering letter by ID:', error);
-    return res.status(500).json({ error: 'Server error', details: error.message });
-  }
-};
-
-
-
-
-
-
-// Add this method to your InwardPatraController.js file
-
-
-// Updated resendLetter method for InwardPatraController.js
-
 // Resend letter back to Inward Letters (HOD action)
 const resendLetter = async (req, res) => {
   const { id } = req.params;
@@ -860,25 +823,6 @@ const resendLetter = async (req, res) => {
     // Log the resend action (optional - for audit trail)
     console.log(`Letter ${patra.referenceNumber} resent by HOD. Resend count: ${updateData.resendCount}`);
 
-    // Create an audit log entry if you have an audit table
-    /*
-    if (AuditLog) {
-      await AuditLog.create({
-        action: 'LETTER_RESEND',
-        entityType: 'InwardPatra',
-        entityId: patra.id,
-        referenceNumber: patra.referenceNumber,
-        previousStatus: patra.letterStatus,
-        newStatus: updateData.letterStatus,
-        reason: updateData.resendReason,
-        resendCount: updateData.resendCount,
-        performedBy: req.user?.id,
-        performedByEmail: req.user?.email,
-        performedAt: new Date()
-      }, { transaction });
-    }
-    */
-
     // Commit the transaction
     await transaction.commit();
 
@@ -919,13 +863,167 @@ const resendLetter = async (req, res) => {
   }
 };
 
+// Get only covering letters with complete data (including Word documents)
+const getAllCoveringLetters = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status, letterType } = req.query;
+    const offset = (page - 1) * limit;
+    
+    const whereClause = {};
+    if (status) whereClause.status = status;
+    if (letterType) whereClause.letterType = letterType;
 
+    const coveringLetters = await CoveringLetter.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: InwardPatra,
+          as: 'InwardPatra',
+          attributes: ['id', 'referenceNumber', 'owReferenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber']
+        },
+        {
+          model: User,
+          as: 'User',
+          attributes: ['id', 'email']
+        },
+        {
+          model: File,
+          as: 'attachedFile',
+          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+          required: false
+        }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+    // Format covering letters with Word document URLs
+    const formattedCoveringLetters = coveringLetters.rows.map(letter => formatCoveringLetterData(letter));
+
+    return res.status(200).json({
+      success: true,
+      message: 'Covering letters retrieved successfully with Word document support',
+      data: {
+        coveringLetters: formattedCoveringLetters,
+        totalCount: coveringLetters.count,
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(coveringLetters.count / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching covering letters:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
+  }
+};
+
+// Get covering letter by ID with proper associations (including Word documents)
+const getCoveringLetterById = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const coveringLetter = await CoveringLetter.findByPk(id, {
+      include: [
+        {
+          model: InwardPatra,
+          as: 'InwardPatra',
+          attributes: ['id', 'referenceNumber', 'owReferenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber', 'letterDate']
+        },
+        {
+          model: User,
+          as: 'User',
+          attributes: ['id', 'email']
+        },
+        {
+          model: File,
+          as: 'attachedFile',
+          attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+          required: false
+        },
+        {
+          model: Head,
+          as: 'heads',
+          include: [
+            {
+              model: User,
+              as: 'User',
+              attributes: ['id', 'email']
+            }
+          ],
+          required: false
+        }
+      ]
+    });
+
+    if (!coveringLetter) {
+      return res.status(404).json({ error: 'Covering letter not found' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Covering letter retrieved successfully with Word document support',
+      data: formatCoveringLetterData(coveringLetter)
+    });
+  } catch (error) {
+    console.error('Error fetching covering letter by ID:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
+  }
+};
+
+// NEW: Get available forward-to options based on roles table
+const getForwardToOptions = async (req, res) => {
+  try {
+    // Get all roles that have a table field (these represent forward-to destinations)
+    const roles = await Role.findAll({
+      where: {
+        table: {
+          [Op.ne]: null // Not null
+        }
+      },
+      attributes: ['id', 'roleName', 'table'],
+      order: [['table', 'ASC']]
+    });
+
+    // Transform the data to provide user-friendly options
+    const options = roles.map(role => ({
+      value: role.table,
+      label: `${role.table.charAt(0).toUpperCase() + role.table.slice(1)} Table`,
+      roleId: role.id,
+      roleName: role.roleName
+    }));
+
+    // Add some default options if they don't exist in roles
+    const defaultOptions = [
+      { value: 'dg', label: 'DG Table' },
+      { value: 'ig', label: 'IG Table' },
+      { value: 'sp', label: 'SP Table' },
+      { value: 'dm', label: 'DM Table' },
+      { value: 'home', label: 'Home Table' },
+      { value: 'local', label: 'Local Table' }
+    ];
+
+    // Merge and deduplicate
+    const existingValues = options.map(opt => opt.value);
+    const missingDefaults = defaultOptions.filter(def => !existingValues.includes(def.value));
+    const finalOptions = [...options, ...missingDefaults];
+
+    return res.status(200).json({
+      success: true,
+      message: 'Forward-to options retrieved successfully',
+      data: finalOptions
+    });
+  } catch (error) {
+    console.error('Error fetching forward-to options:', error);
+    return res.status(500).json({ error: 'Server error', details: error.message });
+  }
+};
 
 module.exports = {
   createPatra,
   getAllPatras,
   getPatraById,
   getPatraByReferenceNumber,
+  getPatraByOwReferenceNumber, // NEW: Export the new function
   getPatraByUserId,
   deletePatraById,
   updatePatraById,
@@ -936,4 +1034,7 @@ module.exports = {
   approveLetter,
   getAllCoveringLetters,
   getCoveringLetterById,
+  generateReferenceNumber,
+  generateOwReferenceNumber, // Export the generator function for potential reuse
+  getForwardToOptions // NEW: Export the forward-to options function
 };
