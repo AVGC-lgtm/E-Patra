@@ -14,12 +14,7 @@ const acknowledgmentRoutes = require('./routes/acknowledgmentRoutes');
 const policeStationRoutes = require('./routes/policeStationRoutes');  // Import PoliceStation routes
 const fileRoutes = require('./routes/fileRoutes');
 const coveringLetters = require('./routes/coveringLetterRoutes');
-const emailRoutes = require('./routes/emailRoutes');
-const emailSenderReceiverRoutes = require('./routes/emailSenderReceiverRoutes');
-const dynamicEmailRoutes = require('./routes/dynamicEmailRoutes');
 const headRoutes = require('./routes/headRoutes');
-const imapRoutes = require('./routes/imapRoutes');
-const { startImapListenerAuto } = require('./controllers/imapController');
 // const emailReplyRoutes = require('./routes/emailReplyRoutes');
 
 const app = express();
@@ -45,26 +40,6 @@ const createDefaultRoles = async () => {
   }
 };
 
-// Function to insert default Police Stations if they don't exist
-const createDefaultPoliceStations = async () => {
-  const defaultStations = [
-    'Nevasa', 'Sonai', 'Rajur', 'Parner', 'Shevgaon', 'Kotwali', 'Toffkhana', 'Shrigonda', 
-    'Belvandi', 'MIDC', 'Nagar Taluka', 'Jamkhed', 'Supa', 'Karjat', 'Bhingar Camp', 'Akole',
-    'Pathardi', 'Ashvi', 'Shirdi', 'Sangamner Taluka', 'Shani Shingnapur', 'Sangamner City',
-    'Shirpur City', 'Rahuri', 'Kopargaon Taluka', 'Kopargaon City', 'Loni', 'Rahata',
-    'Sai Temple Security Shirdi', 'City Traffic Branch - Shirdi', 'Kharda', 'Mirajgaon'
-  ];
-
-  for (let station of defaultStations) {
-    const stationExists = await PoliceStation.findOne({ where: { name: station } });
-    if (!stationExists) {
-      await PoliceStation.create({ name: station });
-      console.log(`Police Station ${station} added successfully.`);
-    } else {
-      console.log(`Police Station ${station} already exists.`);
-    }
-  }
-};
 
 
 // Middleware
@@ -86,32 +61,12 @@ app.use('/api/acknowledgments', acknowledgmentRoutes);
 app.use('/api', policeStationRoutes); 
 app.use('/api/files', fileRoutes);
 app.use('/api/letters', coveringLetters);
-app.use('/api/email', emailRoutes);
-app.use('/api', emailSenderReceiverRoutes);
-app.use('/api/dynamic-email', dynamicEmailRoutes);
 app.use('/api/head', headRoutes);
-app.use('/api/imap', imapRoutes);
 // app.use('/api/email-reply', emailReplyRoutes);
 
 
 
-// Email configuration verification on startup
-const { verifyEmailConfig } = require('./config/email');
 
-// Initialize email configuration
-const initializeEmailService = async () => {
-  try {
-    console.log('Initializing email service...');
-    await verifyEmailConfig();
-    console.log('✓ Email service initialized successfully');
-    
-    // Create default email contacts after email service is initialized
-  
-  } catch (error) {
-    console.error('✗ Email service initialization failed:', error);
-    console.log('Email functionality will be disabled');
-  }
-};
 
 // Define model associations
 const defineAssociations = () => {
@@ -159,18 +114,11 @@ sequelize.sync({ force: false, alter: true })  // Automatically update the table
     // Create default roles
     await createDefaultRoles();
 
-    // Create default Police Stations if not already present
-    await createDefaultPoliceStations();
+
 
     // Start the server after initial setup
     app.listen(process.env.PORT || 5000, async () => {
       console.log(`Server running on port ${process.env.PORT || 5000}`);
-      
-      // Initialize email service and create default email contacts
-      await initializeEmailService();
-      
-      // Start IMAP listener
-      startImapListenerAuto(); // This will start the listener on server startup
 
     });
   })

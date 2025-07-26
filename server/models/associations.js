@@ -3,7 +3,6 @@ const sequelize = require('../config/database');
 
 // Direct imports since these are already defined models, not factory functions
 const InwardPatra = require('./InwardPatra');
-const EmailRecord = require('./EmailRecord');
 const File = require('./File');
 const Head = require('./Head');
 const CoveringLetter = require('./CoveringLetter');
@@ -110,25 +109,9 @@ User.hasMany(Head, {
   as: 'Heads'
 });
 
-// EmailRecord - InwardPatra association
-InwardPatra.hasMany(EmailRecord, {
-  foreignKey: 'referenceNumber',
-  sourceKey: 'referenceNumber',
-  as: 'EmailRecords',
-  constraints: false // This prevents foreign key constraint in database
-});
-
-EmailRecord.belongsTo(InwardPatra, {
-  foreignKey: 'referenceNumber',
-  targetKey: 'referenceNumber',
-  as: 'InwardPatra',
-  constraints: false // This prevents foreign key constraint in database
-});
-
 // Export all models
 module.exports = {
   InwardPatra,
-  EmailRecord,
   File,
   Head,
   CoveringLetter,

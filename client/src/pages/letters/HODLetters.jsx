@@ -24,7 +24,7 @@ const HODLetters = () => {
   const [signaturesModalOpen, setSignaturesModalOpen] = useState(false);
   const [userSignatures, setUserSignatures] = useState([]);
   const [loadingSignatures, setLoadingSignatures] = useState(false);
-  const [sendingEmails, setSendingEmails] = useState(new Set()); // Track which letters are being sent
+
   const [resendingLetters, setResendingLetters] = useState(new Set()); // Track which letters are being resent
 
   // Status filter options with translations - ADDED "sent to head"
@@ -223,13 +223,30 @@ const HODLetters = () => {
 
   // Function to check if letter has covering letter
   const hasCoveringLetter = (letter) => {
-    return letter.coveringLetter && letter.coveringLetter.id;
+    const coveringLetter = letter.coveringLetter || letter.directCoveringLetter;
+    if (!coveringLetter) return false;
+    
+    // Check for either id or _id (to handle both Sequelize and MongoDB)
+    const hasId = coveringLetter.id || coveringLetter._id;
+    // Check for URL availability - prefer Word over PDF over HTML
+    const hasUrl = coveringLetter.wordUrl || 
+                   coveringLetter.documentUrls?.word || 
+                   coveringLetter.pdfUrl || 
+                   coveringLetter.htmlUrl;
+    
+    return !!(hasId && hasUrl);
   };
 
   // Function to view covering letter
   const viewCoveringLetter = (letter) => {
-    if (letter.coveringLetter && letter.coveringLetter.pdfUrl) {
-      window.open(letter.coveringLetter.pdfUrl, '_blank');
+    // Prefer Word over PDF over HTML
+    const url = letter.coveringLetter?.wordUrl || 
+                letter.coveringLetter?.documentUrls?.word || 
+                letter.coveringLetter?.pdfUrl || 
+                letter.coveringLetter?.htmlUrl;
+    
+    if (url) {
+      window.open(url, '_blank');
     } else {
       alert(language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'Covering letter not available');
     }
@@ -678,155 +695,6 @@ const HODLetters = () => {
     }
   };
 
-  // Function to send email from HOD approval
-  const handleSendEmail = async (letter) => {
-    const letterId = letter.id || letter._id;
-    
-    // Check if already sending
-    if (sendingEmails.has(letterId)) {
-      return;
-    }
-    
-    try {
-      // Set loading state for this specific letter
-      setSendingEmails(prev => new Set(prev).add(letterId));
-      
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        alert(language === 'mr' ? 
-          'कृपया पुन्हा लॉगिन करा!' : 
-          'Please login again!');
-        navigate('/login');
-        return;
-      }
-
-      // Get user info
-      const userInfo = localStorage.getItem('userInfo') || localStorage.getItem('user');
-      let userData = null;
-      
-      if (userInfo) {
-        try {
-          userData = JSON.parse(userInfo);
-        } catch (e) {
-          console.error('Error parsing user info:', e);
-        }
-      }
-      
-      if (!userData && token) {
-        try {
-          const tokenParts = token.split('.');
-          if (tokenParts.length === 3) {
-            const payload = JSON.parse(atob(tokenParts[1]));
-            userData = {
-              id: payload.id || payload.userId || payload.sub,
-              email: payload.email,
-              name: payload.name || payload.username,
-              role: payload.role || payload.roleId
-            };
-          }
-        } catch (e) {
-          console.error('Error decoding token:', e);
-        }
-      }
-
-      // Get the stored recipient information from the letter
-      let sentToData = null;
-      try {
-        if (letter.sentTo) {
-          sentToData = typeof letter.sentTo === 'string' ? JSON.parse(letter.sentTo) : letter.sentTo;
-        }
-      } catch (e) {
-        console.error('Error parsing sentTo data:', e);
-      }
-
-      const recipients = sentToData?.recipients || [];
-      const includeCoveringLetter = sentToData?.includeCoveringLetter || false;
-
-      if (recipients.length === 0) {
-        alert(language === 'mr' ? 
-          'प्राप्तकर्ते माहिती सापडली नाही!' : 
-          'Recipient information not found!');
-        return;
-      }
-
-      // Get the original inward_user's email from the letter
-      const originalUserEmail = letter.User?.email || letter.user?.email;
-      
-      if (!originalUserEmail) {
-        alert(language === 'mr' ? 
-          'मूळ वापरकर्त्याची ईमेल सापडली नाही!' : 
-          'Original user email not found!');
-        return;
-      }
-
-      // Prepare email data
-      const emailData = {
-        letterId: letter.id || letter._id,
-        senderEmail: originalUserEmail, // Use the original inward_user's email instead of HOD's email
-        recipients: recipients,
-        customMessage: '',
-        includeCoveringLetter: includeCoveringLetter
-      };
-
-      console.log('HOD sending email:', emailData);
-      
-      // Make the email API call
-      const response = await axios.post(
-        `http://localhost:5000/api/dynamic-email/send-inward-letter`, 
-        emailData, 
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-
-      if (response.status === 200 || response.status === 201) {
-        const result = response.data;
-        
-        // Update letter status to "approved"
-        await axios.put(
-          `http://localhost:5000/api/patras/${letter.id || letter._id}/approve`,
-          {},
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
-        
-        const successMessage = language === 'mr' ? 
-          `पत्र यशस्वीरित्या पाठवले गेले आणि मंजूर केले गेले!\n\nईमेल तपशील:\n- पाठवले: ${result.data.successful}\n- अयशस्वी: ${result.data.failed}\n- संलग्नक: ${result.data.attachments}` : 
-          `Letter sent successfully and approved!\n\nEmail Details:\n- Sent: ${result.data.successful}\n- Failed: ${result.data.failed}\n- Attachments: ${result.data.attachments}`;
-        
-        alert(successMessage);
-        
-        // Refresh letters
-        handleRefresh();
-      }
-    } catch (error) {
-      console.error('Error sending email from HOD:', error);
-      
-      const errorMessage = error.response?.data?.error || 
-                          error.response?.data?.message || 
-                          'Failed to send email';
-      
-      alert(language === 'mr' ? 
-        `ईमेल पाठवण्यात त्रुटी: ${errorMessage}` : 
-        `Error sending email: ${errorMessage}`);
-    } finally {
-      // Clear loading state for this letter
-      setSendingEmails(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(letterId);
-        return newSet;
-      });
-    }
-  };
-
   // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -924,9 +792,7 @@ const HODLetters = () => {
                     <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                       {language === 'mr' ? 'स्थिती' : 'Status'}
                     </th>
-                    <th scope="col" className="px-8 py-4 text-center text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
-                      {language === 'mr' ? 'ईमेल पाठवा' : 'Send Mail'}
-                    </th>
+
                     <th scope="col" className="px-8 py-4 text-center text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                       {language === 'mr' ? 'परत पाठवा' : 'Resend'}
                     </th>
@@ -961,37 +827,7 @@ const HODLetters = () => {
                       <td className="px-8 py-4 whitespace-nowrap text-sm">
                         {getStatusBadge(letter.letterStatus)}
                       </td>
-                      <td className="px-8 py-4 whitespace-nowrap text-center text-sm font-medium">
-                        {/* Send Mail Button - Only show for letters with "sent to head" status */}
-                        {(letter.letterStatus === 'sent to head' || letter.letterStatus === 'प्रमुखांकडे पाठवले') ? (
-                          <button
-                            onClick={() => handleSendEmail(letter)}
-                            disabled={sendingEmails.has(letter.id || letter._id)}
-                            className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                              sendingEmails.has(letter.id || letter._id)
-                                ? 'bg-gray-400 text-white cursor-not-allowed'
-                                : 'bg-green-600 text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500'
-                            }`}
-                            title={language === 'mr' ? 'ईमेल पाठवा आणि मंजूर करा' : 'Send Email and Approve'}
-                          >
-                            {sendingEmails.has(letter.id || letter._id) ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                {language === 'mr' ? 'पाठवत आहे...' : 'Sending...'}
-                              </>
-                            ) : (
-                              <>
-                                <FiMail className="mr-2 h-4 w-4" />
-                                {language === 'mr' ? 'ईमेल पाठवा' : 'Send Mail'}
-                              </>
-                            )}
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">
-                            {language === 'mr' ? 'पाठवले नाही' : 'Not Sent'}
-                          </span>
-                        )}
-                      </td>
+
                       <td className="px-8 py-4 whitespace-nowrap text-center text-sm font-medium">
                         {/* Resend Button - Show for all letters except approved ones */}
                         {letter.letterStatus !== 'approved' && letter.letterStatus !== 'मंजूर' ? (

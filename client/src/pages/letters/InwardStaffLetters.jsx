@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink, FiFileText, FiSend, FiDownload, FiTrash2, FiPlus, FiUpload, FiMail, FiEdit, FiRotateCcw, FiCornerUpLeft } from 'react-icons/fi';
+import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink, FiFileText, FiSend, FiDownload, FiTrash2, FiPlus, FiUpload, FiMail, FiEdit, FiRotateCcw } from 'react-icons/fi';
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
@@ -34,21 +34,13 @@ const InwardStaffLetters = () => {
   const [imageLoading, setImageLoading] = useState({});
   const [uploadingCoveringLetter, setUploadingCoveringLetter] = useState(false);
   const [generatingCoveringLetter, setGeneratingCoveringLetter] = useState(false);
-  const [replyModalOpen, setReplyModalOpen] = useState(false);
-  const [selectedReplies, setSelectedReplies] = useState([]);
-  const [emailReplyModalOpen, setEmailReplyModalOpen] = useState(false);
-  const [selectedEmailForReply, setSelectedEmailForReply] = useState(null);
-  const [replyFormData, setReplyFormData] = useState({
-    subject: '',
-    body: ''
-  });
-  const [sendingReply, setSendingReply] = useState(false);
+
   const [coveringLetterModalOpen, setCoveringLetterModalOpen] = useState(false);
   const [selectedLetterForCovering, setSelectedLetterForCovering] = useState(null);
   const [signaturesModalOpen, setSignaturesModalOpen] = useState(false);
   const [userSignatures, setUserSignatures] = useState([]);
   const [loadingSignatures, setLoadingSignatures] = useState(false);
-  const [sendingEmails, setSendingEmails] = useState(new Set()); // Track which letters are being sent
+
   const [resendingLetters, setResendingLetters] = useState(new Set()); // Track which letters are being resent
 
   // Status filter options with translations
@@ -464,106 +456,7 @@ const InwardStaffLetters = () => {
     }
   };
 
-  // Function to send email directly (for SDPO only)
-  const sendEmailDirectly = async (letterId) => {
-    try {
-      // Get authentication token
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        alert(language === 'mr' ? 
-          'कृपया पुन्हा लॉगिन करा!' : 
-          'Please login again!');
-        navigate('/login');
-        return;
-      }
-      
-      // Get user info from localStorage or token
-      const userInfo = localStorage.getItem('userInfo') || localStorage.getItem('user');
-      let userData = null;
-      
-      if (userInfo) {
-        try {
-          userData = JSON.parse(userInfo);
-          console.log('User data from localStorage:', userData);
-        } catch (e) {
-          console.error('Error parsing user info:', e);
-        }
-      }
-      
-      // If no user data in localStorage, decode from JWT token
-      if (!userData && token) {
-        try {
-          const tokenParts = token.split('.');
-          if (tokenParts.length === 3) {
-            const payload = JSON.parse(atob(tokenParts[1]));
-            console.log('Decoded token payload:', payload);
-            userData = {
-              id: payload.id || payload.userId || payload.sub,
-              email: payload.email,
-              name: payload.name || payload.username,
-              role: payload.role || payload.roleId
-            };
-          }
-        } catch (e) {
-          console.error('Error decoding token:', e);
-        }
-      }
 
-      // Prepare recipients array for email (only SDPO)
-      const recipients = ['sdpo'];
-
-      // Prepare email data
-      const emailData = {
-        letterId: letterId,
-        senderEmail: userData?.email || 'staff@police.gov.in',
-        recipients: recipients,
-        customMessage: '',
-        includeCoveringLetter: selectedLetterForSend.coveringLetter ? true : false
-      };
-
-      console.log('Sending email directly to SDPO:', emailData);
-      
-      // Make the email API call
-      const response = await axios.post(
-        `http://localhost:5000/api/dynamic-email/send-inward-letter`, 
-        emailData, 
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-
-      if (response.status === 200 || response.status === 201) {
-        const result = response.data;
-        
-        const successMessage = language === 'mr' ? 
-          `पत्र यशस्वीरित्या SDPO ला पाठवले गेले!\n\nईमेल तपशील:\n- पाठवले: ${result.data.successful}\n- अयशस्वी: ${result.data.failed}\n- संलग्नक: ${result.data.attachments}` : 
-          `Letter sent successfully to SDPO!\n\nEmail Details:\n- Sent: ${result.data.successful}\n- Failed: ${result.data.failed}\n- Attachments: ${result.data.attachments}`;
-        
-        alert(successMessage);
-        
-        // Close modal
-        setSendModalOpen(false);
-        setSelectedLetterForSend(null);
-        
-        // Refresh letters
-        handleRefresh();
-      }
-    } catch (error) {
-      console.error('Error sending email directly:', error);
-      
-      const errorMessage = error.response?.data?.error || 
-                          error.response?.data?.message || 
-                          'Failed to send email';
-      
-      alert(language === 'mr' ? 
-        `ईमेल पाठवण्यात त्रुटी: ${errorMessage}` : 
-        `Error sending email: ${errorMessage}`);
-    }
-  };
 
   // Handle send form submission
   const handleSendSubmit = async (e) => {
@@ -598,17 +491,8 @@ const InwardStaffLetters = () => {
       const hasHighLevelRecipients = sendToData.igp || sendToData.sp || 
                                    (sendToData.policeStation && sendToData.selectedPoliceStations.length > 0);
       
-      // If high-level recipients are selected, send to HOD for approval
-      if (hasHighLevelRecipients) {
-        await sendToHODForApproval(letterId);
-        return;
-      }
-      
-      // For SDPO only, send email directly (no HOD approval needed)
-      if (sendToData.sdpo) {
-        await sendEmailDirectly(letterId);
-        return;
-      }
+      // Send to HOD for approval regardless of recipients
+      await sendToHODForApproval(letterId);
       
       // If we reach here, no valid recipients were selected
       alert(language === 'mr' ? 
@@ -1019,33 +903,30 @@ const InwardStaffLetters = () => {
   const totalPages = Math.ceil(filteredLetters.length / recordsPerPage);
   const paginatedLetters = filteredLetters.slice((currentPage - 1) * recordsPerPage, currentPage * recordsPerPage);
 
+  // Function to check if letter has covering letter
   const hasCoveringLetter = (letter) => {
-    // Debug: Log the letter data structure
-    console.log('Checking covering letter for:', letter.referenceNumber);
     const coveringLetter = letter.coveringLetter || letter.directCoveringLetter;
-    console.log('Letter covering letter data:', coveringLetter);
-    if (!coveringLetter) {
-      console.log('No covering letter object found');
-      return false;
-    }
+    if (!coveringLetter) return false;
+    
     // Check for either id or _id (to handle both Sequelize and MongoDB)
     const hasId = coveringLetter.id || coveringLetter._id;
-    // Check for URL availability
-    const hasUrl = coveringLetter.pdfUrl || coveringLetter.htmlUrl;
-    console.log('Covering letter ID:', hasId);
-    console.log('Covering letter URLs:', { pdfUrl: coveringLetter.pdfUrl, htmlUrl: coveringLetter.htmlUrl });
+    // Check for URL availability - prefer Word over PDF over HTML
+    const hasUrl = coveringLetter.wordUrl || 
+                   coveringLetter.documentUrls?.word || 
+                   coveringLetter.pdfUrl || 
+                   coveringLetter.htmlUrl;
+    
     return !!(hasId && hasUrl);
   };
-  
-  // Helper function to view covering letter
+
+  // Function to view covering letter
   const viewCoveringLetter = (letter) => {
-    const coveringLetter = letter.coveringLetter || letter.directCoveringLetter;
-    if (!coveringLetter) {
-      alert(language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही!' : 'Covering letter not available!');
-      return;
-    }
-    // Prefer PDF over HTML
-    const url = coveringLetter.pdfUrl || coveringLetter.htmlUrl;
+    // Prefer Word over PDF over HTML
+    const url = letter.coveringLetter?.wordUrl || 
+                letter.coveringLetter?.documentUrls?.word || 
+                letter.coveringLetter?.pdfUrl || 
+                letter.coveringLetter?.htmlUrl;
+    
     if (!url) {
       alert(language === 'mr' ? 'कव्हरिंग लेटर URL उपलब्ध नाही!' : 'Covering letter URL not available!');
       return;
@@ -1277,71 +1158,158 @@ const InwardStaffLetters = () => {
     return false;
   };
 
-  // Function to organize emails in conversation threads (multiple parents structure)
-  const organizeEmailsInThreadImproved = (emails) => {
-    if (!emails || emails.length === 0) return [];
+  // Function to organize emails in conversation threads (multiple parents with direct children)
+// Function to organize emails in conversation threads (multiple parents with direct children)
+const organizeEmailsInThreadImproved = (emails) => {
+  if (!emails || emails.length === 0) return [];
+  
+  console.log('=== Email Organization Debug ===');
+  console.log('Total emails received:', emails.length);
+  
+  // Sort all emails by date (oldest first)
+  const sortedEmails = [...emails].sort((a, b) => new Date(a.date) - new Date(b.date));
+  
+  // First pass: Identify all unique parent emails
+  const parentEmails = [];
+  const parentEmailIds = new Set();
+  const childEmailsMap = new Map(); // Maps parent number to child emails
+  
+  sortedEmails.forEach(email => {
+    const text = email.text || '';
+    const subject = email.subject || '';
     
-    console.log('=== Email Organization Debug ===');
-    console.log('Total emails received:', emails.length);
-    console.log('Emails:', emails.map(e => ({ 
-      subject: e.subject, 
-      from: e.from, 
-      date: e.date, 
-      referenceNumber: e.referenceNumber 
-    })));
+    // Check if this email explicitly mentions being a parent
+    let isExplicitParent = false;
+    let explicitParentNumber = null;
     
-    // Sort all emails by date (oldest first)
-    const sortedEmails = [...emails].sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    // Group emails by sender to identify different parents
-    const senderGroups = new Map();
-    
-    sortedEmails.forEach(email => {
-      const sender = email.from || '';
-      if (!senderGroups.has(sender)) {
-        senderGroups.set(sender, []);
+    // Check for explicit parent indicators
+    for (let i = 1; i <= 10; i++) {
+      if (text.includes(`parent ${i}`) || 
+          text.includes(`Parent ${i}`) ||
+          text.includes(`PARENT ${i}`) ||
+          text.includes(`parent-${i}`) ||
+          text.includes(`parent - ${i}`)) {
+        isExplicitParent = true;
+        explicitParentNumber = i;
+        break;
       }
-      senderGroups.get(sender).push(email);
-    });
+    }
     
-    console.log('Sender Groups:', Array.from(senderGroups.keys()));
+    // Check for ordinal parent references
+    const ordinalChecks = [
+      { pattern: /first parent/i, number: 1 },
+      { pattern: /second parent/i, number: 2 },
+      { pattern: /third parent/i, number: 3 },
+      { pattern: /fourth parent/i, number: 4 },
+      { pattern: /fifth parent/i, number: 5 }
+    ];
     
-    const threads = [];
+    for (const check of ordinalChecks) {
+      if (check.pattern.test(text)) {
+        isExplicitParent = true;
+        explicitParentNumber = check.number;
+        break;
+      }
+    }
     
-    // Create a thread for each sender (each sender is a potential parent)
-    senderGroups.forEach((senderEmails, sender) => {
-      // Sort emails from this sender by date
-      senderEmails.sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Determine if this is a parent email
+    const isParent = isExplicitParent || 
+                    (text.includes('Inward Letter Notification') && !subject.toLowerCase().includes('re:')) ||
+                    (!subject.toLowerCase().includes('re:') && !subject.toLowerCase().includes('fwd:'));
+    
+    if (isParent) {
+      // This is a parent email
+      const parentNumber = explicitParentNumber || (parentEmails.length + 1);
       
-      // The first email from this sender is the parent
-      const parentEmail = senderEmails[0];
+      // Check if we already have a parent with this number
+      const existingParentIndex = parentEmails.findIndex(p => p.parentNumber === parentNumber);
       
-      // All other emails from this sender are children
-      const childEmails = senderEmails.slice(1);
-      
-      console.log(`Parent from ${sender}:`, parentEmail.subject);
-      console.log(`Children from ${sender}:`, childEmails.map(e => e.subject));
-      
-      // Create thread for this sender
-      const thread = {
-        conversationKey: `sender_${sender}_${parentEmail.id}`,
-        original: parentEmail,
-        replies: childEmails.map(email => ({
+      if (existingParentIndex === -1) {
+        parentEmails.push({
           email: email,
-          children: []
-        })),
-        emailsWithReplies: new Set(childEmails.map(e => e.id)),
-        allEmails: senderEmails
-      };
-      
-      threads.push(thread);
+          parentNumber: parentNumber
+        });
+        parentEmailIds.add(email.id);
+      }
+    }
+  });
+  
+  // If no explicit parents found, treat the first email as parent 1
+  if (parentEmails.length === 0 && sortedEmails.length > 0) {
+    parentEmails.push({
+      email: sortedEmails[0],
+      parentNumber: 1
     });
+    parentEmailIds.add(sortedEmails[0].id);
+  }
+  
+  // Second pass: Assign remaining emails as children to appropriate parents
+  sortedEmails.forEach(email => {
+    if (parentEmailIds.has(email.id)) {
+      return; // Skip parent emails
+    }
     
-    console.log('Created threads:', threads.length);
-    console.log('=====================================');
+    const text = email.text || '';
+    let assignedParentNumber = 1; // Default to parent 1
     
-    return threads;
-  };
+    // Check if email mentions a specific parent number
+    for (let i = 1; i <= 10; i++) {
+      if (text.includes(`parent - ${i}`) || 
+          text.includes(`parent-${i}`) || 
+          text.includes(`parent ${i}`) ||
+          text.includes(`Parent ${i}`) ||
+          text.includes(`reply to parent ${i}`) ||
+          text.includes(`Reply to Parent ${i}`)) {
+        assignedParentNumber = i;
+        break;
+      }
+    }
+    
+    if (!childEmailsMap.has(assignedParentNumber)) {
+      childEmailsMap.set(assignedParentNumber, []);
+    }
+    childEmailsMap.get(assignedParentNumber).push(email);
+  });
+  
+  // Create threads
+  const threads = [];
+  
+  parentEmails.forEach(({ email: parentEmail, parentNumber }) => {
+    const children = childEmailsMap.get(parentNumber) || [];
+    
+    // Sort children by date
+    children.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    console.log(`Parent ${parentNumber}:`, parentEmail.subject);
+    console.log(`Children for Parent ${parentNumber}:`, children.map(e => e.subject));
+    
+    const thread = {
+      conversationKey: `parent_${parentNumber}_${parentEmail.id}`,
+      original: parentEmail,
+      replies: children.map(child => ({
+        email: child,
+        children: [] // No nested children - all are direct replies to parent
+      })),
+      emailsWithReplies: new Set(children.map(e => e.id)),
+      allEmails: [parentEmail, ...children]
+    };
+    
+    threads.push(thread);
+  });
+  
+  // Sort threads by parent number
+  threads.sort((a, b) => {
+    const aNum = parseInt(a.conversationKey.split('_')[1]);
+    const bNum = parseInt(b.conversationKey.split('_')[1]);
+    return aNum - bNum;
+  });
+  
+  console.log('Created threads:', threads.length);
+  console.log('=====================================');
+  
+  return threads;
+};
+
 
   // Fallback function for organizing emails
   const organizeEmailsInThread = (emails) => {
@@ -1600,36 +1568,40 @@ const InwardStaffLetters = () => {
                               console.log('📧 API Response:', response.data);
                               
                               if (response.data && response.data.success) {
-                                const allEmails = response.data.data || [];
-                                console.log('📧 Emails found:', allEmails.length);
-                                console.log('📧 Email details:', allEmails);
+                                const emailThreads = response.data.data || [];
+                                console.log('📧 Email threads found:', emailThreads.length);
+                                console.log('📧 Thread details:', emailThreads);
+                                
+                                // Convert threads back to flat array for backward compatibility
+                                const allEmails = [];
+                                emailThreads.forEach(thread => {
+                                  // Add parent email
+                                  allEmails.push(thread.original);
+                                  // Add child emails
+                                  allEmails.push(...thread.replies);
+                                });
+                                
+                                console.log('📧 Flattened emails:', allEmails.length);
                                 setSelectedReplies(allEmails);
                                 setReplyModalOpen(true);
                               } else {
-                                console.log('⚠️ API returned success: false, falling back to EmailRecords');
-                                // Fallback to existing EmailRecords if API fails
-                                setSelectedReplies(letter.EmailRecords || []);
+                                        console.log('⚠️ API returned success: false');
+        setSelectedReplies([]);
                                 setReplyModalOpen(true);
                               }
                             } catch (error) {
                               console.error('❌ Error fetching emails:', error);
                               console.error('❌ Error response:', error.response?.data);
-                              // Fallback to existing EmailRecords
-                              setSelectedReplies(letter.EmailRecords || []);
-                              setReplyModalOpen(true);
+                              alert(language === 'mr' ? 'ईमेल लोड करण्यात त्रुटी' : 'Error loading emails');
                             }
                           }}
                           className={`relative inline-flex items-center px-3 py-1.5 bg-yellow-600 text-white text-xs font-medium rounded hover:bg-yellow-700 transition-colors shadow-sm`}
                           title={language === 'mr' ? 'प्राप्त ईमेल पहा' : 'View Received Replies'}
-                          disabled={!letter.EmailRecords || letter.EmailRecords.length === 0}
+                          disabled={true}
                         >
                           <FiMail className="mr-1 h-4 w-4" />
                           {language === 'mr' ? 'उत्तर' : 'Replies'}
-                          {letter.EmailRecords && letter.EmailRecords.length > 0 && (
-                            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
-                              {letter.EmailRecords.length}
-                            </span>
-                          )}
+
                         </button>
                       </td>
                     </tr>
@@ -1668,8 +1640,8 @@ const InwardStaffLetters = () => {
             </h3>
             <p className="mt-1 text-sm text-gray-500">
               {language === 'mr' 
-                ? 'कोणतीही पत्रे आढळली नाहीत. कृपया आपली शोध बदला किंवा नवीन पत्र जोडा.' 
-                : 'No letters found. Please try changing your search or add a new letter.'}
+                ? 'निवडलेल्या फिल्टरसाठी कोणतीही पत्रे आढळली नाहीत.' 
+                : 'No letters found for the selected filters.'}
             </p>
           </div>
         )}
@@ -2022,479 +1994,31 @@ const InwardStaffLetters = () => {
           <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-8 relative max-h-[90vh] overflow-y-auto border border-blue-100">
             <button
               className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 bg-gray-100 rounded-full p-1 shadow"
-              onClick={() => {
-                setViewModalOpen(false);
-                setImageLoading({});
-              }}
+              onClick={() => setViewModalOpen(false)}
             >
               <FiX className="h-6 w-6" />
             </button>
             <h2 className="text-2xl font-extrabold mb-8 text-blue-700 text-center tracking-wide drop-shadow">
               {language === 'mr' ? 'पत्र तपशील' : 'Letter Details'}
             </h2>
-            
-            {/* Download and View buttons at the top of modal */}
-            {hasAttachments(selectedLetter) && (
-              <div className="flex justify-center mb-6 space-x-3">
-                <button
-                  onClick={() => viewFileInNewTab(selectedLetter)}
-                  className="inline-flex items-center px-6 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors shadow-md"
-                >
-                  <FiExternalLink className="mr-2 h-5 w-5" />
-                  {language === 'mr' ? 'फाईल पहा' : 'View File'}
-                </button>
-                <button
-                  onClick={() => handleFileDownload(selectedLetter)}
-                  className="inline-flex items-center px-6 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors shadow-md"
-                >
-                  <FiDownload className="mr-2 h-5 w-5" />
-                  {language === 'mr' ? 'फाईल्स डाउनलोड करा' : 'Download Files'}
-                  {selectedLetter.letterFiles && selectedLetter.letterFiles.length > 1 && (
-                    <span className="ml-2 bg-green-700 px-2 py-0.5 rounded-full text-xs">
-                      {selectedLetter.letterFiles.length} {language === 'mr' ? 'फाईल्स' : 'files'}
-                    </span>
-                  )}
-                </button>
-              </div>
-            )}
-            
-            <div className="flex flex-col gap-6">
-              {/* Reference Number */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {language === 'mr' ? 'संदर्भ क्रमांक' : 'Reference Number'}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {selectedLetter.referenceNumber || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Letter Status */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {language === 'mr' ? 'पत्र स्थिती' : 'Letter Status'}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {getStatusBadge(getLetterStatus(selectedLetter))}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Sender Office */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {t.officeSendingLetter || (language === 'mr' ? 'पत्र पाठविणारे कार्यालय' : 'Sender Office')}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {selectedLetter.officeSendingLetter || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Sender Name & Designation */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {t.senderNameAndDesignation || (language === 'mr' ? 'पाठविणाऱ्याचे नाव व पदनाम' : 'Sender Name & Designation')}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {selectedLetter.senderNameAndDesignation || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Outward Letter Number */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {t.outward_letter_no || (language === 'mr' ? 'प्राप्त पत्राचा जावक क्रमांक' : 'Outward Letter Number')}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {selectedLetter.outwardLetterNumber || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Number of Copies */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {t.no_of_documents || (language === 'mr' ? 'सह कागद पत्रांची संख्या' : 'Number of Copies')}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {selectedLetter.numberOfCopies || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Mobile Number */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {t.mobileNumber || (language === 'mr' ? 'मोबाईल नंबर / टेलीफोन नंबर' : 'Mobile Number')}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {selectedLetter.mobileNumber || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Letter Medium */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {t.letterMedium || (language === 'mr' ? 'पत्राचे माध्यम' : 'Letter Medium')}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {t[selectedLetter.letterMedium] || selectedLetter.letterMedium || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Letter Classification */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {t.letterClassification || (language === 'mr' ? 'पत्राचे वर्गीकरण' : 'Letter Classification')}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {selectedLetter.letterClassification || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Letter Type */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {t.letterType || (language === 'mr' ? 'पत्राचा प्रकार' : 'Letter Type')}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {t[selectedLetter.letterType] || selectedLetter.letterType || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Date of Receipt */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {t.date_of_receipt_of_the_letter || (language === 'mr' ? 'पत्र मिळाल्याचा दिनांक' : 'Date of Receipt of Letter')}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {selectedLetter.dateOfReceiptOfLetter || selectedLetter.date_of_receipt_of_the_letter || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Letter Date */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {t.letterDate || (language === 'mr' ? 'पत्राची तारीख' : 'Letter Date')}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {selectedLetter.letterDate || 'N/A'}
-                </div>
-              </div>
-              <div className="border-b border-blue-100" />
-              
-              {/* Subject */}
-              <div>
-                <div className="text-base font-bold text-blue-900 mb-1">
-                  {t.subject || (language === 'mr' ? 'विषय' : 'Subject')}
-                </div>
-                <div className="text-lg text-gray-800 font-medium whitespace-pre-line">
-                  {selectedLetter.subject || 'N/A'}
-                </div>
-              </div>
-
-              {/* Covering Letter Section - Updated */}
-              {selectedLetter && (
-                <>
-                  <div className="border-b border-blue-100" />
-                  <div>
-                    <div className="text-base font-bold text-blue-900 mb-3">
-                      {language === 'mr' ? 'कव्हरिंग लेटर' : 'Covering Letter'}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {Object.entries(selectedLetter)
+                .filter(([key]) => !['_id', '__v', 'id', 'createdAt', 'updatedAt', 'fileId', 'userId'].includes(key))
+                .map(([key, value]) => (
+                  <div key={key} className="col-span-1">
+                    <div className="text-base font-bold text-blue-900 mb-1">
+                      {key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}
                     </div>
-                    
-                    {hasCoveringLetter(selectedLetter) ? (
-                      // Show existing covering letter
-                      <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <h4 className="text-lg font-semibold text-indigo-800">
-                              {selectedLetter.coveringLetter?.letterType === 'UPLOADED' 
-                                ? (language === 'mr' ? 'अपलोड केलेले कव्हरिंग लेटर' : 'Uploaded Covering Letter')
-                                : (language === 'mr' ? 'ऑटो-जेनेरेटेड कव्हरिंग लेटर' : 'Auto-Generated Covering Letter')
-                              }
-                            </h4>
-                            <p className="text-sm text-indigo-600">
-                              {language === 'mr' ? 'संदर्भ क्रमांक:' : 'Letter Number:'} {selectedLetter.coveringLetter?.letterNumber}
-                            </p>
-                            <p className="text-sm text-indigo-600">
-                              {language === 'mr' ? 'दिनांक:' : 'Date:'} {selectedLetter.coveringLetter?.letterDate}
-                            </p>
-                            <p className="text-sm text-indigo-600">
-                              {language === 'mr' ? 'स्थिती:' : 'Status:'} 
-                              <span className={`ml-1 px-2 py-1 rounded text-xs font-medium ${
-                                selectedLetter.coveringLetter?.status === 'DRAFT' 
-                                  ? 'bg-yellow-100 text-yellow-800' 
-                                  : selectedLetter.coveringLetter?.status === 'UPLOADED'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-green-100 text-green-800'
-                              }`}>
-                                {selectedLetter.coveringLetter?.status}
-                              </span>
-                            </p>
-                          </div>
-                          
-                          <div className="flex flex-col space-y-2">
-                            {/* View and Action Buttons */}
-                            <div className="flex space-x-2">
-                              {/* View PDF Button */}
-                              {selectedLetter.coveringLetter?.pdfUrl && (
-                                <button
-                                  onClick={() => window.open(selectedLetter.coveringLetter?.pdfUrl, '_blank')}
-                                  className="inline-flex items-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors shadow-md"
-                                >
-                                  <FiFileText className="mr-1 h-3 w-3" />
-                                  {language === 'mr' ? 'PDF पहा' : 'View PDF'}
-                                </button>
-                              )}
-                              
-                              {/* View HTML Button - only for generated letters */}
-                              {selectedLetter.coveringLetter?.htmlUrl && (
-                                <button
-                                  onClick={() => window.open(selectedLetter.coveringLetter?.htmlUrl, '_blank')}
-                                  className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-md"
-                                >
-                                  <FiExternalLink className="mr-1 h-3 w-3" />
-                                  {language === 'mr' ? 'HTML पहा' : 'View HTML'}
-                                </button>
-                              )}
-                            </div>
-                            
-                            <div className="flex space-x-2">
-                              {/* Delete Button - for all covering letters */}
-                              <button
-                                onClick={() => {
-                                  const coveringLetter = selectedLetter && (selectedLetter.coveringLetter || selectedLetter.coveringLetter);
-                                  coveringLetter && handleDeleteCoveringLetter(coveringLetter.id || coveringLetter._id);
-                                }}
-                                className="inline-flex items-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors shadow-md"
-                                title={language === 'mr' ? 'कव्हरिंग लेटर हटवा' : 'Delete covering letter'}
-                              >
-                                <FiTrash2 className="mr-1 h-3 w-3" />
-                                {language === 'mr' ? 'हटवा' : 'Delete'}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Recipient Information */}
-                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="font-medium text-indigo-700">
-                              {language === 'mr' ? 'प्राप्तकर्ता कार्यालय:' : 'Recipient Office:'}
-                            </span>
-                            <p className="text-gray-600">{selectedLetter.coveringLetter?.recipientOffice || 'N/A'}</p>
-                          </div>
-                          <div>
-                            <span className="font-medium text-indigo-700">
-                              {language === 'mr' ? 'प्राप्तकर्ता पदनाम:' : 'Recipient Designation:'}
-                            </span>
-                            <p className="text-gray-600">{selectedLetter.coveringLetter?.recipientDesignation || 'N/A'}</p>
-                          </div>
-                        </div>
-                        
-                        {/* Show file info for uploaded files */}
-                        {selectedLetter.coveringLetter?.uploadedFile && (
-                          <div className="mt-3 pt-3 border-t border-indigo-200">
-                            <p className="text-xs text-indigo-700">
-                              {language === 'mr' ? 'फाईल:' : 'File:'} {selectedLetter.coveringLetter?.uploadedFile.originalName}
-                            </p>
-                            <p className="text-xs text-indigo-600">
-                              {language === 'mr' ? 'साईज:' : 'Size:'} {(selectedLetter.coveringLetter?.uploadedFile.fileSize / 1024 / 1024).toFixed(2)} MB
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      // No covering letter - show upload/generate options
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                        <div className="text-center">
-                          <FiFileText className="mx-auto h-12 w-12 text-yellow-400 mb-3" />
-                          <h4 className="text-lg font-semibold text-yellow-800 mb-2">
-                            {language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'No Covering Letter Available'}
-                          </h4>
-                          <p className="text-sm text-yellow-700 mb-4">
-                            {language === 'mr' 
-                              ? 'या पत्रासाठी कव्हरिंग लेटर तयार करा किंवा अपलोड करा' 
-                              : 'Generate or upload a covering letter for this document'}
-                          </p>
-                          
-                          <div className="flex justify-center space-x-3">
-                    
-                            
-                            {/* Upload Existing Covering Letter */}
-                            <label className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-md cursor-pointer">
-                              <FiUpload className="mr-2 h-4 w-4" />
-                              {language === 'mr' ? 'फाईल अपलोड करा' : 'Upload File'}
-                              <input
-                                type="file"
-                                accept=".pdf,.doc,.docx"
-                                onChange={(e) => {
-                                  if (e.target.files[0]) {
-                                    handleUploadCoveringLetter(selectedLetter, e.target.files[0]);
-                                  }
-                                }}
-                                className="hidden"
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-              
-              {/* File Attachments */}
-              {((selectedLetter.letterFiles && selectedLetter.letterFiles.length > 0) || 
-                (selectedLetter.upload && (selectedLetter.upload.fileUrl || selectedLetter.upload.fileName)) ||
-                (selectedLetter.uploadedFile && (selectedLetter.uploadedFile.fileUrl || selectedLetter.uploadedFile.fileName))) && (
-                <>
-                  <div className="border-b border-blue-100" />
-                  <div>
-                    <div className="text-base font-bold text-blue-900 mb-3">
-                      {language === 'mr' ? 'संलग्न फाईल्स' : 'File Attachments'}
+                    <div className="text-lg text-gray-800 font-medium">
+                      {value ? String(value) : 'N/A'}
                     </div>
-      
-                    {/* Handle uploadedFile structure (new API structure) */}
-                    {selectedLetter.uploadedFile && (selectedLetter.uploadedFile.fileUrl || selectedLetter.uploadedFile.fileName) && (
-                      <div className="space-y-4">
-                        {(() => {
-                          const fileUrl = selectedLetter.uploadedFile.fileUrl || `http://localhost:5000/${selectedLetter.uploadedFile.fileName.replace(/\\/g, '/')}`;
-                          const fileName = selectedLetter.uploadedFile.originalName || selectedLetter.uploadedFile.fileName?.split('/').pop() || 'Document';
-                          const isViewable = isViewableFile(fileName);
-                          const fileExt = getFileExtension(fileName);
-                          
-                          return (
-                            <div className="border border-gray-200 rounded-lg p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-gray-700">{fileName}</span>
-                                <div className="flex space-x-2">
-                                  <a 
-                                    href={fileUrl} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-md hover:bg-blue-200 transition-colors"
-                                  >
-                                    <FiEye className="mr-1 h-4 w-4" />
-                                    {language === 'mr' ? 'पहा' : 'View'}
-                                  </a>
-                                  <button
-                                    onClick={() => downloadSingleFile(fileUrl, fileName)}
-                                    className="inline-flex items-center px-3 py-1 bg-green-100 text-green-700 text-sm rounded-md hover:bg-green-200 transition-colors"
-                                  >
-                                    <FiDownload className="mr-1 h-4 w-4" />
-                                    {language === 'mr' ? 'डाउनलोड' : 'Download'}
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-                    
-                    {/* Handle new upload structure */}
-                    {selectedLetter.upload && (selectedLetter.upload.fileUrl || selectedLetter.upload.fileName) && !selectedLetter.uploadedFile && (
-                      <div className="space-y-4">
-                        {(() => {
-                          const fileUrl = selectedLetter.upload.fileUrl || `http://localhost:5000/${selectedLetter.upload.fileName.replace(/\\/g, '/')}`;
-                          const fileName = selectedLetter.upload.originalName || selectedLetter.upload.fileName?.split('/').pop() || 'Document';
-                          const isViewable = isViewableFile(fileName);
-                          const fileExt = getFileExtension(fileName);
-                          
-                          return (
-                            <div className="border border-gray-200 rounded-lg p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-gray-700">{fileName}</span>
-                                <div className="flex space-x-2">
-                                  {isViewable && (
-                                    <a 
-                                      href={fileUrl} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer" 
-                                      className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-md hover:bg-blue-200 transition-colors"
-                                    >
-                                      <FiEye className="mr-1 h-4 w-4" />
-                                      {language === 'mr' ? 'नवीन टॅबमध्ये उघडा' : 'Open in New Tab'}
-                                    </a>
-                                  )}
-                                  <button
-                                    onClick={() => handleFileDownload(selectedLetter)}
-                                    className="inline-flex items-center px-3 py-1 bg-green-100 text-green-700 text-sm rounded-md hover:bg-green-200 transition-colors"
-                                  >
-                                    <FiDownload className="mr-1 h-4 w-4" />
-                                    {language === 'mr' ? 'डाउनलोड' : 'Download'}
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-                    
-                    {/* Handle legacy letterFiles structure */}
-                    {selectedLetter.letterFiles && selectedLetter.letterFiles.length > 0 && (
-                      <div className="space-y-4">
-                        {selectedLetter.letterFiles.map((file, i) => {
-                          const fileUrl = `http://localhost:5000/${file.filePath.replace(/\\/g, '/')}`;
-                          const fileName = file.originalName || file.filePath.split('/').pop();
-                          const isViewable = isViewableFile(fileName);
-                          const fileExt = getFileExtension(fileName);
-                          
-                          return (
-                            <div key={i} className="border border-gray-200 rounded-lg p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-gray-700">{fileName}</span>
-                                <div className="flex space-x-2">
-                                  {isViewable && (
-                                    <a 
-                                      href={fileUrl} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer" 
-                                      className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-md hover:bg-blue-200 transition-colors"
-                                    >
-                                      <FiExternalLink className="mr-1 h-4 w-4" />
-                                      {language === 'mr' ? 'नवीन टॅबमध्ये उघडा' : 'Open in New Tab'}
-                                    </a>
-                                  )}
-                                  <button
-                                    onClick={() => {
-                                      const fileUrl = `http://localhost:5000/${file.filePath.replace(/\\/g, '/')}`;
-                                      const fileName = file.originalName || file.filePath.split('/').pop();
-                                      downloadSingleFile(fileUrl, fileName);
-                                    }}
-                                    className="inline-flex items-center px-3 py-1 bg-green-100 text-green-700 text-sm rounded-md hover:bg-green-200 transition-colors"
-                                  >
-                                    <FiDownload className="mr-1 h-4 w-4" />
-                                    {language === 'mr' ? 'डाउनलोड' : 'Download'}
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
                   </div>
-                </>
-              )}
+                ))}
             </div>
             <div className="flex justify-center mt-8">
               <button
                 className="px-8 py-2 bg-blue-600 text-white rounded-lg font-semibold shadow hover:bg-blue-700 transition-colors text-lg"
-                onClick={() => {
-                  setViewModalOpen(false);
-                  setImageLoading({});
-                }}
+                onClick={() => setViewModalOpen(false)}
               >
                 {language === 'mr' ? 'बंद करा' : 'Close'}
               </button>
@@ -2531,347 +2055,8 @@ const InwardStaffLetters = () => {
         </div>
       )}
 
-      {replyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-8 relative max-h-[90vh] overflow-y-auto border border-yellow-200">
-            <button
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 bg-gray-100 rounded-full p-1 shadow"
-              onClick={() => setReplyModalOpen(false)}
-            >
-              <FiX className="h-6 w-6" />
-            </button>
-            <h2 className="text-xl font-bold mb-4 text-yellow-700 text-center">
-              {language === 'mr' ? 'प्राप्त ईमेल्स' : 'Received Replies'}
-            </h2>
-            <div className="text-center text-sm text-gray-600 mb-4">
-              {language === 'mr' 
-                ? 'पालक ईमेल्स आणि त्यांचे उत्तरे' 
-                : 'Parent Emails and Their Replies'}
-            </div>
-            {selectedReplies.length === 0 ? (
-              <div className="text-center text-gray-500">
-                {language === 'mr' ? 'कोणतेही उत्तर प्राप्त झाले नाही.' : 'No replies received.'}
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {organizeEmailsInThread(selectedReplies).map((thread, threadIdx) => (
-                  <div key={threadIdx} className="border border-gray-200 rounded-lg overflow-hidden mb-6">
-                    {/* Thread Header */}
-                    <div className="bg-blue-50 border-b border-gray-200 p-3">
-                      <div className="flex justify-between items-center">
-                        <div className="text-sm font-medium text-blue-800">
-                          {language === 'mr' ? `पालक ईमेल ${threadIdx + 1}` : `Parent Email ${threadIdx + 1}`}
-                          {thread.original.referenceNumber && (
-                            <span className="ml-2 text-blue-600">
-                              ({language === 'mr' ? 'संदर्भ:' : 'Ref:'} {thread.original.referenceNumber})
-                            </span>
-                          )}
-                          <span className="ml-2 text-gray-600">
-                            ({thread.original.from})
-                          </span>
-                        </div>
-                        <div className="text-xs text-blue-600">
-                          {language === 'mr' 
-                            ? `${thread.replies.length} मुलांचे उत्तरे` 
-                            : `${thread.replies.length} child replies`}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Original Email */}
-                    <div className="bg-yellow-50 border-b border-gray-200 p-4 relative">
-                      {/* Original Email Indicator */}
-                      <div className="absolute -top-2 -left-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                        <span className="text-white text-xs font-bold">O</span>
-                      </div>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="font-bold text-lg text-yellow-900 mb-1">
-                            {thread.original.subject || (language === 'mr' ? 'विषय उपलब्ध नाही' : 'No Subject')}
-                          </div>
-                          <div className="text-sm text-gray-700">
-                            <span className="font-medium">{language === 'mr' ? 'प्रेषक:' : 'From:'}</span> {thread.original.from}
-                            <span className="mx-2">|</span>
-                            <span className="font-medium">{language === 'mr' ? 'दिनांक:' : 'Date:'}</span> {new Date(thread.original.date).toLocaleString()}
-                          </div>
-                        </div>
-                        
-                        {/* Reply Button - Only show if not replied to */}
-                        {shouldShowReplyButton(thread.original, thread) && (
-                          <button
-                            onClick={() => handleReplyClick(thread.original)}
-                            className="ml-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                          >
-                            <FiCornerUpLeft className="mr-2 h-4 w-4" />
-                            {language === 'mr' ? 'उत्तर द्या' : 'Reply'}
-                          </button>
-                        )}
-                      </div>
-                      
-                      {/* Original Email Body */}
-                      <div className="bg-white rounded p-3 mt-3 text-gray-800 whitespace-pre-line border border-gray-200">
-                        {cleanEmailText(thread.original.text)}
-                      </div>
-                      
-                      {/* Original Email Attachments */}
-                      {thread.original.attachments && thread.original.attachments.length > 0 && (
-                        <div className="mt-3">
-                          <div className="font-semibold text-gray-800 mb-1">
-                            {language === 'mr' ? 'संलग्नक:' : 'Attachments:'}
-                          </div>
-                          <ul className="list-disc ml-6">
-                            {thread.original.attachments.map((att, i) => (
-                              <li key={i}>
-                                <a
-                                  href={att.s3Url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-700 hover:underline font-medium"
-                                >
-                                  {att.filename}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Child Reply Emails */}
-                    {thread.replies.length > 0 && (
-                      <div className="bg-gray-50">
-                        <div className="p-3 bg-green-50 border-b border-gray-200">
-                          <div className="text-sm font-medium text-green-800">
-                            {language === 'mr' ? 'उत्तरे:' : 'Replies:'}
-                          </div>
-                        </div>
-                        {thread.replies.map((reply, replyIdx) => (
-                          <div key={replyIdx} className="border-l-4 border-blue-400 ml-4 p-4 bg-white m-4 rounded-r-lg shadow-sm relative">
-                            {/* Child indicator */}
-                            <div className="absolute -left-2 top-4 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-                              <span className="text-white text-xs font-bold">{replyIdx + 1}</span>
-                            </div>
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="font-semibold text-lg text-blue-900 mb-1">
-                                  {reply.email.subject || (language === 'mr' ? 'विषय उपलब्ध नाही' : 'No Subject')}
-                                </div>
-                                <div className="text-sm text-gray-700">
-                                  <span className="font-medium">{language === 'mr' ? 'प्रेषक:' : 'From:'}</span> {reply.email.from}
-                                  <span className="mx-2">|</span>
-                                  <span className="font-medium">{language === 'mr' ? 'दिनांक:' : 'Date:'}</span> {new Date(reply.email.date).toLocaleString()}
-                                </div>
-                              </div>
-                              
-                              {/* Reply Button for reply emails - Only show if not replied to */}
-                              {shouldShowReplyButton(reply.email, thread) && (
-                                <button
-                                  onClick={() => handleReplyClick(reply.email)}
-                                  className="ml-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                                >
-                                  <FiCornerUpLeft className="mr-2 h-4 w-4" />
-                                  {language === 'mr' ? 'उत्तर द्या' : 'Reply'}
-                                </button>
-                              )}
-                            </div>
-                            
-                            {/* Reply Email Body */}
-                            <div className="bg-gray-50 rounded p-3 mt-3 text-gray-800 whitespace-pre-line border border-gray-200">
-                              {cleanEmailText(reply.email.text)}
-                            </div>
-                            
-                            {/* Reply Email Attachments */}
-                            {reply.email.attachments && reply.email.attachments.length > 0 && (
-                              <div className="mt-3">
-                                <div className="font-semibold text-gray-800 mb-1">
-                                  {language === 'mr' ? 'संलग्नक:' : 'Attachments:'}
-                                </div>
-                                <ul className="list-disc ml-6">
-                                  {reply.email.attachments.map((att, i) => (
-                                    <li key={i}>
-                                      <a
-                                        href={att.s3Url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-700 hover:underline font-medium"
-                                      >
-                                        {att.filename}
-                                      </a>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            
-                            {/* Nested Replies (children of this reply) */}
-                            {reply.children && reply.children.length > 0 && (
-                              <div className="mt-4">
-                                {reply.children.map((childReply, childIdx) => (
-                                  <div key={childIdx} className="border-l-4 border-green-400 ml-4 p-4 bg-green-50 m-4 rounded-r-lg shadow-sm">
-                                    <div className="flex items-start justify-between">
-                                      <div className="flex-1">
-                                        <div className="font-semibold text-lg text-green-900 mb-1">
-                                          {childReply.email.subject || (language === 'mr' ? 'विषय उपलब्ध नाही' : 'No Subject')}
-                                        </div>
-                                        <div className="text-sm text-gray-700">
-                                          <span className="font-medium">{language === 'mr' ? 'प्रेषक:' : 'From:'}</span> {childReply.email.from}
-                                          <span className="mx-2">|</span>
-                                          <span className="font-medium">{language === 'mr' ? 'दिनांक:' : 'Date:'}</span> {new Date(childReply.email.date).toLocaleString()}
-                                        </div>
-                                      </div>
-                                      
-                                      {/* Reply Button for nested replies */}
-                                      {shouldShowReplyButton(childReply.email, thread) && (
-                                        <button
-                                          onClick={() => handleReplyClick(childReply.email)}
-                                          className="ml-4 inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
-                                        >
-                                          <FiCornerUpLeft className="mr-2 h-4 w-4" />
-                                          {language === 'mr' ? 'उत्तर द्या' : 'Reply'}
-                                        </button>
-                                      )}
-                                    </div>
-                                    
-                                    {/* Nested Reply Email Body */}
-                                    <div className="bg-white rounded p-3 mt-3 text-gray-800 whitespace-pre-line border border-gray-200">
-                                      {cleanEmailText(childReply.email.text)}
-                                    </div>
-                                    
-                                    {/* Nested Reply Email Attachments */}
-                                    {childReply.email.attachments && childReply.email.attachments.length > 0 && (
-                                      <div className="mt-3">
-                                        <div className="font-semibold text-gray-800 mb-1">
-                                          {language === 'mr' ? 'संलग्नक:' : 'Attachments:'}
-                                        </div>
-                                        <ul className="list-disc ml-6">
-                                          {childReply.email.attachments.map((att, i) => (
-                                            <li key={i}>
-                                              <a
-                                                href={att.s3Url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-blue-700 hover:underline font-medium"
-                                              >
-                                                {att.filename}
-                                              </a>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+    </div>
+  );
+};
 
-      {/* Email Reply Modal */}
-      {emailReplyModalOpen && selectedEmailForReply && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8 relative max-h-[90vh] overflow-y-auto border border-blue-200">
-            <button
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 bg-gray-100 rounded-full p-1 shadow"
-              onClick={() => {
-                setEmailReplyModalOpen(false);
-                setSelectedEmailForReply(null);
-                setReplyFormData({ subject: '', body: '' });
-              }}
-            >
-              <FiX className="h-6 w-6" />
-            </button>
-            
-            <h2 className="text-xl font-bold mb-6 text-blue-700 text-center">
-              {language === 'mr' ? 'ईमेल उत्तर द्या' : 'Reply to Email'}
-            </h2>
-            
-            {/* Original Email Info */}
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <h3 className="font-semibold text-gray-800 mb-2">
-                {language === 'mr' ? 'मूळ ईमेल:' : 'Original Email:'}
-              </h3>
-              <div className="text-sm text-gray-600">
-                <p><strong>{language === 'mr' ? 'प्रेषक:' : 'From:'}</strong> {selectedEmailForReply.from}</p>
-                <p><strong>{language === 'mr' ? 'विषय:' : 'Subject:'}</strong> {selectedEmailForReply.subject}</p>
-                <p><strong>{language === 'mr' ? 'दिनांक:' : 'Date:'}</strong> {new Date(selectedEmailForReply.date).toLocaleString()}</p>
-              </div>
-            </div>
-            
-            {/* Reply Form */}
-            <form onSubmit={handleReplySubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {language === 'mr' ? 'विषय:' : 'Subject:'}
-                </label>
-                <input
-                  type="text"
-                  name="subject"
-                  value={replyFormData.subject}
-                  onChange={handleReplyFormChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {language === 'mr' ? 'संदेश:' : 'Message:'}
-                </label>
-                <textarea
-                  name="body"
-                  value={replyFormData.body}
-                  onChange={handleReplyFormChange}
-                  rows={8}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-vertical"
-                  required
-                />
-              </div>
-              
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmailReplyModalOpen(false);
-                    setSelectedEmailForReply(null);
-                    setReplyFormData({ subject: '', body: '' });
-                  }}
-                  className="px-6 py-2 bg-gray-500 text-white rounded-lg font-semibold hover:bg-gray-600 transition-colors"
-                >      
-                  {language === 'mr' ? 'रद्द करा' : 'Cancel'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={sendingReply}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                >
-                  {sendingReply ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      {language === 'mr' ? 'पाठवत आहे...' : 'Sending...'}
-                    </>
-                  ) : (
-                    <>
-                      <FiSend className="mr-2 h-4 w-4" />
-                      {language === 'mr' ? 'उत्तर पाठवा' : 'Send Reply'}
-                    </>
-                  )}
-                </button>            
-              </div>               
-            </form>       
-          </div>  
-        </div>            
-      )} 
-    </div>                                                                                                                                                        
-  );      
-};              
-                    
-export default InwardStaffLetters;                                                               
+export default InwardStaffLetters;

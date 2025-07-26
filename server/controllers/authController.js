@@ -4,7 +4,6 @@ const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const Role = require('../models/Role');
 const authResponses = require('../responses/authResponses'); // Importing response module
-const { getPasswordResetOTPTemplate, getWelcomeEmailTemplate, getPasswordChangedTemplate } = require('../utils/emailTemplates');
 const multer = require('multer');
 const multerS3 = require('multer-s3');
 const { S3Client } = require('@aws-sdk/client-s3');
@@ -47,13 +46,32 @@ const upload = multer({
 // Create upload middleware for handling digital signature uploads
 const uploadSingle = upload.single('sign'); // 'sign' is the field name used in the form
 
-
+// Email configuration for authentication
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+});
+
+// Simple email templates for authentication
+const getPasswordResetOTPTemplate = (otp) => ({
+  subject: 'Password Reset OTP',
+  html: `<p>Your OTP for password reset is: <strong>${otp}</strong></p><p>This OTP will expire in 10 minutes.</p>`,
+  text: `Your OTP for password reset is: ${otp}. This OTP will expire in 10 minutes.`
+});
+
+const getWelcomeEmailTemplate = (email) => ({
+  subject: 'Welcome to E-Patra',
+  html: `<p>Welcome to E-Patra! Your account has been created successfully with email: ${email}</p>`,
+  text: `Welcome to E-Patra! Your account has been created successfully with email: ${email}`
+});
+
+const getPasswordChangedTemplate = () => ({
+  subject: 'Password Changed Successfully',
+  html: '<p>Your password has been changed successfully.</p>',
+  text: 'Your password has been changed successfully.'
 });
 
 // Register a new user
@@ -90,14 +108,19 @@ const register = async (req, res) => {
     });
 
     // Send a welcome email
-    const { subject, html, text } = getWelcomeEmailTemplate(email);
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject,
-      html,
-      text,
-    });
+    try {
+      const { subject, html, text } = getWelcomeEmailTemplate(email);
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject,
+        html,
+        text,
+      });
+    } catch (emailError) {
+      console.error('Failed to send welcome email:', emailError);
+      // Continue with registration even if email fails
+    }
 
     // Eagerly load the associated role for the user
     const userWithRole = await User.findOne({
@@ -197,15 +220,22 @@ const forgotPassword = async (req, res) => {
     });
 
     console.log('Sending OTP email to:', email);
-    const { subject, html, text } = getPasswordResetOTPTemplate(otp);
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject,
-      html,
-      text
-    });
-    console.log('OTP email sent successfully');
+    
+    // Send OTP email
+    try {
+      const { subject, html, text } = getPasswordResetOTPTemplate(otp);
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject,
+        html,
+        text
+      });
+      console.log('OTP email sent successfully');
+    } catch (emailError) {
+      console.error('Failed to send OTP email:', emailError);
+      return res.status(500).json(authResponses.error('Failed to send OTP email'));
+    }
 
     return res.json(authResponses.otpSentToEmail());
   } catch (error) {
@@ -308,14 +338,20 @@ const resetPassword = async (req, res) => {
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
 
-    const { subject, html, text } = getPasswordChangedTemplate();
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject,
-      html,
-      text
-    });
+    // Send password changed confirmation email
+    try {
+      const { subject, html, text } = getPasswordChangedTemplate();
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject,
+        html,
+        text
+      });
+    } catch (emailError) {
+      console.error('Failed to send password changed email:', emailError);
+      // Continue with password reset even if email fails
+    }
 
     return res.json(authResponses.passwordResetSuccess());
   } catch (error) {

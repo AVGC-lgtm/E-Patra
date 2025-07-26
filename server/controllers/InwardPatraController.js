@@ -1,5 +1,5 @@
 // controllers/InwardPatraController.js - Updated with Word document support in responses
-const { InwardPatra, CoveringLetter, User, File, Head, EmailRecord } = require('../models/associations');
+const { InwardPatra, CoveringLetter, User, File, Head } = require('../models/associations');
 const sequelize = require('../config/database');
 
 const coveringLetterController = require('./coveringLetterController');
@@ -56,14 +56,7 @@ const getUploadedFileInclude = () => ({
   required: false
 });
 
-// Common include configuration for email records
-const getEmailRecordsInclude = () => ({
-  model: EmailRecord,
-  as: 'EmailRecords',
-  attributes: ['id', 'subject', 'from', 'date', 'text', 'html', 'messageId', 'inReplyTo', 'references', 'attachments', 'referenceNumber', 'createdAt'],
-  required: false,
-  order: [['date', 'DESC']]
-});
+
 
 // Helper function to format covering letter data with Word document URLs
 const formatCoveringLetterData = (coveringLetter) => {
@@ -183,8 +176,7 @@ const createPatra = async (req, res) => {
         include: [
           getUserInclude(),
           getUploadedFileInclude(),
-          getCoveringLetterInclude(),
-          getEmailRecordsInclude()
+          getCoveringLetterInclude()
         ]
       });
       
@@ -248,10 +240,7 @@ const getAllPatras = async (req, res) => {
       getCoveringLetterInclude()
     ];
     
-    // Optionally include email records (default is true)
-    if (includeEmails === 'true') {
-      includes.push(getEmailRecordsInclude());
-    }
+
 
     const patras = await InwardPatra.findAndCountAll({
       where: whereClause,
@@ -268,7 +257,7 @@ const getAllPatras = async (req, res) => {
       console.log('  - Reference Number:', patras.rows[0].referenceNumber);
       console.log('  - Has uploadedFile:', !!patras.rows[0].uploadedFile);
       console.log('  - Has coveringLetter:', !!patras.rows[0].coveringLetter);
-      console.log('  - Email Records count:', patras.rows[0].EmailRecords ? patras.rows[0].EmailRecords.length : 0);
+
       
       if (patras.rows[0].coveringLetter) {
         console.log('  - Covering letter document URLs:', {
@@ -311,7 +300,6 @@ const getPatraById = async (req, res) => {
         getUserInclude(),
         getUploadedFileInclude(),
         getCoveringLetterInclude(),
-        getEmailRecordsInclude(),
         {
           model: Head,
           as: 'heads',
@@ -355,8 +343,7 @@ const getPatraByReferenceNumber = async (req, res) => {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
-        getCoveringLetterInclude(),
-        getEmailRecordsInclude()
+        getCoveringLetterInclude()
       ]
     });
 
@@ -391,10 +378,7 @@ const getPatraByUserId = async (req, res) => {
       getCoveringLetterInclude()
     ];
     
-    // Optionally include email records
-    if (includeEmails === 'true') {
-      includes.push(getEmailRecordsInclude());
-    }
+
 
     const patras = await InwardPatra.findAll({
       where: { userId },
@@ -440,11 +424,7 @@ const deletePatraById = async (req, res) => {
       return res.status(404).json({ error: 'Patra not found' });
     }
 
-    // Delete associated email records first
-    await EmailRecord.destroy({ 
-      where: { referenceNumber: patra.referenceNumber },
-      transaction 
-    });
+
 
     // Delete associated covering letter (this will also handle Word document cleanup via the covering letter controller)
     await CoveringLetter.destroy({ 
@@ -565,8 +545,7 @@ const updatePatraById = async (req, res) => {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
-        getCoveringLetterInclude(),
-        getEmailRecordsInclude()
+        getCoveringLetterInclude()
       ]
     });
 
@@ -594,8 +573,7 @@ const getPatraByUserIdAndPatraId = async (req, res) => {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
-        getCoveringLetterInclude(),
-        getEmailRecordsInclude()
+        getCoveringLetterInclude()
       ]
     });
 
@@ -634,13 +612,12 @@ const updateLetterStatus = async (req, res) => {
 
     await patra.update({ letterStatus });
 
-    // Return updated patra with complete covering letter data and email records
+    // Return updated patra with complete covering letter data
     const updatedPatra = await InwardPatra.findByPk(id, {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
-        getCoveringLetterInclude(),
-        getEmailRecordsInclude()
+        getCoveringLetterInclude()
       ]
     });
 
@@ -826,38 +803,7 @@ const getCoveringLetterById = async (req, res) => {
   }
 };
 
-// Get email conversation history for a specific InwardPatra
-const getEmailConversation = async (req, res) => {
-  const { referenceNumber } = req.params;
 
-  try {
-    const emails = await EmailRecord.findAll({
-      where: { referenceNumber },
-      order: [['date', 'ASC']], // Order by date ascending to show conversation flow
-      attributes: ['id', 'subject', 'from', 'date', 'text', 'html', 'messageId', 'inReplyTo', 'references', 'attachments', 'createdAt']
-    });
-
-    if (emails.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'No email conversation found for this reference number' 
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Email conversation retrieved successfully',
-      data: {
-        referenceNumber,
-        emailCount: emails.length,
-        emails: emails
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching email conversation:', error);
-    return res.status(500).json({ error: 'Server error', details: error.message });
-  }
-};
 
 
 
@@ -941,8 +887,7 @@ const resendLetter = async (req, res) => {
       include: [
         getUserInclude(),
         getUploadedFileInclude(),
-        getCoveringLetterInclude(),
-        getEmailRecordsInclude()
+        getCoveringLetterInclude()
       ]
     });
 
@@ -991,5 +936,4 @@ module.exports = {
   approveLetter,
   getAllCoveringLetters,
   getCoveringLetterById,
-  getEmailConversation,
 };
