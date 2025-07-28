@@ -25,6 +25,26 @@ const generateReferenceNumber = async () => {
   return referenceNumber;
 };
 
+// Function to generate OW-prefixed reference number (OW12345678)
+const generateOutwardReferenceNumber = async () => {
+  let owReferenceNumber;
+  let isUnique = false;
+
+  while (!isUnique) {
+    // Generate 8-digit number and add "OW" prefix
+    const randomNumber = Math.floor(10000000 + Math.random() * 90000000).toString();
+    owReferenceNumber = `OW${randomNumber}`; // ✅ ADDED "OW" prefix
+
+    const existingPatra = await InwardPatra.findOne({ where: { owReferenceNumber } });
+    if (!existingPatra) {
+      isUnique = true;
+    }
+  }
+
+  return owReferenceNumber; 
+};
+
+
 // Common include configuration for covering letter with Word document support
 const getCoveringLetterInclude = () => ({
   model: CoveringLetter,
@@ -133,10 +153,12 @@ const createPatra = async (req, res) => {
     }
 
     const referenceNumber = await generateReferenceNumber();
+    const owReferenceNumber = await generateOutwardReferenceNumber();
 
     // Create InwardPatra within transaction
     const newPatra = await InwardPatra.create({
       referenceNumber,
+      owReferenceNumber,
       dateOfReceiptOfLetter,
       officeSendingLetter,
       senderNameAndDesignation,
@@ -735,7 +757,7 @@ const getAllCoveringLetters = async (req, res) => {
         {
           model: InwardPatra,
           as: 'InwardPatra',
-          attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber']
+          attributes: ['id', 'referenceNumber','owReferenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber']
         },
         {
           model: User,
@@ -783,7 +805,7 @@ const getCoveringLetterById = async (req, res) => {
         {
           model: InwardPatra,
           as: 'InwardPatra',
-          attributes: ['id', 'referenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber', 'letterDate']
+          attributes: ['id', 'referenceNumber','owReferenceNumber', 'subject', 'officeSendingLetter', 'senderNameAndDesignation', 'outwardLetterNumber', 'letterDate']
         },
         {
           model: User,
