@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FiEye, FiDownload, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink, FiFileText, FiUpload, FiTrash2, FiSend } from 'react-icons/fi';
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
@@ -7,11 +7,26 @@ import translations from '../../translations';
 
 const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { language } = useLanguage();
   const t = translations[language] || translations['en'];
+
+  // Determine the correct dashboard path based on current location
+  const getDashboardPath = () => {
+    if (location.pathname.includes('/outward-dashboard/')) {
+      return '/outward-dashboard';
+    } else if (location.pathname.includes('/head-dashboard/')) {
+      return '/head-dashboard';
+    } else if (location.pathname.includes('/inward-dashboard/')) {
+      return '/inward-dashboard';
+    } else {
+      return '/dashboard';
+    }
+  };
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [signStatusFilter, setSignStatusFilter] = useState('All');
   const [letters, setLetters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -30,8 +45,36 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
     { value: 'All', label: language === 'mr' ? 'सर्व स्थिती' : 'All Status' },
     { value: 'pending', label: language === 'mr' ? 'प्रलंबित' : 'Pending' },
     { value: 'approved', label: language === 'mr' ? 'मंजूर' : 'Approved' },
-    { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' }
+    { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' },
+    { value: 'case close', label: language === 'mr' ? 'केस बंद' : 'Case Closed' }
   ];
+
+  // Sign Status filter options
+  const signStatusOptions = [
+    { value: 'All', label: language === 'mr' ? 'सर्व स्वाक्षरी स्थिती' : 'All Sign Status' },
+    { value: 'pending', label: language === 'mr' ? 'स्वाक्षरी प्रलंबित' : 'Sign Pending' },
+    { value: 'completed', label: language === 'mr' ? 'स्वाक्षरी पूर्ण' : 'Sign Completed' }
+  ];
+
+  // Add event listener for signature completion
+  useEffect(() => {
+    const handleSignatureCompleted = () => {
+      console.log('Signature completed event received, refreshing letters...');
+      handleRefresh();
+    };
+
+    window.addEventListener('signature-completed', handleSignatureCompleted);
+    
+    // Also refresh periodically to catch any updates
+    const interval = setInterval(() => {
+      handleRefresh();
+    }, 30000); // Refresh every 30 seconds
+    
+    return () => {
+      window.removeEventListener('signature-completed', handleSignatureCompleted);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Fetch letters from API
   const handleRefresh = async () => {
@@ -114,6 +157,40 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
       console.error('Error downloading file:', error);
       setError(t.errors.downloadError || 'Failed to download file. Please try again.');
     }
+  };
+
+  // Helper function to determine sign status
+  const getSignStatus = (letter) => {
+    console.log('getSignStatus for letter:', {
+      id: letter.id || letter._id,
+      referenceNumber: letter.referenceNumber,
+      forwardTo: letter.forwardTo,
+      letterStatus: letter.letterStatus,
+      coveringLetter: letter.coveringLetter,
+      isSigned: letter.coveringLetter?.isSigned
+    });
+    
+    // Check if letter has been sent to head
+    if (letter.forwardTo === 'head' || letter.letterStatus === 'sent to head' || letter.letterStatus === 'प्रमुखांकडे पाठवले') {
+      // Check if covering letter has been signed
+      if (letter.coveringLetter && letter.coveringLetter.isSigned === true) {
+        return 'completed';
+      } else {
+        return 'pending';
+      }
+    }
+    return null; // Not sent to head
+  };
+
+  // Helper function to get sign status display text
+  const getSignStatusDisplay = (letter) => {
+    const status = getSignStatus(letter);
+    if (status === 'completed') {
+      return language === 'mr' ? 'स्वाक्षरी पूर्ण' : 'Sign Completed';
+    } else if (status === 'pending') {
+      return language === 'mr' ? 'स्वाक्षरी प्रलंबित' : 'Sign Pending';
+    }
+    return language === 'mr' ? 'स्वाक्षरी प्रलंबित' : 'Sign Pending';
   };
 
   // Helper function to check if letter has covering letter
@@ -201,6 +278,78 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
         alert(language === 'mr' 
           ? `SP ला पाठवण्यात त्रुटी: ${errorMessage}` 
           : `Error sending to SP: ${errorMessage}`);
+      } else {
+        alert(language === 'mr' 
+          ? 'नेटवर्क त्रुटी! कृपया पुन्हा प्रयत्न करा.' 
+          : 'Network error! Please try again.');
+      }
+    }
+  };
+
+  // Handle send to Head
+  const handleSendToHead = async (letter) => {
+    try {
+      const confirmSend = window.confirm(
+        language === 'mr' 
+          ? `तुम्हाला खरोखर हे पत्र प्रमुख ला पाठवायचे आहे का?\n\nसंदर्भ क्रमांक: ${letter.referenceNumber}` 
+          : `Are you sure you want to send this letter to Head?\n\nReference No: ${letter.referenceNumber}`
+      );
+      
+      if (!confirmSend) return;
+      
+      const token = localStorage.getItem('token');
+      
+      console.log('BaseLetterComponent - Sending to Head with role:', role);
+      console.log('BaseLetterComponent - Source table name:', getSourceTableName(role));
+      
+      // Update the letter status to "sent to head" so it appears in HODLetters table
+      const response = await axios.put(
+        `http://localhost:5000/api/patras/${letter._id || letter.id}/send-to-hod`,
+        {
+          letterStatus: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'sent to head',
+          forwardTo: 'head',
+          sendToData: {
+            head: true,
+            sp: false,
+            igp: false,
+            sdpo: false,
+            policeStation: false
+          },
+          sourceTable: getSourceTableName(role) // Add source table information
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.status === 200) {
+        alert(language === 'mr' 
+          ? 'पत्र यशस्वीरित्या प्रमुख ला पाठवले गेले! हे पत्र आता या टेबलमध्ये राहील आणि स्वाक्षरी स्थिती दिसेल.' 
+          : 'Letter sent to Head successfully! This letter will remain in this table and show sign status.');
+        
+        // Update the letter in the current table to reflect the new status
+        setLetters(prevLetters => 
+          prevLetters.map(l => 
+            (l._id || l.id) === (letter._id || letter.id) 
+              ? { ...l, forwardTo: 'head', letterStatus: 'sent to head' }
+              : l
+          )
+        );
+        
+        // Trigger event to update Head Dashboard in real-time
+        window.dispatchEvent(new CustomEvent('letter-sent-to-head'));
+      }
+    } catch (error) {
+      console.error('Error sending to Head:', error);
+      
+      if (error.response) {
+        const errorMessage = error.response.data?.error || error.response.data?.message || 'Server error';
+        alert(language === 'mr' 
+          ? `प्रमुख ला पाठवण्यात त्रुटी: ${errorMessage}` 
+          : `Error sending to Head: ${errorMessage}`);
       } else {
         alert(language === 'mr' 
           ? 'नेटवर्क त्रुटी! कृपया पुन्हा प्रयत्न करा.' 
@@ -553,6 +702,37 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
     return !!(hasUpload || hasLetterFiles || hasUploadedFile);
   };
 
+  // Helper function to get source table name based on role
+  const getSourceTableName = (role) => {
+    const roleToTableMap = {
+      'sp': 'SP Table',
+      'collector': 'Collector Table',
+      'home': 'Home Table',
+      'ig_nashik_other': 'IG Table',
+      'shanik_local': 'Shanik Table',
+      'dg_other': 'DG Table',
+      'inward_user': 'Inward Table',
+      'outward_user': 'Outward Table',
+      'outward_staff': 'Outward Table'
+    };
+    
+    // Handle different variations of role names
+    const normalizedRole = role?.toLowerCase().trim();
+    
+    // Map variations to standard roles
+    const roleVariations = {
+      'ig': 'ig_nashik_other',
+      'ig_nashik': 'ig_nashik_other',
+      'shanik': 'shanik_local',
+      'dg': 'dg_other',
+      'inward': 'inward_user',
+      'outward': 'outward_user'
+    };
+    
+    const finalRole = roleVariations[normalizedRole] || normalizedRole;
+    return roleToTableMap[finalRole] || 'Unknown Table';
+  };
+
   // Helper function to get user-friendly field labels
   const getFieldLabel = (key) => {
     const labelMap = {
@@ -624,7 +804,11 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
           (letter.letterStatus && 
            letter.letterStatus.toLowerCase() === statusFilter.toLowerCase());
           
-        return matchesSearch && matchesStatus;
+        const matchesSignStatus = signStatusFilter === 'All' || 
+          (signStatusFilter === 'pending' && (getSignStatus(letter) === 'pending' || getSignStatus(letter) === null)) ||
+          (signStatusFilter === 'completed' && getSignStatus(letter) === 'completed');
+          
+        return matchesSearch && matchesStatus && matchesSignStatus;
       })
     : [];
 
@@ -696,6 +880,18 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
               </option>
             ))}
           </select>
+          
+          <select
+            className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+            value={signStatusFilter}
+            onChange={(e) => setSignStatusFilter(e.target.value)}
+          >
+            {signStatusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -732,6 +928,15 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {language === 'mr' ? 'यांना पाठवा' : 'Forward To'}
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {language === 'mr' ? 'स्वाक्षरी स्थिती' : 'Sign Status'}
+                  </th>
+                  {/* Additional columns headers */}
+                  {additionalColumns.map(col => (
+                    <th key={col.key} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {col.header}
+                    </th>
+                  ))}
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {language === 'mr' ? 'क्रिया' : 'Actions'}
                   </th>
@@ -743,7 +948,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
                     <tr key={letter._id || letter.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800">
                         <button 
-                          onClick={() => navigate(`/dashboard/track-application?ref=${encodeURIComponent(letter.referenceNumber)}`)}
+                          onClick={() => navigate(`${getDashboardPath()}/track-application/${letter.referenceNumber}`)}
                           className="flex items-center hover:underline"
                           title={language === 'mr' ? 'अर्ज ट्रॅक करा' : 'Track Application'}
                         >
@@ -763,6 +968,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
                           letter.letterStatus?.toLowerCase() === 'approved' ? 'bg-green-100 text-green-800' :
                           letter.letterStatus?.toLowerCase() === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                           letter.letterStatus?.toLowerCase() === 'rejected' ? 'bg-red-100 text-red-800' :
+                          letter.letterStatus?.toLowerCase() === 'case close' ? 'bg-gray-100 text-gray-800' :
                           'bg-gray-100 text-gray-800'
                         }`}>
                           {letter.letterStatus ? 
@@ -777,6 +983,21 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
                           {letter.forwardTo ? letter.forwardTo.toUpperCase() : 'Not Set'}
                         </span>
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          getSignStatus(letter) === 'completed' ? 'bg-green-100 text-green-800' :
+                          getSignStatus(letter) === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>
+                          {getSignStatusDisplay(letter)}
+                          {getSignStatus(letter) === 'completed' && (
+                            <span className="ml-1 text-xs">✓</span>
+                          )}
+                        </span>
+                      </td>
+                      
+                      {/* Additional columns */}
+                      {renderAdditionalColumns(letter)}
                    
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end space-x-2">
@@ -801,22 +1022,42 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
                             <span className="ml-1">{language === 'mr' ? 'कव्हर लेटर' : 'Cover Letter'}</span>
                           </button>
 
-                          <button
-                            onClick={() => handleSendToSP(letter)}
-                            className="inline-flex items-center px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors shadow-sm"
-                            title={language === 'mr' ? 'प्रमुख ला पाठवा' : 'Send to Head'}
-                          >
-                            <FiSend className="h-4 w-4" />
-                            <span className="ml-1">{language === 'mr' ? 'एसपी ला पाठवा' : 'Send to SP'}</span>
-                          </button>
+                          {(() => {
+                            const signStatus = getSignStatus(letter);
+                            const isSignCompleted = signStatus === 'completed';
+                            
+                            if (isSignCompleted) {
+                              return (
+                                <button
+                                  disabled
+                                  className="inline-flex items-center px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded cursor-not-allowed transition-colors shadow-sm"
+                                  title={language === 'mr' ? 'स्वाक्षरी पूर्ण - पाठवणे शक्य नाही' : 'Sign Completed - Cannot Send'}
+                                >
+                                  <FiSend className="h-4 w-4" />
+                                  <span className="ml-1">{language === 'mr' ? 'स्वाक्षरी पूर्ण' : 'Sign Completed'}</span>
+                                </button>
+                              );
+                            } else {
+                              return (
+                                <button
+                                  onClick={() => handleSendToHead(letter)}
+                                  className="inline-flex items-center px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 transition-colors shadow-sm"
+                                  title={language === 'mr' ? 'प्रमुख ला पाठवा' : 'Send to Head'}
+                                >
+                                  <FiSend className="h-4 w-4" />
+                                  <span className="ml-1">{language === 'mr' ? 'प्रमुख ला पाठवा' : 'Send to Head'}</span>
+                                </button>
+                              );
+                            }
+                          })()}
                         </div>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                      {searchTerm || statusFilter !== 'All' 
+                    <td colSpan={7 + additionalColumns.length} className="px-6 py-8 text-center text-gray-500">
+                      {searchTerm || statusFilter !== 'All' || signStatusFilter !== 'All'
                         ? (language === 'mr' 
                             ? 'जुळणारी पत्रे सापडली नाहीत' 
                             : 'No matching letters found')
@@ -966,15 +1207,34 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
                         ? 'नवीन कव्हरिंग लेटर अपलोड करण्यासाठी आधी सध्याचे हटवा' 
                         : 'Delete the current covering letter first to upload a new one'}
                     </p>
-                    <button
-                      onClick={() => handleDeleteCoveringLetter(
-                        selectedLetterForCovering.coveringLetter?.id || selectedLetterForCovering.coveringLetter?._id
-                      )}
-                      className="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
-                    >
-                      <FiTrash2 className="mr-2 h-4 w-4" />
-                      {language === 'mr' ? 'सध्याचे कव्हरिंग लेटर हटवा' : 'Delete Current Covering Letter'}
-                    </button>
+                    {(() => {
+                      const signStatus = getSignStatus(selectedLetterForCovering);
+                      const isSignCompleted = signStatus === 'completed';
+                      
+                      if (isSignCompleted) {
+                        return (
+                          <button
+                            disabled
+                            className="inline-flex items-center px-4 py-2 bg-gray-400 text-white text-sm font-medium rounded-lg cursor-not-allowed transition-colors"
+                          >
+                            <FiTrash2 className="mr-2 h-4 w-4" />
+                            {language === 'mr' ? 'स्वाक्षरी पूर्ण - हटवणे शक्य नाही' : 'Sign Completed - Cannot Delete'}
+                          </button>
+                        );
+                      } else {
+                        return (
+                          <button
+                            onClick={() => handleDeleteCoveringLetter(
+                              selectedLetterForCovering.coveringLetter?.id || selectedLetterForCovering.coveringLetter?._id
+                            )}
+                            className="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+                          >
+                            <FiTrash2 className="mr-2 h-4 w-4" />
+                            {language === 'mr' ? 'सध्याचे कव्हरिंग लेटर हटवा' : 'Delete Current Covering Letter'}
+                          </button>
+                        );
+                      }
+                    })()}
                   </div>
                 </>
               ) : (
@@ -1102,7 +1362,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
                               </p>
                               <p>
                                 {language === 'mr' 
-                                  ? 'तुम्ही फाईल वर क्लिक करून निवडू शकता किंवा त्यास बॉक्समध्ये ड्रॅग करू शकता' 
+                                  ? 'तुमी फाईल वर क्लिक करून निवडू शकता किंवा त्यास बॉक्समध्ये ड्रॅग करू शकता' 
                                   : 'You can click to select a file or drag it into the box'}
                               </p>
                             </div>

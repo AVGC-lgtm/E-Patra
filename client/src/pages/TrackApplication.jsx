@@ -17,7 +17,8 @@ import {
   FiMail,
   FiPhone,
   FiCalendar,
-  FiFolder
+  FiFolder,
+  FiCheckCircle
 } from 'react-icons/fi';
 
 // Format file size helper function
@@ -120,22 +121,48 @@ const TrackApplication = () => {
   };
 
   // Get status step based on actual letterStatus from API
-  const getStatusStep = (status) => {
+  const getStatusStep = (status, forwardTo, sentTo) => {
+    const statusLower = status?.toLowerCase() || '';
+    
+    // Check if case is closed (highest priority)
+    if (statusLower.includes('case close') || statusLower.includes('केस बंद')) {
+      return 5; // New final step for case closure
+    }
+    
+    // Check if letter is sent to head for signing
+    if (statusLower.includes('head sign') || forwardTo === 'head') {
+      return 3;
+    }
+    
+    // Check if letter is forwarded to any table
+    if (forwardTo && forwardTo !== 'head') {
+      return 2;
+    }
+    
+    // Check if letter has been processed and signed
+    if (statusLower.includes('approved') || statusLower.includes('completed') || statusLower.includes('signed')) {
+      return 4;
+    }
+    
     const statusMap = {
       'received': 1,
       'pending': 1,
-      'acknowledged': 2,
       'in_review': 2,
-      'forwarded': 3,
-      'processing': 3,
-      'sending for head sign': 4,
-      'approved': 5,
-      'completed': 5,
+      'forwarded': 2,
+      'processing': 2,
+      'sending for head sign': 3,
+      'sent to head': 3,
+      'प्रमुखांकडे पाठवले': 3,
+      'approved': 4,
+      'completed': 4,
+      'signed': 4,
+      'case close': 5,
+      'केस बंद': 5,
       'rejected': 0,
       'return': 0,
       'return_received': 0
     };
-    return statusMap[status?.toLowerCase()] || 0;
+    return statusMap[statusLower] || 1;
   };
 
   // Get status badge styling
@@ -145,13 +172,16 @@ const TrackApplication = () => {
     const statusConfig = {
       'received': { bg: 'bg-blue-100', text: 'text-blue-800', label: language === 'mr' ? 'प्राप्त' : 'Received' },
       'pending': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: language === 'mr' ? 'प्रलंबित' : 'Pending' },
-      'acknowledged': { bg: 'bg-indigo-100', text: 'text-indigo-800', label: language === 'mr' ? 'पोचपावती' : 'Acknowledged' },
       'in_review': { bg: 'bg-purple-100', text: 'text-purple-800', label: language === 'mr' ? 'पुनरावलोकनात' : 'In Review' },
       'forwarded': { bg: 'bg-cyan-100', text: 'text-cyan-800', label: language === 'mr' ? 'पुढे पाठवले' : 'Forwarded' },
       'processing': { bg: 'bg-orange-100', text: 'text-orange-800', label: language === 'mr' ? 'प्रक्रियेत' : 'Processing' },
       'sending for head sign': { bg: 'bg-pink-100', text: 'text-pink-800', label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी' : 'For Head Sign' },
+      'sent to head': { bg: 'bg-pink-100', text: 'text-pink-800', label: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'Sent to Head' },
+      'प्रमुखांकडे पाठवले': { bg: 'bg-pink-100', text: 'text-pink-800', label: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'Sent to Head' },
       'approved': { bg: 'bg-green-100', text: 'text-green-800', label: language === 'mr' ? 'मंजूर' : 'Approved' },
       'completed': { bg: 'bg-green-100', text: 'text-green-800', label: language === 'mr' ? 'पूर्ण' : 'Completed' },
+      'case close': { bg: 'bg-gray-100', text: 'text-gray-800', label: language === 'mr' ? 'केस बंद' : 'Case Closed' },
+      'केस बंद': { bg: 'bg-gray-100', text: 'text-gray-800', label: language === 'mr' ? 'केस बंद' : 'Case Closed' },
       'rejected': { bg: 'bg-red-100', text: 'text-red-800', label: language === 'mr' ? 'नाकारले' : 'Rejected' },
       'return': { bg: 'bg-red-100', text: 'text-red-800', label: language === 'mr' ? 'परतावा' : 'Returned' },
       'return_received': { bg: 'bg-gray-100', text: 'text-gray-800', label: language === 'mr' ? 'परतावा प्राप्त' : 'Return Received' }
@@ -166,13 +196,78 @@ const TrackApplication = () => {
     );
   };
 
-  const statusSteps = [
-    { id: 'received', label: language === 'mr' ? 'अर्ज प्राप्त' : 'Application Received' },
-    { id: 'acknowledged', label: language === 'mr' ? 'पोचपावती' : 'Acknowledged' },
-    { id: 'forwarded', label: language === 'mr' ? 'पुढे पाठवले' : 'Forwarded' },
-    { id: 'processing', label: language === 'mr' ? 'प्रक्रियेत' : 'Processing' },
-    { id: 'completed', label: language === 'mr' ? 'पूर्ण' : 'Completed' }
-  ];
+  // Dynamic status steps based on actual letter journey
+  const getStatusSteps = (application) => {
+    const steps = [
+      { 
+        id: 'received', 
+        label: language === 'mr' ? 'अर्ज प्राप्त' : 'Application Received',
+        date: application?.dateOfReceiptOfLetter || application?.createdAt,
+        description: language === 'mr' ? 'पत्र प्राप्त झाले आणि सिस्टममध्ये नोंदवले' : 'Letter received and registered in system'
+      }
+    ];
+
+    // Add forwarding step if letter was forwarded
+    if (application?.forwardTo && application.forwardTo !== 'head') {
+      steps.push({
+        id: 'forwarded',
+        label: language === 'mr' ? 'पुढे पाठवले' : 'Forwarded',
+        date: application?.updatedAt,
+        description: language === 'mr' ? `${application.forwardTo} टेबलला पाठवले` : `Forwarded to ${application.forwardTo} table`
+      });
+    }
+
+    // Add head signing step if letter was sent to head
+    if (application?.forwardTo === 'head' || application?.letterStatus?.toLowerCase().includes('head sign')) {
+      steps.push({
+        id: 'head_sign',
+        label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी' : 'Sent for Head Signature',
+        date: application?.updatedAt,
+        description: language === 'mr' ? 'प्रमुखांकडे स्वाक्षरीसाठी पाठवले' : 'Sent to head for signature'
+      });
+    }
+
+    // Check if case is closed
+    const isCaseClosed = application?.letterStatus?.toLowerCase().includes('case close') || 
+                         application?.letterStatus?.toLowerCase().includes('केस बंद') ||
+                         application?.inwardPatraClose === true;
+
+    if (isCaseClosed) {
+      // Add completion step (signature completed)
+      steps.push({
+        id: 'completed',
+        label: language === 'mr' ? 'स्वाक्षरी पूर्ण' : 'Signature Completed',
+        date: application?.coveringLetter?.generatedAt || application?.updatedAt,
+        description: language === 'mr' ? 'स्वाक्षरी पूर्ण झाली' : 'Process completed with signature'
+      });
+
+      // Add case closure step
+      steps.push({
+        id: 'case_closed',
+        label: language === 'mr' ? 'केस बंद' : 'Case Closed',
+        date: application?.caseClosedAt || application?.updatedAt,
+        description: language === 'mr' ? 'रिपोर्ट अपलोड केल्यानंतर केस बंद केली' : 'Case closed after report upload'
+      });
+    } else {
+      // Add completion step (regular completion logic)
+      const isCompleted = application?.letterStatus?.toLowerCase().includes('approved') || 
+                         application?.letterStatus?.toLowerCase().includes('completed') ||
+                         application?.coveringLetter?.isSigned;
+      
+      steps.push({
+        id: 'completed',
+        label: language === 'mr' ? 'पूर्ण' : 'Completed',
+        date: isCompleted ? (application?.coveringLetter?.generatedAt || application?.updatedAt) : null,
+        description: isCompleted ? 
+          (language === 'mr' ? 'स्वाक्षरी पूर्ण' : 'Process completed with signature') :
+          (language === 'mr' ? 'प्रक्रिया सुरू आहे' : 'Process in progress')
+      });
+    }
+
+    return steps;
+  };
+
+  const statusSteps = getStatusSteps(application);
 
   // Helper function to format date
   const formatDate = (dateString) => {
@@ -248,7 +343,7 @@ const TrackApplication = () => {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-full mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold text-gray-900">
           {language === 'mr' ? 'अर्ज ट्रॅक करा' : 'Track Application'}
@@ -514,6 +609,89 @@ const TrackApplication = () => {
               </div>
             ) : null}
 
+            {/* Report Downloads Section */}
+            {(application.letterStatus?.toLowerCase().includes('case close') || 
+              application.letterStatus?.toLowerCase().includes('केस बंद') ||
+              application.inwardPatraClose) && 
+             application.reportFiles && 
+             application.reportFiles !== '[]' && 
+             application.reportFiles !== 'null' ? (
+              <div className="bg-white p-6 rounded-xl border border-gray-200">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <FiDownload className="h-5 w-5 text-purple-600" />
+                  {language === 'mr' ? 'अपलोड केलेले रिपोर्ट्स' : 'Uploaded Reports'}
+                </h3>
+                <div className="space-y-3">
+                  {(() => {
+                    try {
+                      const reportFiles = JSON.parse(application.reportFiles);
+                      return reportFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-4 bg-purple-50 rounded-lg border border-purple-200">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                              <FiFileText className="h-6 w-6 text-purple-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {file.originalName || `Report_${index + 1}.pdf`}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                {file.size ? `${Math.round(file.size / 1024)} KB` : 'N/A'} • 
+                                {file.mimetype || 'PDF'} • 
+                                {language === 'mr' ? 'अपलोड केली गेली' : 'Uploaded'}: {formatDate(file.uploadedAt || application.reportUploadedAt)}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => window.open(file.s3Url, '_blank')}
+                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                          >
+                            <FiDownload className="h-4 w-4" />
+                            {language === 'mr' ? 'डाउनलोड' : 'Download'}
+                          </button>
+                        </div>
+                      ));
+                    } catch (error) {
+                      console.error('Error parsing report files:', error);
+                      return (
+                        <div className="text-center py-4 text-gray-500">
+                          <p>{language === 'mr' ? 'रिपोर्ट फाइल्स लोड करण्यात त्रुटी' : 'Error loading report files'}</p>
+                        </div>
+                      );
+                    }
+                  })()}
+                </div>
+                
+                {/* Case Closure Information */}
+                <div className="mt-4 pt-4 border-t border-purple-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-purple-700">
+                      <FiCheckCircle className="h-4 w-4" />
+                      <span className="font-medium">
+                        {language === 'mr' ? 'केस स्थिती' : 'Case Status'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-semibold text-red-800 bg-red-100 px-2 py-1 rounded-full">
+                        {language === 'mr' ? 'केस बंद' : 'CASE CLOSED'}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    {language === 'mr' 
+                      ? 'रिपोर्ट अपलोड केल्यानंतर हे केस बंद केले गेले आहे.'
+                      : 'This case has been closed after report upload.'}
+                  </p>
+                  {application.caseClosedAt && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {language === 'mr' ? 'बंद केली गेली' : 'Closed on'}: {formatDate(application.caseClosedAt)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
             {/* Status Timeline */}
             <div className="bg-white p-6 rounded-xl border border-gray-200">
               <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
@@ -522,13 +700,13 @@ const TrackApplication = () => {
               </h3>
               <div className="space-y-6">
                 {statusSteps.map((step, index) => {
-                  const currentStep = getStatusStep(application.letterStatus);
+                  const currentStep = getStatusStep(application.letterStatus, application.forwardTo, application.sentTo);
                   const isCompleted = index < currentStep;
                   const isCurrent = index === currentStep - 1;
                   
                   return (
                     <div key={step.id} className="flex items-start">
-                      <div className={`h-10 w-10 flex-shrink-0 rounded-full flex items-center justify-center mr-4 ${
+                      <div className={`h-12 w-12 flex-shrink-0 rounded-full flex items-center justify-center mr-4 ${
                         isCompleted 
                           ? 'bg-green-100 text-green-600 border-2 border-green-200' 
                           : isCurrent 
@@ -536,7 +714,7 @@ const TrackApplication = () => {
                             : 'bg-gray-100 text-gray-400 border-2 border-gray-200'
                       }`}>
                         {isCompleted ? (
-                          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                          <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                           </svg>
                         ) : (
@@ -544,28 +722,59 @@ const TrackApplication = () => {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium ${
+                        <p className={`text-base font-semibold ${
                           isCompleted || isCurrent ? 'text-gray-900' : 'text-gray-500'
                         }`}>
                           {step.label}
                         </p>
-                        {isCurrent && (
-                          <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                            <FiClock className="h-3 w-3" />
-                            {language === 'mr' 
-                              ? 'सध्या प्रक्रियेत आहे' 
-                              : 'Currently in progress'}
+                        
+                        {/* Show description for each step */}
+                        <p className={`text-sm mt-1 ${
+                          isCompleted || isCurrent ? 'text-gray-600' : 'text-gray-400'
+                        }`}>
+                          {step.description || step.label}
+                        </p>
+                        
+                        {/* Show date/time for completed or current steps */}
+                        {(isCompleted || isCurrent) && step.date && (
+                          <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+                            <FiCalendar className="h-3 w-3" />
+                            {formatDate(step.date)}
                           </p>
                         )}
+                        
+                        {/* Show current status indicator */}
+                        {isCurrent && (
+                          <div className="mt-2">
+                            <div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              <div className="w-2 h-2 bg-blue-600 rounded-full mr-2 animate-pulse"></div>
+                              {language === 'mr' ? 'सध्या प्रक्रियेत' : 'In Progress'}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Show completion indicator */}
                         {isCompleted && (
-                          <p className="text-xs text-green-600 mt-1">
-                            {language === 'mr' ? 'पूर्ण' : 'Completed'}
+                          <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                            <FiCheckCircle className="h-3 w-3" />
+                            {language === 'mr' ? 'पूर्ण झाले' : 'Completed'}
                           </p>
+                        )}
+                        
+                        {/* Show real-time status information */}
+                        {isCurrent && application.forwardTo && (
+                          <div className="mt-2 p-2 bg-blue-50 rounded-lg">
+                            <p className="text-xs text-blue-700">
+                              {language === 'mr' 
+                                ? `सध्या ${application.forwardTo} येथे आहे`
+                                : `Currently at ${application.forwardTo} table`}
+                            </p>
+                          </div>
                         )}
                       </div>
                       {index < statusSteps.length - 1 && (
-                        <div className={`w-px h-8 ml-5 ${
-                          isCompleted ? 'bg-green-200' : 'bg-gray-200'
+                        <div className={`w-px h-16 ml-6 ${
+                          isCompleted ? 'bg-green-300' : 'bg-gray-200'
                         }`} />
                       )}
                     </div>
@@ -574,25 +783,74 @@ const TrackApplication = () => {
               </div>
             </div>
 
-            {/* Current Status Display */}
+            {/* Current Status Display - Enhanced Real-time */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200">
               <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-blue-900 mb-2">
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                    <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse"></div>
                     {language === 'mr' ? 'सध्याची स्थिती' : 'Current Status'}
                   </h3>
-                  <p className="text-blue-700">
-                    {application.letterStatus === 'sending for head sign' 
-                      ? (language === 'mr' ? 'तुमचा अर्ज प्रमुख स्वाक्षरीसाठी पाठवला गेला आहे' : 'Your application has been sent for head signature')
-                      : (language === 'mr' ? 'तुमचा अर्ज प्रक्रियेत आहे' : 'Your application is being processed')
-                    }
-                  </p>
+                  
+                  {/* Real-time status message */}
+                  <div className="space-y-2">
+                    <p className="text-blue-700 font-medium">
+                      {application.letterStatus?.toLowerCase().includes('case close') || application.letterStatus?.toLowerCase().includes('केस बंद') || application.inwardPatraClose
+                        ? (language === 'mr' ? 'तुमचा अर्ज पूर्ण झाला आहे आणि केस बंद केली आहे' : 'Your application has been completed and case has been closed')
+                        : application.forwardTo === 'head' || application.letterStatus?.toLowerCase().includes('head sign')
+                        ? (language === 'mr' ? 'तुमचा अर्ज प्रमुख स्वाक्षरीसाठी पाठवला गेला आहे' : 'Your application has been sent for head signature')
+                        : application.forwardTo && application.forwardTo !== 'head'
+                        ? (language === 'mr' ? `तुमचा अर्ज ${application.forwardTo} टेबलवर आहे` : `Your application is at ${application.forwardTo} table`)
+                        : application.letterStatus?.toLowerCase().includes('completed') || application.coveringLetter?.isSigned
+                        ? (language === 'mr' ? 'तुमचा अर्ज पूर्ण झाला आहे' : 'Your application has been completed')
+                        : (language === 'mr' ? 'तुमचा अर्ज प्रक्रियेत आहे' : 'Your application is being processed')
+                      }
+                    </p>
+                    
+                    {/* Show additional context */}
+                    {application.sentTo && (
+                      <p className="text-sm text-blue-600">
+                        {language === 'mr' ? 'विभाग: ' : 'Department: '}
+                        {JSON.parse(application.sentTo).sourceTable || 'Processing'}
+                      </p>
+                    )}
+                    
+                    {/* Show signature status */}
+                    {application.coveringLetter && (
+                      <div className="flex items-center gap-2 mt-3">
+                        <div className={`w-2 h-2 rounded-full ${application.coveringLetter.isSigned ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+                        <span className="text-sm">
+                          {application.coveringLetter.isSigned 
+                            ? (language === 'mr' ? 'स्वाक्षरी पूर्ण' : 'Signature Completed')
+                            : (language === 'mr' ? 'स्वाक्षरी प्रलंबित' : 'Signature Pending')
+                          }
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
+                
                 <div className="text-right">
                   {getStatusBadge(application.letterStatus)}
-                  <p className="text-sm text-gray-600 mt-1">
-                    {language === 'mr' ? 'शेवटच्या अपडेटची तारीख' : 'Last updated'}: {formatDate(application.updatedAt || application.createdAt)}
+                  <p className="text-sm text-gray-600 mt-2">
+                    {language === 'mr' ? 'शेवटच्या अपडेटची तारीख' : 'Last updated'}
                   </p>
+                  <p className="text-xs text-gray-500">
+                    {formatDate(application.updatedAt || application.createdAt)}
+                  </p>
+                  
+                  {/* Show processing time */}
+                  <div className="mt-2 text-xs text-gray-500">
+                    {language === 'mr' ? 'एकूण वेळ: ' : 'Total time: '}
+                    {(() => {
+                      const created = new Date(application.createdAt);
+                      const now = new Date();
+                      const diffDays = Math.floor((now - created) / (1000 * 60 * 60 * 24));
+                      return diffDays === 0 ? 
+                        (language === 'mr' ? 'आज' : 'Today') : 
+                        `${diffDays} ${language === 'mr' ? 'दिवस' : 'days'}`;
+                    })()}
+                  </div>
                 </div>
               </div>
             </div>

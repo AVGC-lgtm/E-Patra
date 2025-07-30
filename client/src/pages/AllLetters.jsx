@@ -30,7 +30,18 @@ const AllLetters = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await axios.get('http://localhost:5000/api/patras');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Please login first');
+        navigate('/login');
+        return;
+      }
+
+      const response = await axios.get('http://localhost:5000/api/patras', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       setLetters(response.data);
       
       // Load acknowledged status from localStorage
@@ -39,8 +50,17 @@ const AllLetters = () => {
         setAcknowledgedLetters(new Set(JSON.parse(savedAcknowledged)));
       }
     } catch (err) {
-      setError('Failed to fetch letters. Please try again.');
       console.error('Error fetching letters:', err);
+      
+      // Handle authentication errors
+      if (err.response?.status === 401) {
+        setError('Authentication failed. Please login again.');
+        localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
+      
+      setError('Failed to fetch letters. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -62,10 +82,20 @@ const AllLetters = () => {
 
   const handleDownload = async (filePath, originalName) => {
     try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Please login first');
+        navigate('/login');
+        return;
+      }
+
       const response = await axios({
         url: `http://localhost:5000/${filePath.replace(/\\/g, '/')}`,
         method: 'GET',
         responseType: 'blob',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
 
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -77,6 +107,15 @@ const AllLetters = () => {
       document.body.removeChild(link);
     } catch (error) {
       console.error('Error downloading file:', error);
+      
+      // Handle authentication errors
+      if (error.response?.status === 401) {
+        setError('Authentication failed. Please login again.');
+        localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
+      
       setError('Failed to download file. Please try again.');
     }
   };
@@ -221,7 +260,7 @@ const AllLetters = () => {
                     <tr key={letter._id || letter.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800">
                         <button 
-                          onClick={() => navigate(`/dashboard/track-application?ref=${encodeURIComponent(letter.referenceNumber)}`)}
+                          onClick={() => navigate(`/dashboard/track-application/${letter.referenceNumber}`)}
                           className="flex items-center hover:underline"
                           title={language === 'mr' ? 'अर्ज ट्रॅक करा' : 'Track Application'}
                         >

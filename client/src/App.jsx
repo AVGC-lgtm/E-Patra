@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LanguageProvider } from './context/LanguageContext';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { getAuthToken, setAuthToken, clearAuthTokens, isSessionActive } from './utils/auth';
 import Login from "./components/Login/Login";
 import ForgotPassword from "./components/Login/ForgotPassword";
 import DashboardLayout from './components/Dashboard/DashboardLayout';
@@ -9,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import InwardDashboard from './pages/InwardDashboard';
 import MyInwardLetters from './pages/MyInwardLetters';
 import OutwardDashboard from './pages/OutwardDashboard';
+import HeadDashboard from './pages/HeadDashboard';
 
 // Import role-specific letter components
 import InwardStaffLetters from './pages/letters/InwardStaffLetters';
@@ -60,29 +62,59 @@ const AppContent = () => {
   const [userRole, setUserRole] = useState('user');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check for existing token on initial load
+  // Check for existing token on initial load with improved session management
   useEffect(() => {
     const checkAuth = async () => {
-      const token = localStorage.getItem('token');
+      // Check if this is a fresh page load (new tab/window)
+      if (!isSessionActive()) {
+        // If it's a new session, clear any existing tokens to force fresh login
+        clearAuthTokens();
+        setIsLoading(false);
+        return;
+      }
+
+      // Get token using utility function
+      const token = getAuthToken();
+      
       if (token) {
         try {
-          const tokenData = JSON.parse(atob(token.split('.')[1]));
-          const currentTime = Date.now() / 1000;
-          
-          if (tokenData.exp > currentTime) {
-            setIsLoggedIn(true);
-            
-            const rawRole = tokenData.roleName || 'user';
-            const normalizedRole = normalizeRole(rawRole);
-            setUserRole(normalizedRole);
-          } else {
-            // Token expired
-            localStorage.removeItem('token');
+          // Validate token by making an API call to ensure it's still valid
+          const response = await fetch('http://localhost:5000/api/auth/verify', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
 
+          if (response.ok) {
+            const tokenData = JSON.parse(atob(token.split('.')[1]));
+            const currentTime = Date.now() / 1000;
+            
+            if (tokenData.exp > currentTime) {
+              // Ensure token is in sessionStorage for this session
+              setAuthToken(token);
+              setIsLoggedIn(true);
+              
+              const rawRole = tokenData.roleName || 'user';
+              const normalizedRole = normalizeRole(rawRole);
+              setUserRole(normalizedRole);
+            } else {
+              // Token expired
+              clearAuthTokens();
+              setIsLoggedIn(false);
+              setUserRole('user');
+            }
+          } else {
+            // Token invalid on server
+            clearAuthTokens();
+            setIsLoggedIn(false);
+            setUserRole('user');
           }
         } catch (error) {
-          console.error('Error parsing token:', error);
-          localStorage.removeItem('token');
+          console.error('Error validating token:', error);
+          clearAuthTokens();
+          setIsLoggedIn(false);
+          setUserRole('user');
         }
       }
       setIsLoading(false);
@@ -94,7 +126,10 @@ const AppContent = () => {
   const handleLogin = (token) => {
     try {
       const tokenData = JSON.parse(atob(token.split('.')[1]));
-      localStorage.setItem('token', token);
+      
+      // Use utility function to set token
+      setAuthToken(token);
+      
       setIsLoggedIn(true);
       
       const rawRole = tokenData.roleName || 'user';
@@ -107,8 +142,8 @@ const AppContent = () => {
   };
 
   const handleLogout = () => {
-    // Clear local storage and state
-    localStorage.removeItem('token');
+    // Clear all storage and state using utility function
+    clearAuthTokens();
     setIsLoggedIn(false);
     setUserRole('user');
     // Navigate to login page
@@ -127,9 +162,20 @@ const AppContent = () => {
   const getLayout = (children) => {
     // All users use the same SimpleDashboardLayout design
     if ([
-      'inward_user', 'outward_user', 'sp', 'head', 'outside_police_station',
+      'inward_user', 'outward_user', 'sp', 'outside_police_station',
       'collector', 'dg_other', 'home', 'ig_nashik_other', 'shanik_local'
     ].includes(userRole)) {
+      return (
+        <SimpleDashboardLayout 
+          onLogout={handleLogout}
+        >
+          {children}
+        </SimpleDashboardLayout>
+      );
+    }
+    
+    // Head users get a special layout or use SimpleDashboardLayout
+    if (userRole === 'head') {
       return (
         <SimpleDashboardLayout 
           onLogout={handleLogout}
@@ -148,25 +194,145 @@ const AppContent = () => {
     );
   };
 
-  // Protected route wrapper
+  // Protected route wrapper with enhanced security
   const ProtectedRoute = ({ children, roles = [] }) => {
+    // First check if user is logged in
     if (!isLoggedIn) {
       return <Navigate to="/login" replace />;
     }
     
+    // Verify token is still valid and get fresh user data
+    const token = getAuthToken();
+    if (!token) {
+      setIsLoggedIn(false);
+      setUserRole('user');
+      return <Navigate to="/login" replace />;
+    }
+    
+    // Additional security: verify token structure and user role
+    try {
+      const tokenData = JSON.parse(atob(token.split('.')[1]));
+      const currentTime = Date.now() / 1000;
+      
+      // Check if token is expired
+      if (tokenData.exp <= currentTime) {
+        clearAuthTokens();
+        setIsLoggedIn(false);
+        setUserRole('user');
+        return <Navigate to="/login" replace />;
+      }
+      
+      // Verify the role from token matches the current userRole state
+      const tokenRole = normalizeRole(tokenData.roleName || 'user');
+      if (tokenRole !== userRole) {
+        // Role mismatch - update state and redirect appropriately
+        setUserRole(tokenRole);
+        const correctPath = 
+          tokenRole === 'inward_user' ? '/inward-dashboard' :
+          tokenRole === 'head' ? '/head-dashboard' :
+          '/outward-dashboard';
+        return <Navigate to={correctPath} replace />;
+      }
+    } catch (error) {
+      console.error('Invalid token structure:', error);
+      clearAuthTokens();
+      setIsLoggedIn(false);
+      setUserRole('user');
+      return <Navigate to="/login" replace />;
+    }
+    
+    // Check role-based access
     if (roles.length && !roles.includes(userRole)) {
-      return <Navigate to="/dashboard" replace />;
+      console.warn(`Access denied: User role '${userRole}' not in allowed roles [${roles.join(', ')}]`);
+      
+      // Redirect to appropriate dashboard based on actual user role
+      const redirectPath = 
+        userRole === 'inward_user' ? '/inward-dashboard' :
+        userRole === 'head' ? '/head-dashboard' :
+        '/outward-dashboard';
+      return <Navigate to={redirectPath} replace />;
     }
     
     return getLayout(children);
   };
 
+  // Route guard component to validate access on every navigation
+  const RouteGuard = ({ children }) => {
+    const [isValidating, setIsValidating] = useState(true);
+    
+    useEffect(() => {
+      const validateAccess = async () => {
+        const token = getAuthToken();
+        
+        if (!token) {
+          setIsLoggedIn(false);
+          setUserRole('user');
+          setIsValidating(false);
+          return;
+        }
+        
+        try {
+          // Validate token with server
+          const response = await fetch('http://localhost:5000/api/auth/verify', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            const userData = await response.json();
+            const tokenData = JSON.parse(atob(token.split('.')[1]));
+            const currentRole = normalizeRole(tokenData.roleName || 'user');
+            
+            // Ensure role consistency
+            if (currentRole !== userRole) {
+              setUserRole(currentRole);
+            }
+            
+            setIsLoggedIn(true);
+          } else {
+            // Token invalid
+            clearAuthTokens();
+            setIsLoggedIn(false);
+            setUserRole('user');
+          }
+        } catch (error) {
+          console.error('Route validation error:', error);
+          clearAuthTokens();
+          setIsLoggedIn(false);
+          setUserRole('user');
+        }
+        
+        setIsValidating(false);
+      };
+      
+      validateAccess();
+    }, [window.location.pathname]); // Re-validate on route change
+    
+    if (isValidating) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      );
+    }
+    
+    return children;
+  };
+
   return (
     <div className="min-h-screen">
-      <Routes>
+      <RouteGuard>
+        <Routes>
         <Route path="/forgot-password" element={
           isLoggedIn ? (
-            <Navigate to="/dashboard" replace />
+            <Navigate to={
+              userRole === 'inward_user' ? '/inward-dashboard' :
+              userRole === 'head' ? '/head-dashboard' :
+              '/outward-dashboard'
+            } 
+            replace />
           ) : (
             <div className="min-h-screen flex items-center justify-center p-4">
               <ForgotPassword />
@@ -177,6 +343,7 @@ const AppContent = () => {
           isLoggedIn ? (
             <Navigate to={
               userRole === 'inward_user' ? '/inward-dashboard' :
+              userRole === 'head' ? '/head-dashboard' :
               userRole === 'outward_user' ? '/outward-dashboard' :
               '/outward-dashboard'  // All other roles use outward-dashboard design
             } 
@@ -207,7 +374,7 @@ const AppContent = () => {
           path="/outward-dashboard" 
           element={
             <ProtectedRoute roles={[
-              'outward_user', 'head', 'sp', 'collector', 'dg_other', 
+              'outward_user', 'sp', 'collector', 'dg_other', 
               'home', 'ig_nashik_other', 'shanik_local', 'outside_police_station'
             ]}>
               <Outlet />
@@ -221,13 +388,31 @@ const AppContent = () => {
           </Route>
         </Route>
 
-        {/* Main Dashboard Route */}
+        {/* Head Dashboard Routes - Separate dashboard for Head users */}
+        <Route 
+          path="/head-dashboard" 
+          element={
+            <ProtectedRoute roles={['head']}>
+              <Outlet />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<HeadDashboard />} />
+          <Route path="letters" element={<HODLetters />} />
+          <Route path="upload-sign" element={<UploadSign />} />
+        </Route>
+
+        {/* Main Dashboard Route - Redirect Head users to their dedicated dashboard */}
         <Route 
           path="/dashboard" 
           element={
-            <ProtectedRoute>
-              <Outlet />
-            </ProtectedRoute>
+            userRole === 'head' ? (
+              <Navigate to="/head-dashboard" replace />
+            ) : (
+              <ProtectedRoute>
+                <Outlet />
+              </ProtectedRoute>
+            )
           }
         >
           <Route index element={<Dashboard />} />
@@ -260,13 +445,6 @@ const AppContent = () => {
             </>
           )}
           
-          {userRole === 'head' && (
-            <>
-              <Route path="letters" element={<HODLetters />} />
-              <Route path="upload-sign" element={<UploadSign />} />
-            </>
-          )}
-          
           {userRole === 'outside_police_station' && (
             <>
               <Route path="letters" element={<PoliceLetters />} />
@@ -281,6 +459,7 @@ const AppContent = () => {
           element={
             <Navigate to={isLoggedIn ? 
               (userRole === 'inward_user' ? '/inward-dashboard' : 
+               userRole === 'head' ? '/head-dashboard' :
                '/outward-dashboard') : 
               '/login'} 
             replace />
@@ -293,6 +472,7 @@ const AppContent = () => {
           element={<Navigate to="/" replace />} 
         />
       </Routes>
+      </RouteGuard>
     </div>
   );
 };

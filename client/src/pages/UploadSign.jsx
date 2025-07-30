@@ -45,18 +45,41 @@ const UploadSign = () => {
   const loadSignatures = async () => {
     try {
       setLoading(true);
-      // This would be replaced with actual API call to fetch user's signatures
-      // const response = await axios.get(`http://localhost:5000/api/signatures/${user?.userId}`);
-      // setUploadedSignatures(response.data);
       
-      // For now, using localStorage as mock data
-      const savedSignatures = localStorage.getItem(`signatures_${user?.userId}`);
-      if (savedSignatures) {
-        setUploadedSignatures(JSON.parse(savedSignatures));
+      if (!user?.userId) {
+        console.error('No user ID available');
+        return;
+      }
+
+      // Fetch signature from the database using the same API as HODLetters
+      const response = await axios.get(`http://localhost:5000/api/head/head-signature/${user.userId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (response.data.success && response.data.data.hasSignature) {
+        // Create signature object for display
+        const signature = {
+          id: Date.now(),
+          fileName: 'Head Signature',
+          fileSize: 0,
+          uploadDate: new Date().toISOString(),
+          previewUrl: response.data.data.sign,
+          signUrl: response.data.data.sign,
+          isActive: true
+        };
+        
+        setUploadedSignatures([signature]);
+        console.log('Loaded signature from API:', signature);
+      } else {
+        setUploadedSignatures([]);
+        console.log('No signature found for user');
       }
     } catch (err) {
       console.error('Error loading signatures:', err);
       setError(language === 'mr' ? 'स्वाक्षरी लोड करण्यात त्रुटी' : 'Error loading signatures');
+      setUploadedSignatures([]);
     } finally {
       setLoading(false);
     }
@@ -144,28 +167,12 @@ const UploadSign = () => {
       });
 
       if (response.data.success) {
-        // Create signature object for local display
-        const newSignature = {
-          id: Date.now(),
-          fileName: selectedFile.name,
-          fileSize: selectedFile.size,
-          uploadDate: new Date().toISOString(),
-          previewUrl: response.data.sign, // Use the S3 URL from backend
-          signUrl: response.data.sign,
-          isActive: true // New signature becomes active
-        };
-
-        // Update local state
-        const updatedSignatures = uploadedSignatures.map(sig => ({ ...sig, isActive: false }));
-        updatedSignatures.push(newSignature);
-        setUploadedSignatures(updatedSignatures);
-        
-        // Save to localStorage for persistence
-        localStorage.setItem(`signatures_${user?.userId || user?.id}`, JSON.stringify(updatedSignatures));
-
         setSuccess(language === 'mr' ? 'स्वाक्षरी यशस्वीरित्या अपलोड झाली!' : 'Signature uploaded successfully!');
         setSelectedFile(null);
         setPreviewUrl('');
+        
+        // Refresh signatures from database
+        await loadSignatures();
         
         // Clear success message after 3 seconds
         setTimeout(() => setSuccess(''), 3000);
@@ -200,14 +207,11 @@ const UploadSign = () => {
       });
 
       if (response.data.success || response.status === 200) {
-        // Update local state after successful API call
-        const updatedSignatures = uploadedSignatures.filter(sig => sig.id !== signatureId);
-        setUploadedSignatures(updatedSignatures);
-        
-        // Update localStorage for persistence
-        localStorage.setItem(`signatures_${user?.userId || user?.id}`, JSON.stringify(updatedSignatures));
-        
         setSuccess(language === 'mr' ? 'स्वाक्षरी हटवली गेली!' : 'Signature deleted successfully!');
+        
+        // Refresh signatures from database
+        await loadSignatures();
+        
         setTimeout(() => setSuccess(''), 3000);
       }
     } catch (err) {
@@ -236,23 +240,7 @@ const UploadSign = () => {
     }
   };
 
-  const handleSetActive = async (signatureId) => {
-    try {
-      const updatedSignatures = uploadedSignatures.map(sig => ({
-        ...sig,
-        isActive: sig.id === signatureId
-      }));
-      
-      setUploadedSignatures(updatedSignatures);
-      localStorage.setItem(`signatures_${user?.userId}`, JSON.stringify(updatedSignatures));
-      
-      setSuccess(language === 'mr' ? 'सक्रिय स्वाक्षरी अपडेट झाली!' : 'Active signature updated!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Error setting active signature:', err);
-      setError(language === 'mr' ? 'सक्रिय स्वाक्षरी सेट करण्यात त्रुटी' : 'Error setting active signature');
-    }
-  };
+  // Note: handleSetActive is no longer needed since there's only one signature per user in the database
 
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
@@ -273,7 +261,7 @@ const UploadSign = () => {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-full mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           {language === 'mr' ? 'स्वाक्षरी अपलोड करा' : 'Upload Signature'}
@@ -480,7 +468,7 @@ const UploadSign = () => {
                   <p>{formatDate(signature.uploadDate)}</p>
                 </div>
                 
-                <div className="flex justify-between items-center">
+                <div className="flex justify-center items-center">
                   <div className="flex space-x-2">
                     <button
                       onClick={() => window.open(signature.previewUrl, '_blank')}
@@ -497,15 +485,6 @@ const UploadSign = () => {
                       <FiTrash2 className="h-4 w-4" />
                     </button>
                   </div>
-                  
-                  {!signature.isActive && (
-                    <button
-                      onClick={() => handleSetActive(signature.id)}
-                      className="px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                    >
-                      {language === 'mr' ? 'सक्रिय करा' : 'Set Active'}
-                    </button>
-                  )}
                 </div>
               </div>
             ))}

@@ -3,6 +3,41 @@
 const { InwardPatra, CoveringLetter, User, Head } = require('../models/associations');
 const s3Service = require('../services/s3Service');
 const multer = require('multer');
+const { S3Client } = require('@aws-sdk/client-s3');
+const multerS3 = require('multer-s3');
+
+// AWS S3 Configuration for Head signature uploads
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY,
+    secretAccessKey: process.env.AWS_SECRET_KEY,
+  },
+});
+
+// Setup multer to upload the signature to S3 for Head users
+const uploadToS3 = multer({
+  storage: multerS3({
+    s3: s3Client,
+    bucket: process.env.AWS_BUCKET_NAME,
+    contentType: multerS3.AUTO_CONTENT_TYPE,
+    key: (req, file, cb) => {
+      const fileName = `head-signatures/${Date.now()}-${file.originalname}`;
+      cb(null, fileName);
+    },
+  }),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+    files: 1, // Only allow one file at a time
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || file.mimetype === 'image/png' || file.mimetype === 'image/jpeg') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF, PNG, or JPEG files are allowed'), false);
+    }
+  },
+});
 
 // Simple signature processing
 const processSignatureBuffer = (buffer) => {
@@ -417,44 +452,7 @@ const uploadSignatureAndSignLetter = async (req, res) => {
       });
     }
 
-    // Check file upload
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: 'No signature file uploaded. Please select an image file.'
-      });
-    }
-
-    console.log('📁 File received:', {
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size
-    });
-
-    // Validate file
-    if (!req.file.buffer || req.file.size === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Uploaded file is empty or corrupted'
-      });
-    }
-
-    // Process signature
-    console.log('🔄 Processing signature...');
-    let signatureData;
-    try {
-      signatureData = processSignatureBuffer(req.file.buffer);
-      console.log('✅ Signature processed successfully, size:', signatureData.size);
-    } catch (processingError) {
-      return res.status(400).json({
-        success: false,
-        error: 'Failed to process signature image',
-        details: processingError.message
-      });
-    }
-
-    // Fetch user
-    console.log('👤 Fetching user...');
+    // ✅ FIXED: Check if user has uploaded signature instead of requiring file upload
     const user = await User.findByPk(userId);
     if (!user) {
       return res.status(404).json({
@@ -462,6 +460,46 @@ const uploadSignatureAndSignLetter = async (req, res) => {
         error: 'User not found'
       });
     }
+
+    if (!user.sign) {
+      return res.status(400).json({
+        success: false,
+        error: 'No signature found for this user. Please upload a signature first.'
+      });
+    }
+
+    console.log('✅ Using uploaded signature for user:', {
+      userId: user.id,
+      signUrl: user.sign
+    });
+
+    // ✅ FIXED: Use uploaded signature URL instead of processing file buffer
+    console.log('🔄 Using uploaded signature URL...');
+    let signatureData;
+    try {
+      // Convert S3 URL to data URL for processing
+      const response = await fetch(user.sign);
+      const buffer = await response.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString('base64');
+      
+      signatureData = {
+        dataUrl: `data:image/png;base64,${base64}`,
+        size: buffer.byteLength,
+        success: true
+      };
+      
+      console.log('✅ Signature processed successfully, size:', signatureData.size);
+    } catch (processingError) {
+      console.error('❌ Failed to process signature from URL:', processingError);
+      return res.status(400).json({
+        success: false,
+        error: 'Failed to process signature from uploaded URL',
+        details: processingError.message
+      });
+    }
+
+    // ✅ FIXED: User already fetched above, no need to fetch again
+    console.log('👤 User already fetched:', user.id);
 
     // Fetch covering letter with minimal InwardPatra fields
     console.log('📄 Fetching covering letter...');
@@ -619,7 +657,8 @@ const uploadSignatureAndSignLetter = async (req, res) => {
     try {
       const updateData = {
         pdfUrl: signedDocumentsResult.pdfUrl,
-        wordUrl: signedDocumentsResult.wordUrl
+        wordUrl: signedDocumentsResult.wordUrl,
+        isSigned: true // Mark as signed
       };
 
       if (coveringLetter.status !== 'SENT') {
@@ -627,7 +666,7 @@ const uploadSignatureAndSignLetter = async (req, res) => {
       }
 
       await coveringLetter.update(updateData);
-      console.log('✅ Covering letter updated with signed documents');
+      console.log('✅ Covering letter updated with signed documents and marked as signed');
     } catch (updateError) {
       console.warn('⚠️ Could not update covering letter:', updateError.message);
     }
@@ -667,7 +706,7 @@ const uploadSignatureAndSignLetter = async (req, res) => {
           signedBy: finalSignerName,
           signedAt: currentTime,
           position: validSignaturePosition,
-          originalFileName: req.file.originalname,
+          originalFileName: user.sign ? user.sign.split('/').pop() : 'uploaded-signature',
           sequenceNumber: existingSignatures.length + 1
         },
         documents: {
@@ -917,9 +956,188 @@ const deleteHead = async (req, res) => {
   }
 };
 
+// ✅ NEW: Upload signature for Head users
+const uploadHeadSignature = async (req, res) => {
+  console.log('🖊️ === HEAD SIGNATURE UPLOAD START ===');
+  console.log('📥 Request body:', req.body);
+
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'User ID is required'
+      });
+    }
+
+    // Check file upload
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No signature file uploaded. Please select an image file.'
+      });
+    }
+
+    console.log('📁 File received:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      location: req.file.location
+    });
+
+    // Validate file
+    if (!req.file.location) {
+      return res.status(400).json({
+        success: false,
+        error: 'Uploaded file is empty or corrupted'
+      });
+    }
+
+    // Fetch user
+    console.log('👤 Fetching user...');
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Get the file URL from S3
+    const signUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${req.file.key}`;
+
+    // Update the user with the digital signature URL
+    user.sign = signUrl;
+    await user.save();
+
+    console.log('✅ Head signature uploaded successfully:', {
+      userId: user.id,
+      signUrl: signUrl
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Head signature uploaded successfully',
+      data: {
+        userId: user.id,
+        sign: signUrl,
+        fileName: req.file.originalname,
+        uploadedAt: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error('💥 === ERROR IN HEAD SIGNATURE UPLOAD ===');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    return res.status(500).json({
+      success: false,
+      error: 'Internal server error occurred during signature upload',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+};
+
+// ✅ NEW: Get user's uploaded signature
+const getHeadSignature = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'User ID is required'
+      });
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Head signature retrieved successfully',
+      data: {
+        userId: user.id,
+        sign: user.sign,
+        hasSignature: !!user.sign
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching head signature:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch head signature',
+      details: error.message
+    });
+  }
+};
+
+// ✅ NEW: Delete head signature
+const deleteHeadSignature = async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'User ID is required'
+      });
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    if (!user.sign) {
+      return res.status(400).json({
+        success: false,
+        error: 'No signature found to delete'
+      });
+    }
+
+    // Remove the signature URL from the user
+    user.sign = null;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Head signature deleted successfully',
+      data: {
+        userId: user.id,
+        deletedAt: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error('Error deleting head signature:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to delete head signature',
+      details: error.message
+    });
+  }
+};
+
 module.exports = {
   upload,
+  uploadToS3,
   uploadSignatureAndSignLetter,
+  uploadHeadSignature,
+  getHeadSignature,
+  deleteHeadSignature,
   getHeadsByCoveringLetter,
   getHeadsByUser,
   updateHeadStatus,

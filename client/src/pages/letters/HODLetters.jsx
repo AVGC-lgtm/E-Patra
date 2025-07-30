@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiEye, FiRefreshCw, FiSearch, FiFileText, FiEdit, FiMail, FiX, FiRotateCcw } from 'react-icons/fi';
+import { FiEye, FiRefreshCw, FiSearch, FiFileText, FiEdit, FiMail, FiX, FiRotateCcw, FiUpload, FiDownload, FiCheck } from 'react-icons/fi';
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
@@ -12,6 +12,7 @@ const HODLetters = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [signStatusFilter, setSignStatusFilter] = useState('All');
   const [letters, setLetters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -26,6 +27,8 @@ const HODLetters = () => {
   const [loadingSignatures, setLoadingSignatures] = useState(false);
 
   const [resendingLetters, setResendingLetters] = useState(new Set()); // Track which letters are being resent
+  const [signingLetters, setSigningLetters] = useState(new Set()); // Track which letters are being signed
+  const [signedLetters, setSignedLetters] = useState(new Set()); // Track which letters have been signed
 
   // Status filter options with translations - ADDED "sent to head"
   const statusOptions = [
@@ -33,7 +36,15 @@ const HODLetters = () => {
     { value: 'sent to head', label: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'Sent to Head' },
     { value: 'pending', label: language === 'mr' ? 'प्रलंबित' : 'Pending' },
     { value: 'approved', label: language === 'mr' ? 'मंजूर' : 'Approved' },
-    { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' }
+    { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' },
+    { value: 'case close', label: language === 'mr' ? 'केस बंद' : 'Case Closed' }
+  ];
+
+  // Sign Status filter options
+  const signStatusOptions = [
+    { value: 'All', label: language === 'mr' ? 'सर्व स्वाक्षरी स्थिती' : 'All Sign Status' },
+    { value: 'signed', label: language === 'mr' ? 'स्वाक्षरी पूर्ण' : 'Signed' },
+    { value: 'unsigned', label: language === 'mr' ? 'स्वाक्षरी प्रलंबित' : 'Unsigned' }
   ];
 
   // Field labels for the view modal
@@ -61,8 +72,41 @@ const HODLetters = () => {
   // Fields to exclude from the view modal
   const excludedFields = [
     '_id', '__v', 'id', 'createdAt', 'updatedAt', 
-    'fileId', 'userId', 'upload', 'extractedData', 'upload'
+    'fileId', 'userId', 'upload', 'extractedData', 'upload',
+    'forwardTo', 'sentTo', 'previousStatus', 'resendAt', 'resendByRole', 'User',
+    'reportFiles', 'inwardPatraClose', 'caseClosedAt', 'caseClosedBy', 
+    'reportUploadedAt', 'reportUploadedBy', 'reportUploadedByEmail', 'caseClosedByEmail'
   ];
+
+  // Helper function to determine sign status
+  const getSignStatus = (letter) => {
+    // Check if letter has been sent to head
+    if (letter.forwardTo === 'head' || letter.letterStatus === 'sent to head' || letter.letterStatus === 'प्रमुखांकडे पाठवले') {
+      // Check if covering letter has been signed
+      if (letter.coveringLetter && letter.coveringLetter.isSigned === true) {
+        return 'completed';
+      } else {
+        return 'pending';
+      }
+    }
+    return null; // Not sent to head
+  };
+
+  // Helper function to get sign status display text
+  const getSignStatusDisplay = (letter) => {
+    const status = getSignStatus(letter);
+    if (status === 'completed') {
+      return language === 'mr' ? 'स्वाक्षरी पूर्ण' : 'Sign Completed';
+    } else if (status === 'pending') {
+      return language === 'mr' ? 'स्वाक्षरी प्रलंबित' : 'Sign Pending';
+    }
+    return language === 'mr' ? 'स्वाक्षरी प्रलंबित' : 'Sign Pending';
+  };
+
+  // Helper function to check if a letter has been signed
+  const isLetterSigned = (letter) => {
+    return letter.coveringLetter && letter.coveringLetter.isSigned === true;
+  };
 
   // Helper function to get user data
   const getUserData = () => {
@@ -269,25 +313,32 @@ const HODLetters = () => {
         return;
       }
 
-      // Try to get signatures from localStorage first (like UploadSign component)
-      const savedSignatures = localStorage.getItem(`signatures_${user.id}`);
-      if (savedSignatures) {
-        const signatures = JSON.parse(savedSignatures);
-        setUserSignatures(signatures);
-        console.log('Loaded signatures from localStorage:', signatures);
-      } else {
-        // If no signatures in localStorage, try API call
-        const response = await axios.get(`http://localhost:5000/api/auth/signatures/${user.id}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        
-        if (response.data && response.data.signatures) {
-          setUserSignatures(response.data.signatures);
-        } else {
-          setUserSignatures([]);
+      console.log('Fetching signatures for user:', user.id);
+
+      // Call the new Head signature API
+      const response = await axios.get(`http://localhost:5000/api/head/head-signature/${user.id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
+      });
+      
+      if (response.data.success && response.data.data.hasSignature) {
+        // Create signature object for display
+        const signature = {
+          id: Date.now(),
+          fileName: 'Head Signature',
+          fileSize: 0,
+          uploadDate: new Date().toISOString(),
+          previewUrl: response.data.data.sign,
+          signUrl: response.data.data.sign,
+          isActive: true
+        };
+        
+        setUserSignatures([signature]);
+        console.log('Loaded signature from API:', signature);
+      } else {
+        setUserSignatures([]);
+        console.log('No signature found for user');
       }
     } catch (error) {
       console.error('Error fetching signatures:', error);
@@ -301,6 +352,9 @@ const HODLetters = () => {
   const handleAttachSignatureToCovering = (letterId) => {
     try {
       console.log('Attaching signature to covering letter for letter:', letterId);
+      // Set the selected letter for covering
+      const letter = letters.find(letter => (letter.id || letter._id) === letterId);
+      setSelectedLetterForCovering(letter);
       // Fetch signatures and show modal
       fetchUserSignatures();
       setSignaturesModalOpen(true);
@@ -310,7 +364,7 @@ const HODLetters = () => {
     }
   };
 
-  // Function to handle resend letter back to InwardPatras
+  // Function to handle resend letter back to original source table
   const handleResendLetter = async (letter) => {
     const letterId = letter.id || letter._id;
     
@@ -319,12 +373,16 @@ const HODLetters = () => {
       return;
     }
     
+    // Get the original source table
+    const sourceTable = getSourceTableForRevert(letter);
+    const sourceTableName = getSourceTableName(letter);
+    
     try {
-      // Show confirmation dialog
+      // Show confirmation dialog with source table info
       const confirmResend = window.confirm(
         language === 'mr' 
-          ? `तुम्हाला खरोखर हे पत्र परत इनवर्ड पत्रांमध्ये पाठवायचे आहे का?\n\nसंदर्भ क्रमांक: ${letter.referenceNumber}\nकार्यालय: ${letter.officeSendingLetter}`
-          : `Are you sure you want to resend this letter back to Inward Letters?\n\nReference No: ${letter.referenceNumber}\nOffice: ${letter.officeSendingLetter}`
+          ? `तुम्हाला खरोखर हे पत्र परत ${sourceTableName} मध्ये पाठवायचे आहे का?\n\nसंदर्भ क्रमांक: ${letter.referenceNumber}\nस्रोत टेबल: ${sourceTableName}`
+          : `Are you sure you want to resend this letter back to ${sourceTableName}?\n\nReference No: ${letter.referenceNumber}\nSource Table: ${sourceTableName}`
       );
       
       if (!confirmResend) {
@@ -346,15 +404,18 @@ const HODLetters = () => {
 
       console.log('Resending letter:', {
         letterId: letterId,
-        referenceNumber: letter.referenceNumber
+        referenceNumber: letter.referenceNumber,
+        sourceTable: sourceTable,
+        sourceTableName: sourceTableName
       });
 
-      // Update letter status back to "sending for head sign" to move it back to InwardPatras
+      // Update letter status and forwardTo to send it back to the original table
       const response = await axios.put(
         `http://localhost:5000/api/patras/${letterId}/resend`,
         {
-          newStatus: 'sending for head sign',
-          reason: 'Resent by HOD back to Inward Staff'
+          newStatus: 'pending', // Set to pending so it appears in the original table
+          forwardTo: sourceTable, // Set forwardTo to the original source table
+          reason: `Resent by HOD back to ${sourceTableName}`
         },
         {
           headers: {
@@ -366,8 +427,8 @@ const HODLetters = () => {
 
       if (response.status === 200) {
         const successMessage = language === 'mr' ? 
-          `पत्र यशस्वीरित्या इनवर्ड पत्रांमध्ये परत पाठवले गेले!\n\nसंदर्भ क्रमांक: ${letter.referenceNumber}` : 
-          `Letter successfully resent to Inward Letters!\n\nReference No: ${letter.referenceNumber}`;
+          `पत्र यशस्वीरित्या ${sourceTableName} मध्ये परत पाठवले गेले!\n\nसंदर्भ क्रमांक: ${letter.referenceNumber}` : 
+          `Letter successfully resent to ${sourceTableName}!\n\nReference No: ${letter.referenceNumber}`;
         
         alert(successMessage);
         
@@ -401,7 +462,8 @@ const HODLetters = () => {
     try {
       const token = localStorage.getItem('token');
       
-      const response = await axios.get('http://localhost:5000/api/patras', {
+      // Use the specific Head letters endpoint
+      const response = await axios.get('http://localhost:5000/api/patras/head', {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -530,10 +592,12 @@ const HODLetters = () => {
       'pending',             // ✅ When HOD needs to review
       'approved',            // ✅ When HOD approves
       'rejected',            // ✅ When HOD rejects
+      'case close',          // ✅ When case is closed after report upload
       'प्रमुखांकडे पाठवले',    // ✅ Marathi for "sent to head"
       'प्रलंबित',            // ✅ Marathi for "pending"
       'मंजूर',               // ✅ Marathi for "approved"
-      'नाकारले'              // ✅ Marathi for "rejected"
+      'नाकारले',             // ✅ Marathi for "rejected"
+      'केस बंद'              // ✅ Marathi for "case close"
     ];
     
     const hasAllowedStatus = allowedStatuses.some(s => 
@@ -560,9 +624,16 @@ const HODLetters = () => {
       (statusFilter === 'sent to head' && (statusLower === 'sent to head' || letterStatus === 'प्रमुखांकडे पाठवले')) ||
       (statusFilter === 'pending' && (statusLower === 'pending' || letterStatus === 'प्रलंबित')) ||
       (statusFilter === 'approved' && (statusLower === 'approved' || letterStatus === 'मंजूर')) ||
-      (statusFilter === 'rejected' && (statusLower === 'rejected' || letterStatus === 'नाकारले'));
+      (statusFilter === 'rejected' && (statusLower === 'rejected' || letterStatus === 'नाकारले')) ||
+      (statusFilter === 'case close' && (statusLower === 'case close' || letterStatus === 'केस बंद'));
 
-    const shouldInclude = matchesSearch && matchesStatus && hasAllowedStatus;
+    // Sign status filtering
+    const signStatus = getSignStatus(letter);
+    const matchesSignStatus = signStatusFilter === 'All' || 
+      (signStatusFilter === 'signed' && signStatus === 'completed') ||
+      (signStatusFilter === 'unsigned' && (signStatus === 'pending' || signStatus === null));
+
+    const shouldInclude = matchesSearch && matchesStatus && matchesSignStatus && hasAllowedStatus;
     if (shouldInclude) {
       console.log('HOD Filter - Including letter:', letter.referenceNumber, 'Status:', letterStatus);
     }
@@ -572,6 +643,159 @@ const HODLetters = () => {
 
   const totalPages = Math.ceil(filteredLetters.length / recordsPerPage);
   const paginatedLetters = filteredLetters.slice((currentPage - 1) * recordsPerPage, currentPage * recordsPerPage);
+
+  // Helper function to get source table name
+  const getSourceTableName = (letter) => {
+    console.log('Getting source table for letter:', letter.referenceNumber);
+    console.log('Letter sentTo:', letter.sentTo);
+    console.log('Letter forwardTo:', letter.forwardTo);
+    
+    // Determine source table based on letter data
+    // This can be determined from various fields like forwardTo, sentTo, or other metadata
+    
+    // Check if there's a sentTo field with recipient information
+    if (letter.sentTo) {
+      try {
+        const sentToData = JSON.parse(letter.sentTo);
+        console.log('Parsed sentToData:', sentToData);
+        
+        // First check if sourceTable is directly stored
+        if (sentToData.sourceTable) {
+          console.log('Found sourceTable in sentToData:', sentToData.sourceTable);
+          return sentToData.sourceTable;
+        }
+        
+        if (sentToData.sendToData) {
+          // Check which table was selected in sendToData
+          const sendToDataObj = sentToData.sendToData;
+          console.log('sendToData object:', sendToDataObj);
+          if (sendToDataObj.sp) return language === 'mr' ? 'एसपी टेबल' : 'SP Table';
+          if (sendToDataObj.collector) return language === 'mr' ? 'कलेक्टर टेबल' : 'Collector Table';
+          if (sendToDataObj.home) return language === 'mr' ? 'होम टेबल' : 'Home Table';
+          if (sendToDataObj.ig) return language === 'mr' ? 'आयजी टेबल' : 'IG Table';
+          if (sendToDataObj.shanik) return language === 'mr' ? 'शाणिक टेबल' : 'Shanik Table';
+          if (sendToDataObj.dg) return language === 'mr' ? 'डीजी टेबल' : 'DG Table';
+        }
+      } catch (e) {
+        console.log('Error parsing sentTo data:', e);
+      }
+    }
+    
+    // Check forwardTo field
+    if (letter.forwardTo) {
+      const forwardTo = letter.forwardTo.toLowerCase();
+      switch (forwardTo) {
+        case 'sp':
+          return language === 'mr' ? 'एसपी टेबल' : 'SP Table';
+        case 'collector':
+          return language === 'mr' ? 'कलेक्टर टेबल' : 'Collector Table';
+        case 'home':
+          return language === 'mr' ? 'होम टेबल' : 'Home Table';
+        case 'ig':
+        case 'ig_nashik':
+          return language === 'mr' ? 'आयजी टेबल' : 'IG Table';
+        case 'shanik':
+        case 'shanik_local':
+          return language === 'mr' ? 'शाणिक टेबल' : 'Shanik Table';
+        case 'dg':
+        case 'dg_other':
+          return language === 'mr' ? 'डीजी टेबल' : 'DG Table';
+        case 'inward':
+        case 'inward_user':
+          return language === 'mr' ? 'इनवर्ड टेबल' : 'Inward Table';
+        default:
+          return language === 'mr' ? 'अज्ञात टेबल' : 'Unknown Table';
+      }
+    }
+    
+    // If no specific source found, try to determine from other fields
+    if (letter.officeSendingLetter) {
+      const office = letter.officeSendingLetter.toLowerCase();
+      if (office.includes('police') || office.includes('पोलीस')) {
+        return language === 'mr' ? 'पोलीस टेबल' : 'Police Table';
+      }
+      if (office.includes('collector') || office.includes('कलेक्टर')) {
+        return language === 'mr' ? 'कलेक्टर टेबल' : 'Collector Table';
+      }
+      if (office.includes('home') || office.includes('गृह')) {
+        return language === 'mr' ? 'होम टेबल' : 'Home Table';
+      }
+    }
+    
+    // Default fallback
+    return language === 'mr' ? 'इनवर्ड टेबल' : 'Inward Table';
+  };
+
+  // Helper function to get source table for revert (returns table identifier)
+  const getSourceTableForRevert = (letter) => {
+    console.log('Getting source table for revert for letter:', letter.referenceNumber);
+    console.log('Letter sentTo:', letter.sentTo);
+    console.log('Letter forwardTo:', letter.forwardTo);
+    
+    // Check if there's a sentTo field with recipient information
+    if (letter.sentTo) {
+      try {
+        const sentToData = JSON.parse(letter.sentTo);
+        console.log('Parsed sentToData for revert:', sentToData);
+        
+        // First check if sourceTable is directly stored
+        if (sentToData.sourceTable) {
+          const sourceTable = sentToData.sourceTable;
+          console.log('Found sourceTable in sentToData for revert:', sourceTable);
+          // Map table names back to identifiers
+          if (sourceTable.includes('SP')) return 'sp';
+          if (sourceTable.includes('Collector')) return 'collector';
+          if (sourceTable.includes('Home')) return 'home';
+          if (sourceTable.includes('IG')) return 'ig_nashik_other';
+          if (sourceTable.includes('Shanik')) return 'shanik_local';
+          if (sourceTable.includes('DG')) return 'dg_other';
+          if (sourceTable.includes('Inward')) return 'inward_user';
+          if (sourceTable.includes('Outward')) return 'outward_user';
+        }
+        
+        if (sentToData.sendToData) {
+          // Check which table was selected in sendToData
+          const sendToDataObj = sentToData.sendToData;
+          console.log('sendToData object for revert:', sendToDataObj);
+          if (sendToDataObj.sp) return 'sp';
+          if (sendToDataObj.collector) return 'collector';
+          if (sendToDataObj.home) return 'home';
+          if (sendToDataObj.ig) return 'ig_nashik_other';
+          if (sendToDataObj.shanik) return 'shanik_local';
+          if (sendToDataObj.dg) return 'dg_other';
+        }
+      } catch (e) {
+        console.log('Error parsing sentTo data for revert:', e);
+      }
+    }
+    
+    // Check forwardTo field
+    if (letter.forwardTo) {
+      const forwardTo = letter.forwardTo.toLowerCase();
+      console.log('Using forwardTo for revert:', forwardTo);
+      switch (forwardTo) {
+        case 'sp': return 'sp';
+        case 'collector': return 'collector';
+        case 'home': return 'home';
+        case 'ig':
+        case 'ig_nashik':
+        case 'ig_nashik_other': return 'ig_nashik_other';
+        case 'shanik':
+        case 'shanik_local': return 'shanik_local';
+        case 'dg':
+        case 'dg_other': return 'dg_other';
+        case 'inward':
+        case 'inward_user': return 'inward_user';
+        case 'outward':
+        case 'outward_user': return 'outward_user';
+        default: return 'inward_user';
+      }
+    }
+    
+    // Default fallback
+    console.log('Using default fallback for revert: inward_user');
+    return 'inward_user';
+  };
 
   // Helper function to get status badge styling
   const getStatusBadge = (status) => {
@@ -616,7 +840,7 @@ const HODLetters = () => {
       'नाकारले': {
         bg: 'bg-red-100',
         text: 'text-red-800',
-        label: language === 'mr' ? 'नाकारले' : 'Rejected'
+        label: language === 'mr' ? 'नाकारले' : 'Rejected' 
       },
       'sending for head sign': {
         bg: 'bg-orange-100',
@@ -627,6 +851,16 @@ const HODLetters = () => {
         bg: 'bg-orange-100',
         text: 'text-orange-800',
         label: language === 'mr' ? 'प्रमुख स्वाक्षरीसाठी' : 'For Head Sign'
+      },
+      'case close': {
+        bg: 'bg-gray-100',
+        text: 'text-gray-800',
+        label: language === 'mr' ? 'केस बंद' : 'Case Closed'
+      },
+      'केस बंद': {
+        bg: 'bg-gray-100',
+        text: 'text-gray-800',
+        label: language === 'mr' ? 'केस बंद' : 'Case Closed'
       }
     };
 
@@ -663,27 +897,66 @@ const HODLetters = () => {
 
   // Function to handle signature selection and attachment
   const handleSignatureSelection = async (signature) => {
+    const letterId = selectedLetterForCovering.id || selectedLetterForCovering._id;
+    
+    // Check if already signing
+    if (signingLetters.has(letterId)) {
+      return;
+    }
+
     try {
       if (!selectedLetterForCovering) {
         alert(language === 'mr' ? 'पत्र निवडले नाही' : 'No letter selected');
         return;
       }
 
-      // Here you would call the API to attach the signature to the covering letter
-      const response = await axios.put(`http://localhost:5000/api/letters/${selectedLetterForCovering.id}/attach-signature`, {
-        signatureId: signature.id,
-        signatureUrl: signature.signUrl || signature.previewUrl,
-        letterId: selectedLetterForCovering.id
-      }, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+      // Get user data from token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert(language === 'mr' ? 'कृपया पुन्हा लॉगिन करा!' : 'Please login again!');
+        return;
+      }
+
+      const tokenData = JSON.parse(atob(token.split('.')[1]));
+      const userId = tokenData.id || tokenData.userId;
+
+      console.log('Attaching signature to covering letter:', {
+        coveringLetterId: selectedLetterForCovering.id,
+        userId: userId,
+        signature: signature
       });
 
+      // Set loading state for this specific letter
+      setSigningLetters(prev => new Set(prev).add(letterId));
+
+      // Call the new Head signature API
+      const response = await axios.post(
+        `http://localhost:5000/api/head/upload-signature/${selectedLetterForCovering.id}`,
+        {
+          userId: userId,
+          signaturePosition: 'top-right', // Default position
+          remarks: 'Signed by HOD',
+          signerName: 'अर्ज शाखा प्रभारी अधिकारी' // Default Marathi name
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
       if (response.data.success) {
+        // Mark letter as signed
+        setSignedLetters(prev => new Set(prev).add(letterId));
+        
         alert(language === 'mr' ? 'स्वाक्षरी यशस्वीरित्या जोडली गेली!' : 'Signature attached successfully!');
         setSignaturesModalOpen(false);
         setCoveringLetterModalOpen(false);
+        
+        // Trigger event to update all letter tables
+        window.dispatchEvent(new CustomEvent('signature-completed'));
+        
         // Refresh the letters list
         handleRefresh();
       } else {
@@ -691,7 +964,28 @@ const HODLetters = () => {
       }
     } catch (error) {
       console.error('Error attaching signature to letter:', error);
-      alert(language === 'mr' ? 'स्वाक्षरी जोडण्यात त्रुटी!' : 'Error attaching signature!');
+      
+      // Handle specific error cases
+      if (error.response?.data?.error) {
+        if (error.response.data.error.includes('No signature found')) {
+          alert(language === 'mr' ? 
+            'तुमच्याकडे कोणतीही स्वाक्षरी अपलोड केलेली नाही. कृपया प्रथम स्वाक्षरी अपलोड करा.' : 
+            'You have no signature uploaded. Please upload a signature first.');
+        } else {
+          alert(language === 'mr' ? 
+            `स्वाक्षरी जोडण्यात त्रुटी: ${error.response.data.error}` : 
+            `Error attaching signature: ${error.response.data.error}`);
+        }
+      } else {
+        alert(language === 'mr' ? 'स्वाक्षरी जोडण्यात त्रुटी!' : 'Error attaching signature!');
+      }
+    } finally {
+      // Clear loading state for this letter
+      setSigningLetters(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(letterId);
+        return newSet;
+      });
     }
   };
 
@@ -728,6 +1022,19 @@ const HODLetters = () => {
               className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
             >
               {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="relative">
+            <select
+              value={signStatusFilter}
+              onChange={(e) => setSignStatusFilter(e.target.value)}
+              className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+            >
+              {signStatusOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -786,13 +1093,15 @@ const HODLetters = () => {
                     <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                       {language === 'mr' ? 'संदर्भ क्रमांक' : 'Reference No'}
                     </th>
-                    <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap min-w-[220px]">
-                      {language === 'mr' ? 'अर्जदाराचे नाव' : 'Applicant Name'}
-                    </th>
                     <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                       {language === 'mr' ? 'स्थिती' : 'Status'}
                     </th>
-
+                    <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
+                      {language === 'mr' ? 'बाह्य संदर्भ क्रमांक' : 'Outward Reference No'}
+                    </th>
+                    <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
+                      {language === 'mr' ? 'मूळ टेबल' : 'From Table'}
+                    </th>
                     <th scope="col" className="px-8 py-4 text-center text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                       {language === 'mr' ? 'परत पाठवा' : 'Resend'}
                     </th>
@@ -812,25 +1121,27 @@ const HODLetters = () => {
                       </td>
                       <td className="px-8 py-4 whitespace-nowrap text-sm font-medium text-blue-600 max-w-[200px] truncate">
                         <button 
-                          onClick={() => navigate(`/dashboard/track-application/${letter.referenceNumber}`)}
+                          onClick={() => navigate(`/head-dashboard/track-application/${letter.referenceNumber}`)}
                           className="hover:text-blue-800 hover:underline focus:outline-none"
                           title={language === 'mr' ? 'अर्जाचा मागोवा पहा' : 'Track application'}
                         >
                           {letter.referenceNumber || 'N/A'}
                         </button>
                       </td>
-                      <td className="px-8 py-4 text-sm text-gray-900 max-w-[220px]">
-                        <div className="line-clamp-2">
-                          {letter.senderNameAndDesignation || 'N/A'}
-                        </div>
-                      </td>
                       <td className="px-8 py-4 whitespace-nowrap text-sm">
                         {getStatusBadge(letter.letterStatus)}
                       </td>
+                      <td className="px-8 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {letter.owReferenceNumber || 'N/A'}
+                      </td>
+
+                      <td className="px-8 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {getSourceTableName(letter)}
+                      </td>
 
                       <td className="px-8 py-4 whitespace-nowrap text-center text-sm font-medium">
-                        {/* Resend Button - Show for all letters except approved ones */}
-                        {letter.letterStatus !== 'approved' && letter.letterStatus !== 'मंजूर' ? (
+                        {/* Resend Button - Show for letters that are not approved and not signed */}
+                        {letter.letterStatus !== 'approved' && letter.letterStatus !== 'मंजूर' && !isLetterSigned(letter) ? (
                           <button
                             onClick={() => handleResendLetter(letter)}
                             disabled={resendingLetters.has(letter.id || letter._id)}
@@ -839,7 +1150,7 @@ const HODLetters = () => {
                                 ? 'bg-gray-400 text-white cursor-not-allowed'
                                 : 'bg-orange-600 text-white hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500'
                             }`}
-                            title={language === 'mr' ? 'पत्र परत इनवर्ड पत्रांमध्ये पाठवा' : 'Resend letter back to Inward Letters'}
+                            title={language === 'mr' ? 'पत्र परत मूळ टेबलमध्ये पाठवा' : 'Resend letter back to original table'}
                           >
                             {resendingLetters.has(letter.id || letter._id) ? (
                               <>
@@ -853,6 +1164,10 @@ const HODLetters = () => {
                               </>
                             )}
                           </button>
+                        ) : isLetterSigned(letter) ? (
+                          <span className="text-green-600 text-xs font-medium">
+                            {language === 'mr' ? 'स्वाक्षरी पूर्ण' : 'Signed'}
+                          </span>
                         ) : (
                           <span className="text-gray-400 text-xs">
                             {language === 'mr' ? 'मंजूर' : 'Approved'}
@@ -887,14 +1202,7 @@ const HODLetters = () => {
                           >
                             <FiMail className="h-5 w-5" />
                           </button>
-                          
-                          <button
-                            onClick={() => handleAttachSign(letter.id || letter._id)}
-                            className="text-purple-600 hover:text-purple-900 p-1 rounded-md hover:bg-purple-100 transition-colors"
-                            title={language === 'mr' ? 'स्वाक्षरी जोडा' : 'Attach Sign'}
-                          >
-                            <FiEdit className="h-5 w-5" />
-                          </button>
+
                         </div>
                       </td>
                     </tr>
@@ -1033,6 +1341,72 @@ const HODLetters = () => {
                 </div>
               </div>
             ) : null}
+
+            {/* Download Report Section */}
+            {selectedLetter.reportFiles && selectedLetter.reportFiles !== '[]' && selectedLetter.reportFiles !== 'null' ? (
+              <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded-xl">
+                <h3 className="text-lg font-bold text-green-800 mb-4 flex items-center gap-2">
+                  <FiFileText className="h-5 w-5" />
+                  {language === 'mr' ? 'अपलोड केलेले रिपोर्ट' : 'Uploaded Reports'}
+                </h3>
+                <div className="space-y-3">
+                  {(() => {
+                    try {
+                      const reportFiles = JSON.parse(selectedLetter.reportFiles);
+                      return reportFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 bg-white border border-green-200 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                              <FiFileText className="h-5 w-5 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900 text-sm">
+                                {file.originalName || `Report_${index + 1}.pdf`}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {file.size ? `${Math.round(file.size / 1024)} KB` : 'N/A'} • 
+                                {file.mimetype || 'PDF'}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => window.open(file.s3Url, '_blank')}
+                            className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1.5"
+                          >
+                            <FiDownload className="h-4 w-4" />
+                            {language === 'mr' ? 'डाउनलोड' : 'Download'}
+                          </button>
+                        </div>
+                      ));
+                    } catch (error) {
+                      console.error('Error parsing report files:', error);
+                      return (
+                        <div className="text-center py-4 text-gray-500">
+                          <p>{language === 'mr' ? 'रिपोर्ट फाइल्स लोड करण्यात त्रुटी' : 'Error loading report files'}</p>
+                        </div>
+                      );
+                    }
+                  })()}
+                </div>
+                <div className="mt-4 pt-3 border-t border-green-200">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-1 text-green-700">
+                      <FiCheck className="h-4 w-4" />
+                      {language === 'mr' ? 'रिपोर्ट अपलोड पूर्ण' : 'Report Upload Complete'}
+                    </span>
+                    {selectedLetter.letterStatus === 'case close' && (
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-800 text-sm font-semibold rounded-full border border-red-200 shadow-sm">
+                          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                          {language === 'mr' ? 'केस बंद' : 'CASE CLOSED'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <div className="flex justify-center mt-8">
               <button
                 className="px-8 py-2 bg-blue-600 text-white rounded-lg font-semibold shadow hover:bg-blue-700 transition-colors text-lg"
@@ -1080,16 +1454,46 @@ const HODLetters = () => {
                   {language === 'mr' ? 'कव्हरिंग लेटर पहा' : 'View Covering Letter'}
                 </button>
                 
-                <button
-                  onClick={() => {
-                    handleAttachSignatureToCovering(selectedLetterForCovering.id || selectedLetterForCovering._id);
-                    setCoveringLetterModalOpen(false);
-                  }}
-                  className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors"
-                >
-                  <FiEdit className="mr-2 h-4 w-4" />
-                  {language === 'mr' ? 'स्वाक्षरी जोडा' : 'Attach Signature'}
-                </button>
+                {(() => {
+                  const letterId = selectedLetterForCovering?.id || selectedLetterForCovering?._id;
+                  const isSigning = signingLetters.has(letterId);
+                  const isSigned = isLetterSigned(selectedLetterForCovering) || signedLetters.has(letterId);
+                  
+                  if (isSigning) {
+                    return (
+                      <button
+                        disabled
+                        className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-md text-white bg-purple-400 cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors"
+                      >
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                        {language === 'mr' ? 'स्वाक्षरी जोडत आहे...' : 'Attaching Signature...'}
+                      </button>
+                    );
+                  } else if (isSigned) {
+                    return (
+                      <button
+                        disabled
+                        className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+                      >
+                        <FiEdit className="mr-2 h-4 w-4" />
+                        {language === 'mr' ? 'स्वाक्षरी जोडली गेली' : 'Signature Attached'}
+                      </button>
+                    );
+                  } else {
+                    return (
+                      <button
+                        onClick={() => {
+                          handleAttachSignatureToCovering(selectedLetterForCovering.id || selectedLetterForCovering._id);
+                          setCoveringLetterModalOpen(false);
+                        }}
+                        className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors"
+                      >
+                        <FiEdit className="mr-2 h-4 w-4" />
+                        {language === 'mr' ? 'स्वाक्षरी जोडा' : 'Attach Signature'}
+                      </button>
+                    );
+                  }
+                })()}
               </div>
             </div>
           </div>
@@ -1170,11 +1574,42 @@ const HODLetters = () => {
                     </div>
                     
                     <div className="flex justify-center">
-                      <button
-                        className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
-                      >
-                        {language === 'mr' ? 'निवडा' : 'Select'}
-                      </button>
+                      {(() => {
+                        const letterId = selectedLetterForCovering?.id || selectedLetterForCovering?._id;
+                        const isSigning = signingLetters.has(letterId);
+                        const isSigned = signedLetters.has(letterId);
+                        
+                        if (isSigning) {
+                          return (
+                            <button
+                              disabled
+                              className="px-4 py-2 bg-purple-400 text-white rounded-md cursor-not-allowed transition-colors text-sm flex items-center"
+                            >
+                              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                              {language === 'mr' ? 'स्वाक्षरी जोडत आहे...' : 'Attaching...'}
+                            </button>
+                          );
+                        } else if (isSigned) {
+                          return (
+                            <button
+                              disabled
+                              className="px-4 py-2 bg-green-600 text-white rounded-md cursor-not-allowed transition-colors text-sm flex items-center"
+                            >
+                              <FiEdit className="mr-2 h-4 w-4" />
+                              {language === 'mr' ? 'स्वाक्षरी जोडली गेली' : 'Signed'}
+                            </button>
+                          );
+                        } else {
+                          return (
+                            <button
+                              onClick={() => handleSignatureSelection(signature)}
+                              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
+                            >
+                              {language === 'mr' ? 'निवडा' : 'Select'}
+                            </button>
+                          );
+                        }
+                      })()}
                     </div>
                   </div>
                 ))}
@@ -1193,10 +1628,11 @@ const HODLetters = () => {
                 <button
                   onClick={() => {
                     setSignaturesModalOpen(false);
-                    navigate('/dashboard/upload-sign');
+                    navigate('/head-dashboard/upload-sign');
                   }}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+                  className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
                 >
+                  <FiUpload className="mr-2 h-4 w-4" />
                   {language === 'mr' ? 'स्वाक्षरी अपलोड करा' : 'Upload Signature'}
                 </button>
               </div>

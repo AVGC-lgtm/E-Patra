@@ -3,10 +3,11 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
 import LanguageSelector from '../LanguageSelector';
+import { getAuthToken, getUserRole, updateLastActivity } from '../../utils/auth';
 
-// Helper function to get user data from token
+// Helper function to get user data from token using auth utility
 const getUserFromToken = () => {
-  const token = localStorage.getItem('token');
+  const token = getAuthToken();
   if (!token) return null;
   
   try {
@@ -22,25 +23,52 @@ const getUserFromToken = () => {
   }
 };
 
-const SimpleDashboardLayout = ({ children, onLogout }) => {
+const SimpleDashboardLayout = ({ children, onLogout, userRole: propUserRole }) => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileView, setIsMobileView] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(propUserRole || 'user');
   const location = useLocation();
 
   useEffect(() => {
-    // Get user data when component mounts
+    // Get user data when component mounts or route changes
     const userData = getUserFromToken();
+    const currentRole = getUserRole() || propUserRole || 'user';
+    
     setUser(userData);
-  }, []);
+    setUserRole(currentRole);
+    
+    // Update activity tracking
+    updateLastActivity();
+  }, [location.pathname, propUserRole]);
+
+  // Update user info when token changes (for security)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const userData = getUserFromToken();
+      const currentRole = getUserRole();
+      
+      if (userData && currentRole && (userData.role !== user?.role || currentRole !== userRole)) {
+        setUser(userData);
+        setUserRole(currentRole);
+      }
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [user?.role, userRole]);
 
   // Determine active tab based on current route
   const getActiveTab = () => {
     const path = location.pathname;
     if (path.includes('inward-letter')) return 'inward-letter';
     if (path.includes('my-letters')) return 'my-letters';
+    if (path.includes('/head-dashboard/letters')) return 'letters';
+    if (path.includes('/head-dashboard/upload-sign')) return 'upload-sign';
+    if (path.includes('/head-dashboard')) return 'dashboard';
+    if (path.includes('outward-letters')) return 'outward-letters';
+    if (path.includes('track-application')) return 'track-application';
     return 'dashboard';
   };
 
@@ -76,7 +104,7 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
   const { language } = useLanguage();
   const t = translations[language] || translations.en;
   
-  const userRole = user?.role || 'user';
+  // const userRole = user?.role || 'user'; // This line is now redundant as userRole is state
 
   // Dynamic navigation items based on user role
   const getNavItems = () => {
@@ -85,6 +113,13 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
         { path: '/inward-dashboard', icon: '📊', label: language === 'mr' ? 'डॅशबोर्ड' : 'Dashboard', key: 'dashboard' },
         { path: '/inward-dashboard/inward-letter', icon: '✉️', label: language === 'mr' ? 'आवक पत्र' : 'Inward Letter', key: 'inward-letter' },
         { path: '/inward-dashboard/my-letters', icon: '📋', label: language === 'mr' ? 'माझी पत्रे' : 'My Letters', key: 'my-letters' }
+      ];
+    } else if (userRole === 'head') {
+      // Head users get their own navigation without Track Application
+      return [
+        { path: '/head-dashboard', icon: '📊', label: language === 'mr' ? 'डॅशबोर्ड' : 'Dashboard', key: 'dashboard' },
+        { path: '/head-dashboard/letters', icon: '📤', label: language === 'mr' ? 'पत्रे' : 'Letters', key: 'letters' },
+        { path: '/head-dashboard/upload-sign', icon: '✍️', label: language === 'mr' ? 'स्वाक्षरी अपलोड' : 'Upload Signature', key: 'upload-sign' }
       ];
     } else {
       // All other roles use outward-style navigation
@@ -394,7 +429,7 @@ const SimpleDashboardLayout = ({ children, onLogout }) => {
 
         {/* Page Content */}
         <main className="flex-1 p-6 overflow-y-auto bg-gradient-to-br from-gray-50 to-gray-100">
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-full mx-auto">
             <div className="bg-white rounded-xl shadow-sm p-6">
               {children || <Outlet />}
             </div>

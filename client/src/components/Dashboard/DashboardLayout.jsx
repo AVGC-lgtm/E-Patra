@@ -3,10 +3,11 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
 import LanguageSelector from '../LanguageSelector';
+import { getAuthToken, getUserRole, updateLastActivity } from '../../utils/auth';
 
-// Helper function to get user data from token
+// Helper function to get user data from token using auth utility
 const getUserFromToken = () => {
-  const token = localStorage.getItem('token');
+  const token = getAuthToken();
   if (!token) return null;
   
   try {
@@ -15,7 +16,6 @@ const getUserFromToken = () => {
       name: tokenData.name || 'User',
       email: tokenData.email || '',
       role: tokenData.roleName || 'user',
-      // Add any other user properties you need
     };
   } catch (error) {
     console.error('Error parsing token:', error);
@@ -23,19 +23,41 @@ const getUserFromToken = () => {
   }
 };
 
-const DashboardLayout = ({ children, onLogout }) => {
+const DashboardLayout = ({ children, onLogout, userRole: propUserRole }) => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileView, setIsMobileView] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(propUserRole || 'user');
   const location = useLocation();
 
   useEffect(() => {
-    // Get user data when component mounts
+    // Get user data when component mounts or route changes
     const userData = getUserFromToken();
+    const currentRole = getUserRole() || propUserRole || 'user';
+    
     setUser(userData);
-  }, []);
+    setUserRole(currentRole);
+    
+    // Update activity tracking
+    updateLastActivity();
+  }, [location.pathname, propUserRole]);
+
+  // Update user info when token changes (for security)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const userData = getUserFromToken();
+      const currentRole = getUserRole();
+      
+      if (userData && currentRole && (userData.role !== user?.role || currentRole !== userRole)) {
+        setUser(userData);
+        setUserRole(currentRole);
+      }
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [user?.role, userRole]);
 
   // Determine active tab based on current route
   const getActiveTab = () => {
@@ -344,7 +366,7 @@ const DashboardLayout = ({ children, onLogout }) => {
 
         {/* Page Content */}
         <main className="flex-1 p-6 overflow-y-auto bg-gradient-to-br from-gray-50 to-gray-100">
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-full mx-auto">
             <div className="bg-white rounded-xl shadow-sm p-6">
               {children || <Outlet />}
             </div>

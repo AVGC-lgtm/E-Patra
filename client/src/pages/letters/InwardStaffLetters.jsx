@@ -1548,6 +1548,77 @@ const organizeEmailsInThreadImproved = (emails) => {
                               </span>
                             )}
                           </button>
+
+                          {/* Send to Head button */}
+                          <button
+                            onClick={async () => {
+                              try {
+                                const confirmSend = window.confirm(
+                                  language === 'mr' 
+                                    ? `तुम्हाला खरोखर हे पत्र प्रमुख ला पाठवायचे आहे का?\n\nसंदर्भ क्रमांक: ${letter.referenceNumber}` 
+                                    : `Are you sure you want to send this letter to Head?\n\nReference No: ${letter.referenceNumber}`
+                                );
+                                
+                                if (!confirmSend) return;
+                                
+                                const token = localStorage.getItem('token');
+                                
+                                const response = await axios.put(
+                                  `http://localhost:5000/api/patras/${letter._id || letter.id}/send-to-hod`,
+                                  {
+                                    letterStatus: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'sent to head',
+                                    forwardTo: 'head',
+                                    sendToData: {
+                                      head: true,
+                                      sp: false,
+                                      igp: false,
+                                      sdpo: false,
+                                      policeStation: false
+                                    },
+                                    sourceTable: 'Inward Table' // Add source table information
+                                  },
+                                  {
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${token}`
+                                    }
+                                  }
+                                );
+                                
+                                if (response.status === 200) {
+                                  alert(language === 'mr' 
+                                    ? 'पत्र यशस्वीरित्या प्रमुख ला पाठवले गेले! हे पत्र आता या टेबलमधून काढून टाकले गेले आहे आणि HOD मंजुरी टेबलमध्ये दिसेल.' 
+                                    : 'Letter sent to Head successfully! This letter has been removed from this table and will now appear in the HOD approval table.');
+                                  
+                                  // Remove the letter from the current table immediately
+                                  setLetters(prevLetters => 
+                                    prevLetters.filter(l => (l._id || l.id) !== (letter._id || letter.id))
+                                  );
+                                  
+                                  // Trigger event to update Head Dashboard in real-time
+                                  window.dispatchEvent(new CustomEvent('letter-sent-to-head'));
+                                }
+                              } catch (error) {
+                                console.error('Error sending to Head:', error);
+                                
+                                if (error.response) {
+                                  const errorMessage = error.response.data?.error || error.response.data?.message || 'Server error';
+                                  alert(language === 'mr' 
+                                    ? `प्रमुख ला पाठवण्यात त्रुटी: ${errorMessage}` 
+                                    : `Error sending to Head: ${errorMessage}`);
+                                } else {
+                                  alert(language === 'mr' 
+                                    ? 'नेटवर्क त्रुटी! कृपया पुन्हा प्रयत्न करा.' 
+                                    : 'Network error! Please try again.');
+                                }
+                              }
+                            }}
+                            className="inline-flex items-center px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 transition-colors shadow-sm"
+                            title={language === 'mr' ? 'प्रमुख ला पाठवा' : 'Send to Head'}
+                          >
+                            <FiSend className="h-4 w-4" />
+                            <span className="ml-1">{language === 'mr' ? 'प्रमुख ला पाठवा' : 'Send to Head'}</span>
+                          </button>
                         
                         {/* Reply button */}
                         <button

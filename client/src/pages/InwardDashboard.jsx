@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
-import { FiMail, FiFileText, FiClock, FiChevronUp, FiChevronDown, FiRefreshCw } from 'react-icons/fi';
+import { FiMail, FiFileText, FiClock, FiChevronUp, FiChevronDown, FiRefreshCw, FiTrendingUp } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import { useLanguage } from '../context/LanguageContext';
+import { getAuthToken } from '../utils/auth';
 
 const StatCard = ({ title, value, change, icon, color }) => {
   const colorVariants = {
@@ -46,17 +47,20 @@ const InwardDashboard = () => {
   const [myLetters, setMyLetters] = useState([]);
   const [stats, setStats] = useState([]);
   const [pieData, setPieData] = useState([]);
+  const [monthlyData, setMonthlyData] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
   const [error, setError] = useState(null);
+  const [timeFilter, setTimeFilter] = useState('monthly'); // daily, monthly
+  const [isMobile, setIsMobile] = useState(false);
   const { language } = useLanguage();
 
-  // Colors for different statuses in the pie chart
-  const COLORS = ['#6366f1', '#10b981', '#ef4444']; // [pending, approved, rejected]
+  // Colors for different tables in the pie chart
+  const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16', '#F97316'];
 
   const fetchMyLetters = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         setError(language === 'mr' ? 'कृपया लॉगिन करा' : 'Please login first');
         return;
@@ -111,6 +115,140 @@ const InwardDashboard = () => {
     }
   }, [language]);
 
+  // Helper function to get source table name from letter data
+  const getSourceTableName = (letter) => {
+    // Function to normalize table names to ensure consistent translation
+    const normalizeTableName = (tableName) => {
+      if (!tableName) return language === 'mr' ? 'अज्ञात टेबल' : 'Unknown Table';
+      
+      const lowerName = tableName.toLowerCase().trim();
+      
+      // Standard mapping for consistent translation
+      const tableTranslations = {
+        'sp': language === 'mr' ? 'एसपी टेबल' : 'SP Table',
+        'sp table': language === 'mr' ? 'एसपी टेबल' : 'SP Table',
+        'collector': language === 'mr' ? 'कलेक्टर टेबल' : 'Collector Table',
+        'collector table': language === 'mr' ? 'कलेक्टर टेबल' : 'Collector Table',
+        'home': language === 'mr' ? 'होम टेबल' : 'Home Table',
+        'home table': language === 'mr' ? 'होम टेबल' : 'Home Table',
+        'ig': language === 'mr' ? 'आयजी टेबल' : 'IG Table',
+        'ig table': language === 'mr' ? 'आयजी टेबल' : 'IG Table',
+        'ig_nashik_other': language === 'mr' ? 'आयजी टेबल' : 'IG Table',
+        'shanik': language === 'mr' ? 'शाणिक टेबल' : 'Shanik Table',
+        'shanik table': language === 'mr' ? 'शाणिक टेबल' : 'Shanik Table',
+        'shanik_local': language === 'mr' ? 'शाणिक टेबल' : 'Shanik Table',
+        'dg': language === 'mr' ? 'डीजी टेबल' : 'DG Table',
+        'dg table': language === 'mr' ? 'डीजी टेबल' : 'DG Table',
+        'dg_other': language === 'mr' ? 'डीजी टेबल' : 'DG Table',
+        'head': language === 'mr' ? 'हेड टेबल' : 'Head Table',
+        'head table': language === 'mr' ? 'हेड टेबल' : 'Head Table',
+        'other': language === 'mr' ? 'इतर टेबल' : 'Other Table',
+        'other table': language === 'mr' ? 'इतर टेबल' : 'Other Table',
+        'unknown': language === 'mr' ? 'अज्ञात टेबल' : 'Unknown Table',
+        'unknown table': language === 'mr' ? 'अज्ञात टेबल' : 'Unknown Table'
+      };
+      
+      return tableTranslations[lowerName] || (language === 'mr' ? 'इतर टेबल' : 'Other Table');
+    };
+    
+    // Check if there's a sentTo field with recipient information
+    if (letter.sentTo) {
+      try {
+        const sentToData = JSON.parse(letter.sentTo);
+        
+        // First check if sourceTable is directly stored
+        if (sentToData.sourceTable) {
+          return normalizeTableName(sentToData.sourceTable);
+        }
+        
+        if (sentToData.sendToData) {
+          const sendToDataObj = sentToData.sendToData;
+          if (sendToDataObj.sp) return normalizeTableName('sp');
+          if (sendToDataObj.collector) return normalizeTableName('collector');
+          if (sendToDataObj.home) return normalizeTableName('home');
+          if (sendToDataObj.ig) return normalizeTableName('ig');
+          if (sendToDataObj.shanik) return normalizeTableName('shanik');
+          if (sendToDataObj.dg) return normalizeTableName('dg');
+        }
+      } catch (e) {
+        console.log('Error parsing sentTo data:', e);
+      }
+    }
+    
+    // Check forwardTo field as fallback
+    if (letter.forwardTo) {
+      return normalizeTableName(letter.forwardTo);
+    }
+    
+    return normalizeTableName(null);
+  };
+
+  // Calculate monthly data for bar chart
+  const getMonthlyData = (lettersData) => {
+    const monthCounts = {};
+    const monthNames = language === 'mr' 
+      ? ['जाने', 'फेब्रु', 'मार्च', 'एप्रि', 'मे', 'जून', 'जुलै', 'ऑग', 'सप्टें', 'ऑक्टो', 'नोव्हें', 'डिसें']
+      : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    // Initialize all months with 0
+    monthNames.forEach((month, index) => {
+      monthCounts[month] = 0;
+    });
+    
+    // Count letters by month
+    lettersData.forEach(letter => {
+      if (letter.createdAt) {
+        const letterDate = new Date(letter.createdAt);
+        const monthIndex = letterDate.getMonth();
+        const monthName = monthNames[monthIndex];
+        monthCounts[monthName]++;
+      }
+    });
+    
+    return Object.entries(monthCounts).map(([month, count]) => ({
+      month,
+      count
+    }));
+  };
+
+  // Calculate table distribution for pie chart
+  const calculateTableDistribution = (lettersData) => {
+    const tableCounts = {};
+    const now = new Date();
+    
+    // Filter letters based on time period
+    const filteredLetters = lettersData.filter(letter => {
+      if (!letter.createdAt) return false;
+      const letterDate = new Date(letter.createdAt);
+      
+      if (timeFilter === 'daily') {
+        // Show only today's letters
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        letterDate.setHours(0, 0, 0, 0);
+        return letterDate.getTime() === today.getTime();
+      } else if (timeFilter === 'monthly') {
+        // Show letters from current month
+        return letterDate.getMonth() === now.getMonth() && 
+               letterDate.getFullYear() === now.getFullYear();
+      }
+      return true; // Show all letters for other cases
+    });
+    
+    filteredLetters.forEach(letter => {
+      const tableName = getSourceTableName(letter);
+      if (tableName) {
+        tableCounts[tableName] = (tableCounts[tableName] || 0) + 1;
+      }
+    });
+    
+    return Object.entries(tableCounts).map(([table, count], index) => ({
+      name: table,
+      value: count,
+      color: COLORS[index % COLORS.length]
+    }));
+  };
+
   const processLettersData = (lettersData) => {
     if (!Array.isArray(lettersData)) {
       console.error('Invalid data format received:', lettersData);
@@ -150,6 +288,23 @@ const InwardDashboard = () => {
     const approvedCount = statusCounts['approved'] || 0;
     const rejectedCount = statusCounts['rejected'] || 0;
     
+    // Calculate average letters per day
+    let averagePerDay = 0;
+    if (lettersData.length > 0) {
+      // Get date range from first to last letter
+      const dates = lettersData
+        .filter(p => p.createdAt)
+        .map(p => new Date(p.createdAt))
+        .sort((a, b) => a - b);
+      
+      if (dates.length > 0) {
+        const firstDate = dates[0];
+        const lastDate = dates[dates.length - 1];
+        const daysDifference = Math.max(1, Math.ceil((lastDate - firstDate) / (1000 * 60 * 60 * 24)) + 1);
+        averagePerDay = Math.round((lettersData.length / daysDifference) * 10) / 10; // Round to 1 decimal
+      }
+    }
+    
     // Update stats with proper change indicators
     setStats([
       {
@@ -167,22 +322,17 @@ const InwardDashboard = () => {
         color: "green",
       },
       {
-        title: language === 'mr' ? "प्रलंबित मंजुरी" : "Pending Approval",
-        value: pendingCount.toString(),
-        change: "0%",
-        icon: <FiClock />,
+        title: language === 'mr' ? "दैनिक सरासरी पत्रे" : "Average Letters by Day",
+        value: averagePerDay.toString(),
+        change: averagePerDay > 0 ? `${averagePerDay}/day` : "No data",
+        icon: <FiTrendingUp />,
         color: "amber",
       },
     ]);
 
-    // Process pie chart data
-    const pieChartData = [
-      { name: language === 'mr' ? 'प्रलंबित' : 'Pending', value: pendingCount },
-      { name: language === 'mr' ? 'मंजूर' : 'Approved', value: approvedCount },
-      { name: language === 'mr' ? 'नाकारले' : 'Rejected', value: rejectedCount }
-    ].filter(item => item.value > 0);
-    
-    setPieData(pieChartData.length > 0 ? pieChartData : [{ name: language === 'mr' ? 'डेटा नाही' : 'No Data', value: 1 }]);
+    // Process pie chart data - Table Distribution
+    const tableDistribution = calculateTableDistribution(lettersData);
+    setPieData(tableDistribution.length > 0 ? tableDistribution : [{ name: language === 'mr' ? 'डेटा नाही' : 'No Data', value: 1 }]);
 
     // Process recent activity
     const sortedLetters = [...lettersData]
@@ -197,11 +347,35 @@ const InwardDashboard = () => {
       user: letter.recipientNameAndDesignation || (language === 'mr' ? 'अज्ञात' : 'Unknown'),
     }));
     setRecentActivity(activity);
+    
+    // Process monthly data for bar chart
+    const monthlyChartData = getMonthlyData(lettersData);
+    setMonthlyData(monthlyChartData);
   };
 
   useEffect(() => {
     fetchMyLetters();
   }, [fetchMyLetters]);
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
+
+  // Re-process pie chart data when timeFilter changes
+  useEffect(() => {
+    if (myLetters.length > 0) {
+      const tableDistribution = calculateTableDistribution(myLetters);
+      setPieData(tableDistribution.length > 0 ? tableDistribution : [{ name: language === 'mr' ? 'डेटा नाही' : 'No Data', value: 1 }]);
+    }
+  }, [timeFilter, myLetters, language]);
 
   if (isLoading) {
     return (
@@ -231,28 +405,29 @@ const InwardDashboard = () => {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <motion.div 
-        className="mb-10"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-      >
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-          {language === 'mr' ? 'माझे डॅशबोर्ड' : 'My Dashboard'}
-        </h1>
-        <p className="text-gray-500 mt-1">
-          {language === 'mr' ? 'तुमच्या पत्रांचे विहंगावलोकन' : 'Overview of your letters and submissions'}
-        </p>
-      </motion.div>
-      
-      {/* Stats Cards */}
-      <motion.div 
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, staggerChildren: 0.1 }}
-      >
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-7xl">
+        <motion.div 
+          className="mb-8 sm:mb-10"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            {language === 'mr' ? 'माझे डॅशबोर्ड' : 'My Dashboard'}
+          </h1>
+          <p className="text-gray-500 mt-2 text-sm sm:text-base">
+            {language === 'mr' ? 'तुमच्या पत्रांचे विहंगावलोकन' : 'Overview of your letters and submissions'}
+          </p>
+        </motion.div>
+        
+        {/* Stats Cards */}
+        <motion.div 
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, staggerChildren: 0.1 }}
+        >
         {stats.map((stat, index) => (
           <motion.div
             key={index}
@@ -265,42 +440,53 @@ const InwardDashboard = () => {
         ))}
       </motion.div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8 mb-8 sm:mb-12">
         
-        {/* Pie Chart */}
-        <motion.div 
-          className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.3 }}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-800">
-              {language === 'mr' ? 'पत्र स्थिती' : 'Letter Status'}
-            </h3>
-            <button 
-              onClick={fetchMyLetters}
-              className="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
-            >
-              <FiRefreshCw className="w-4 h-4 text-gray-500" />
-            </button>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+          {/* Pie Chart */}
+          <motion.div 
+            className="bg-white p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-sm border border-gray-100"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3 }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-3 sm:gap-2">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                {language === 'mr' ? 'टेबल वितरण' : 'Table Distribution'}
+              </h3>
+              <div className="flex items-center gap-2">
+                {/* Time Filter */}
+                <select
+                  value={timeFilter}
+                  onChange={(e) => setTimeFilter(e.target.value)}
+                  className="text-xs sm:text-sm border border-gray-200 rounded-lg px-2 sm:px-3 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
+                <option value="daily">{language === 'mr' ? 'दैनिक' : 'Daily'}</option>
+                <option value="monthly">{language === 'mr' ? 'मासिक' : 'Monthly'}</option>
+              </select>
+              <button 
+                onClick={fetchMyLetters}
+                className="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
+              >
+                <FiRefreshCw className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+          </div>
+            <div className="h-48 sm:h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    outerRadius={60}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  >
                   {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip 
@@ -316,50 +502,254 @@ const InwardDashboard = () => {
               </PieChart>
             </ResponsiveContainer>
           </div>
+          
+            {/* Table Distribution Details */}
+            <div className="mt-4 sm:mt-6">
+              <h4 className="text-sm sm:text-md font-semibold text-gray-700 mb-3 sm:mb-4">
+                {language === 'mr' ? 'तक्ता वितरण तपशील' : 'Table Distribution Details'}
+              </h4>
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                                <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="text-left py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-700 border-b border-gray-200">
+                          {language === 'mr' ? 'टेबल' : 'Table'}
+                        </th>
+                        <th className="text-center py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-700 border-b border-gray-200">
+                          {language === 'mr' ? 'संख्या' : 'Count'}
+                        </th>
+                        <th className="text-right py-2 sm:py-3 px-2 sm:px-4 text-xs sm:text-sm font-semibold text-gray-700 border-b border-gray-200">
+                          {language === 'mr' ? 'टक्केवारी' : 'Percentage'}
+                        </th>
+                      </tr>
+                    </thead>
+                <tbody>
+                  {pieData.length > 0 && pieData[0].name !== (language === 'mr' ? 'डेटा नाही' : 'No Data') ? (
+                    (() => {
+                      const totalCount = pieData.reduce((sum, item) => sum + item.value, 0);
+                      return pieData.map((item, index) => (
+                          <tr key={index} className="hover:bg-gray-50 transition-colors">
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 border-b border-gray-100">
+                              <div className="flex items-center gap-2 sm:gap-3">
+                                <div 
+                                  className="w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0" 
+                                  style={{ backgroundColor: item.color || COLORS[index % COLORS.length] }}
+                                ></div>
+                                <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{item.name}</span>
+                              </div>
+                            </td>
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-center border-b border-gray-100">
+                              <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 bg-blue-100 text-blue-800 rounded-full text-xs sm:text-sm font-semibold">
+                                {item.value}
+                              </span>
+                            </td>
+                            <td className="py-2 sm:py-3 px-2 sm:px-4 text-right border-b border-gray-100">
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="flex-1 max-w-[80px] bg-gray-200 rounded-full h-2 overflow-hidden">
+                                <div 
+                                  className="h-full rounded-full transition-all duration-300" 
+                                  style={{ 
+                                    backgroundColor: item.color || COLORS[index % COLORS.length],
+                                    width: `${((item.value / totalCount) * 100).toFixed(1)}%`
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="font-semibold text-gray-700 min-w-[45px]">
+                                {((item.value / totalCount) * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      ));
+                    })()
+                  ) : (
+                    <tr>
+                      <td colSpan="3" className="py-8 text-center text-gray-500">
+                        {language === 'mr' ? 'कोणताही डेटा उपलब्ध नाही' : 'No data available'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                {pieData.length > 0 && pieData[0].name !== (language === 'mr' ? 'डेटा नाही' : 'No Data') && (
+                  <tfoot>
+                    <tr className="bg-gray-50 border-t-2 border-gray-200">
+                      <td className="py-3 px-4 font-semibold text-gray-800">
+                        {language === 'mr' ? 'एकूण पत्रे:' : 'Total Letters:'}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className="inline-flex items-center justify-center w-8 h-8 bg-green-100 text-green-800 rounded-full text-sm font-bold">
+                          {pieData.reduce((sum, item) => sum + item.value, 0)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right font-semibold text-gray-800">
+                        {language === 'mr' ? 'एकूण पत्रे: ' : 'Total Letters: '}
+                        {pieData.reduce((sum, item) => sum + item.value, 0)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
         </motion.div>
 
-        {/* Recent Activity */}
-        <motion.div 
-          className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.4 }}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-800">
-              {language === 'mr' ? 'अलीकडील क्रियाकलाप' : 'Recent Activity'}
-            </h3>
-          </div>
-          <div className="space-y-4">
-            {recentActivity.length > 0 ? recentActivity.map((activity, index) => (
-              <motion.div 
-                key={activity.id}
-                className="flex items-start p-3 rounded-lg hover:bg-gray-50 transition-colors"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 + (index * 0.05) }}
-              >
-                <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                  activity.type === 'new' ? 'bg-blue-100 text-blue-600' : 
-                  activity.type === 'update' ? 'bg-green-100 text-green-600' : 
-                  'bg-amber-100 text-amber-600'
-                }`}>
-                  {activity.type === 'new' ? (
-                    <FiMail className="w-5 h-5" />
-                  ) : activity.type === 'update' ? (
-                    <FiRefreshCw className="w-5 h-5" />
-                  ) : (
-                    <FiClock className="w-5 h-5" />
-                  )}
+          {/* Monthly Bar Chart */}
+          <motion.div 
+            className="bg-white p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 pb-8"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.4 }}
+          >
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                {language === 'mr' ? 'मासिक पत्र संख्या' : 'Monthly Letter Count'}
+              </h3>
+            </div>
+            
+            <div className="h-72 sm:h-80">
+            {monthlyData.length > 0 ? (
+              <div className="h-full relative">
+                  {/* Chart area - fixed height for bars */}
+                  <div className="h-52 sm:h-64 flex items-end justify-between gap-1 sm:gap-2 px-2 sm:px-4 relative">
+                    {monthlyData.map((item, index) => {
+                      const maxCount = Math.max(...monthlyData.map(d => d.count));
+                      const heightPercent = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
+                      const chartHeight = isMobile ? 200 : 240; // Updated for new container height
+                      const barHeight = Math.max((heightPercent / 100) * chartHeight, item.count > 0 ? 4 : 0);
+                    
+                    return (
+                        <div key={index} className="flex flex-col items-center flex-1 group">
+                          {/* Bar container with fixed positioning */}
+                          <div className="relative flex items-end justify-center w-full max-w-[24px] sm:max-w-[40px]">
+                            <div 
+                              className="w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-sm sm:rounded-t-lg transition-all duration-300 hover:shadow-lg hover:scale-105 relative group-hover:from-blue-600 group-hover:to-blue-500"
+                              style={{ 
+                                height: `${barHeight}px`,
+                                minHeight: item.count > 0 ? '4px' : '0px'
+                              }}
+                            >
+                              {/* Count label on top of bar */}
+                              {item.count > 0 && (
+                                <div className="absolute -top-5 sm:-top-6 left-1/2 transform -translate-x-1/2 text-xs font-semibold text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                  {item.count}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                    );
+                  })}
                 </div>
-                <div className="ml-4 flex-1">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-gray-900">{activity.title}</h4>
-                    <span className="text-xs text-gray-500">{activity.time}</span>
+                
+                  {/* Month labels - separate row */}
+                  <div className="flex items-end justify-between gap-1 sm:gap-2 px-2 sm:px-4 mt-6 mb-2 h-8">
+                    {monthlyData.map((item, index) => (
+                      <div key={index} className="flex-1 flex justify-center items-end">
+                        <div className="text-xs font-medium text-gray-600 text-center transform -rotate-45 origin-bottom truncate whitespace-nowrap">
+                          {item.month}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-sm text-gray-500 mt-0.5">{activity.user}</p>
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500">
+                {language === 'mr' ? 'कोणताही डेटा उपलब्ध नाही' : 'No data available'}
+              </div>
+            )}
+          </div>
+          
+          {/* Y-axis labels */}
+          <div className="flex justify-between items-center mt-4 px-4 text-xs text-gray-500">
+            <span>0</span>
+            {monthlyData.length > 0 && (
+              <span>{Math.max(...monthlyData.map(d => d.count))}</span>
+            )}
+          </div>
+          
+            {/* Chart summary */}
+            {monthlyData.length > 0 && (
+              <div className="mt-4 p-3 sm:p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 text-xs sm:text-sm">
+                <div className="text-center">
+                  <div className="font-semibold text-gray-800">
+                    {monthlyData.reduce((sum, item) => sum + item.count, 0)}
+                  </div>
+                  <div className="text-gray-600">
+                    {language === 'mr' ? 'एकूण पत्रे' : 'Total Letters'}
+                  </div>
                 </div>
-              </motion.div>
+                <div className="text-center">
+                  <div className="font-semibold text-blue-600">
+                    {Math.max(...monthlyData.map(d => d.count))}
+                  </div>
+                  <div className="text-gray-600">
+                    {language === 'mr' ? 'सर्वाधिक' : 'Peak Month'}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="font-semibold text-green-600">
+                    {Math.round(monthlyData.reduce((sum, item) => sum + item.count, 0) / 12 * 10) / 10}
+                  </div>
+                  <div className="text-gray-600">
+                    {language === 'mr' ? 'सरासरी' : 'Average'}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="font-semibold text-purple-600">
+                    {monthlyData.filter(d => d.count > 0).length}
+                  </div>
+                  <div className="text-gray-600">
+                    {language === 'mr' ? 'सक्रिय महिने' : 'Active Months'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </motion.div>
+
+          {/* Recent Activity */}
+          <motion.div 
+            className="bg-white p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 xl:col-span-2"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.4 }}
+          >
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                {language === 'mr' ? 'अलीकडील क्रियाकलाप' : 'Recent Activity'}
+              </h3>
+            </div>
+          <div className="space-y-4">
+              {recentActivity.length > 0 ? recentActivity.map((activity, index) => (
+                <motion.div 
+                  key={activity.id}
+                  className="flex items-start p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 + (index * 0.05) }}
+                >
+                  <div className={`flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${
+                    activity.type === 'new' ? 'bg-blue-100 text-blue-600' : 
+                    activity.type === 'update' ? 'bg-green-100 text-green-600' : 
+                    'bg-amber-100 text-amber-600'
+                  }`}>
+                    {activity.type === 'new' ? (
+                      <FiMail className="w-4 h-4 sm:w-5 sm:h-5" />
+                    ) : activity.type === 'update' ? (
+                      <FiRefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
+                    ) : (
+                      <FiClock className="w-4 h-4 sm:w-5 sm:h-5" />
+                    )}
+                  </div>
+                  <div className="ml-3 sm:ml-4 flex-1 min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                      <h4 className="text-xs sm:text-sm font-medium text-gray-900 truncate">{activity.title}</h4>
+                      <span className="text-xs text-gray-500 flex-shrink-0">{activity.time}</span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-gray-500 mt-0.5 truncate">{activity.user}</p>
+                  </div>
+                </motion.div>
             )) : (
               <div className="text-center py-8">
                 <FiFileText className="mx-auto h-12 w-12 text-gray-300 mb-4" />
@@ -375,35 +765,36 @@ const InwardDashboard = () => {
         </motion.div>
       </div>
 
-      {/* Quick Actions */}
-      <motion.div 
-        className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.5 }}
-      >
-        <div className="text-center">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">
-            {language === 'mr' ? 'द्रुत क्रियाकलाप' : 'Quick Actions'}
-          </h3>
-          <div className="flex justify-center space-x-4">
-            <a
-              href="/inward-dashboard/inward-letter"
-              className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md"
-            >
-              <FiFileText className="mr-2 h-5 w-5" />
-              {language === 'mr' ? 'नवीन पत्र सबमिट करा' : 'Submit New Letter'}
-            </a>
-            <a
-              href="/inward-dashboard/my-letters"
-              className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
-            >
-              <FiClock className="mr-2 h-5 w-5" />
-              {language === 'mr' ? 'माझी पत्रे पहा' : 'View My Letters'}
-            </a>
+              {/* Quick Actions */}
+        <motion.div 
+          className="bg-white p-4 sm:p-6 lg:p-8 rounded-xl sm:rounded-2xl shadow-sm border border-gray-100"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.5 }}
+        >
+          <div className="text-center">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-4 sm:mb-6">
+              {language === 'mr' ? 'द्रुत क्रियाकलाप' : 'Quick Actions'}
+            </h3>
+            <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
+              <a
+                href="/inward-dashboard/inward-letter"
+                className="inline-flex items-center justify-center px-4 sm:px-6 py-3 bg-blue-600 text-white text-sm sm:text-base font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+              >
+                <FiFileText className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                {language === 'mr' ? 'नवीन पत्र सबमिट करा' : 'Submit New Letter'}
+              </a>
+              <a
+                href="/inward-dashboard/my-letters"
+                className="inline-flex items-center justify-center px-4 sm:px-6 py-3 bg-indigo-600 text-white text-sm sm:text-base font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
+              >
+                <FiClock className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                {language === 'mr' ? 'माझी पत्रे पहा' : 'View My Letters'}
+              </a>
+            </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
 };

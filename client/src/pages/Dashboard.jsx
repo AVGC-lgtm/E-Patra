@@ -55,12 +55,22 @@ const Dashboard = () => {
   const fetchPatras = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Add timestamp to prevent caching
-      const response = await axios.get('http://localhost:5000/api/patras', {
+      const token = localStorage.getItem('token');
+      const config = token ? {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         params: {
           _t: new Date().getTime() // Prevent caching
         }
-      });
+      } : {
+        params: {
+          _t: new Date().getTime() // Prevent caching
+        }
+      };
+      
+      // Add timestamp to prevent caching
+      const response = await axios.get('http://localhost:5000/api/patras', config);
       
       console.log('API Response:', response.data); // Debug log
       
@@ -80,7 +90,6 @@ const Dashboard = () => {
         patrasData = response.data;
         console.log('Using direct array response:', patrasData);
       } else {
-        // Try to extract from nested data (for paginated or wrapped responses)
         if (response.data && typeof response.data === 'object') {
           // Try to find the first array property
           const arrayProp = Object.values(response.data).find(v => Array.isArray(v));
@@ -112,6 +121,16 @@ const Dashboard = () => {
       setError(null);
     } catch (err) {
       console.error('Error fetching patras:', err);
+      
+      // Handle authentication errors
+      if (err.response?.status === 401) {
+        setError('Authentication failed. Please login again.');
+        // Optionally redirect to login
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        return;
+      }
+      
       setError('Failed to load patras data. Please try again later.');
       setPatras([]);
     } finally {
@@ -285,7 +304,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-full mx-auto">
       <motion.div 
         className="mb-10"
         initial={{ opacity: 0, y: -20 }}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { FiEye, FiDownload, FiSearch, FiRefreshCw } from 'react-icons/fi';
+import { FiEye, FiDownload, FiSearch, FiRefreshCw, FiFileText } from 'react-icons/fi';
 import { useLanguage } from '../context/LanguageContext';
 
 const MyInwardLetters = () => {
@@ -265,6 +265,9 @@ const MyInwardLetters = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-blue-900 uppercase tracking-wider">
                       {language === 'mr' ? 'दिनांक' : 'Date'}
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-blue-900 uppercase tracking-wider">
+                      {language === 'mr' ? 'फॉरवर्ड टू' : 'Forward To'}
+                    </th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-blue-900 uppercase tracking-wider">
                       {language === 'mr' ? 'कव्हरिंग लेटर' : 'Covering Letter'}
                     </th>
@@ -287,6 +290,17 @@ const MyInwardLetters = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {letter.createdAt ? new Date(letter.createdAt).toLocaleDateString() : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {letter.forwardTo ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {letter.forwardTo}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">
+                            {language === 'mr' ? 'निर्धारित नाही' : 'Not Assigned'}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         {letter.coveringLetter || letter.directCoveringLetter ? (

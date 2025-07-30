@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { getAuthToken } from '../utils/auth';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { FiFileText, FiSend, FiClock, FiCheckCircle, FiXCircle, FiRefreshCw, FiPlus, FiEye, FiChevronUp, FiChevronDown } from 'react-icons/fi';
+import { FiFileText, FiSend, FiClock, FiCheckCircle, FiXCircle, FiRefreshCw, FiPlus, FiEye, FiChevronUp, FiChevronDown, FiExternalLink } from 'react-icons/fi';
 import { useLanguage } from '../context/LanguageContext';
 
 const StatCard = ({ title, value, change, icon, color }) => {
@@ -47,12 +49,13 @@ const OutwardDashboard = () => {
   const [error, setError] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
   const { language } = useLanguage();
+  const navigate = useNavigate();
 
   // Fetch letters forwarded to this user's table
   const fetchOutwardLetters = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         setError(language === 'mr' ? 'कृपया लॉगिन करा' : 'Please login first');
         return;
@@ -135,48 +138,63 @@ const OutwardDashboard = () => {
       color: 'green'
     },
     {
-      title: language === 'mr' ? 'पाठवले' : 'Dispatched',
+      title: language === 'mr' ? 'प्रमुखांकडे पाठवणे' : 'Sending to Head',
       value: letters.filter(letter => 
-        letter.letterStatus && letter.letterStatus.toLowerCase().includes('dispatched')
+        letter.letterStatus && (
+          letter.letterStatus.toLowerCase().includes('sent to head') ||
+          letter.letterStatus.toLowerCase().includes('प्रमुखांकडे पाठवले') ||
+          letter.forwardTo === 'head'
+        )
       ).length,
-      change: '0%',
+      change: 'To Head',
       icon: <FiSend />,
       color: 'blue'
     },
     {
-      title: language === 'mr' ? 'प्रलंबित' : 'Pending',
+      title: language === 'mr' ? 'स्वाक्षरी कागदपत्रे' : 'Signed Documents',
       value: letters.filter(letter => 
-        letter.letterStatus && (
-          letter.letterStatus.toLowerCase().includes('pending') ||
-          letter.letterStatus.toLowerCase().includes('draft') ||
-          letter.letterStatus.toLowerCase() === 'created'
-        )
+        letter.coveringLetter && letter.coveringLetter.isSigned === true
       ).length,
-      change: '0%',
-      icon: <FiClock />,
+      change: 'Signed',
+      icon: <FiCheckCircle />,
       color: 'amber'
     }
   ];
 
-  // Prepare chart data
-  const todayCount = stats[0].value;
-  const totalCount = stats[1].value;
-  const dispatchedCount = stats[2].value;
-  const pendingCount = stats[3].value;
-  
-  const approvedCount = letters.filter(letter => 
-    letter.letterStatus && letter.letterStatus.toLowerCase().includes('approved')
-  ).length;
-  const rejectedCount = letters.filter(letter => 
-    letter.letterStatus && letter.letterStatus.toLowerCase().includes('rejected')
-  ).length;
-  
-  const chartData = [
-    { name: language === 'mr' ? 'प्रलंबित' : 'Pending', value: pendingCount, color: '#FFA726' },
-    { name: language === 'mr' ? 'पाठवले' : 'Dispatched', value: dispatchedCount, color: '#66BB6A' },
-    { name: language === 'mr' ? 'मंजूर' : 'Approved', value: approvedCount, color: '#42A5F5' },
-    { name: language === 'mr' ? 'नाकारले' : 'Rejected', value: rejectedCount, color: '#EF5350' }
-  ].filter(item => item.value > 0);
+  // Prepare month-wise chart data
+  const getMonthlyData = () => {
+    const monthCounts = {};
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    const monthsMarathi = [
+      'जाने', 'फेब्रु', 'मार्च', 'एप्रि', 'मे', 'जून',
+      'जुलै', 'ऑग', 'सप्टें', 'ऑक्टो', 'नोव्हें', 'डिसें'
+    ];
+
+    // Initialize all months with 0
+    months.forEach(month => {
+      monthCounts[month] = 0;
+    });
+
+    // Count letters by month
+    letters.forEach(letter => {
+      if (letter.createdAt) {
+        const date = new Date(letter.createdAt);
+        const monthIndex = date.getMonth();
+        const monthName = months[monthIndex];
+        monthCounts[monthName]++;
+      }
+    });
+
+    return months.map((month, index) => ({
+      month: language === 'mr' ? monthsMarathi[index] : month,
+      count: monthCounts[month]
+    }));
+  };
+
+  const chartData = getMonthlyData();
 
   // Get recent letters (last 5)
   const recentLetters = letters.slice(0, 5);
@@ -263,7 +281,7 @@ const OutwardDashboard = () => {
 
       {/* Charts and Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-        {/* Status Chart */}
+        {/* Monthly Chart */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -271,25 +289,41 @@ const OutwardDashboard = () => {
           className="bg-white rounded-xl shadow-lg p-6 border border-gray-100"
         >
           <h3 className="text-lg font-semibold text-gray-800 mb-4">
-            {language === 'mr' ? 'पत्र स्थिती वितरण' : 'Letter Status Distribution'}
+            {language === 'mr' ? 'मासिक पत्र संख्या' : 'Monthly Letter Count'}
           </h3>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  dataKey="value"
-                  label={({ name, value }) => `${name}: ${value}`}
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis 
+                  dataKey="month" 
+                  stroke="#666"
+                  fontSize={12}
+                  tickLine={false}
+                />
+                <YAxis 
+                  stroke="#666"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip 
+                  contentStyle={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  }}
+                  labelStyle={{ color: '#374151' }}
+                  formatter={(value) => [value, language === 'mr' ? 'पत्रे' : 'Letters']}
+                />
+                <Bar 
+                  dataKey="count" 
+                  fill="#3B82F6"
+                  radius={[4, 4, 0, 0]}
+                  name={language === 'mr' ? 'पत्रे' : 'Letters'}
+                />
+              </BarChart>
             </ResponsiveContainer>
           ) : (
             <div className="flex items-center justify-center h-64 text-gray-500">
@@ -319,9 +353,14 @@ const OutwardDashboard = () => {
                   className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <button 
+                      onClick={() => navigate(`/outward-dashboard/track-application/${letter.referenceNumber}`)}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline truncate flex items-center gap-1"
+                      title={language === 'mr' ? 'अर्जाचा मागोवा पहा' : 'Track application'}
+                    >
                       {letter.referenceNumber || 'No Reference'}
-                    </p>
+                      <FiExternalLink className="h-3 w-3 flex-shrink-0" />
+                    </button>
                     <p className="text-xs text-gray-500 truncate">
                       {letter.recipientDepartment || letter.recipientNameAndDesignation || 'No recipient'}
                     </p>

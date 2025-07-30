@@ -79,6 +79,11 @@ const CoveringLetter = sequelize.define('CoveringLetter', {
     type: DataTypes.TEXT,
     allowNull: true,
     comment: 'AI-generated solution approach'
+  },
+  isSigned: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    comment: 'Whether the covering letter has been signed'
   }
 }, {
   underscored: true,

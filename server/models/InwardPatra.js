@@ -122,6 +122,67 @@ const InwardPatra = sequelize.define('InwardPatra', {
     comment: 'Role of the person who resent the letter'
   },
 
+  // ===== REPORT FILES TRACKING FIELDS =====
+  
+  // JSON string storing report files information
+  reportFiles: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'JSON string storing uploaded report files information'
+  },
+  
+  // Timestamp when report was uploaded
+  reportUploadedAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Timestamp when the report files were uploaded'
+  },
+  
+  // User ID who uploaded the report
+  reportUploadedBy: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'ID of the user who uploaded the report files'
+  },
+  
+  // Email of user who uploaded the report
+  reportUploadedByEmail: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Email of the user who uploaded the report files'
+  },
+
+  // ===== CASE CLOSE TRACKING FIELD =====
+  
+  // Boolean to track if the inward patra case has been closed
+  inwardPatraClose: {
+    type: DataTypes.BOOLEAN,
+    allowNull: true,
+    defaultValue: false,
+    comment: 'Whether the inward patra case has been closed after report upload'
+  },
+  
+  // Timestamp when case was closed
+  caseClosedAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Timestamp when the case was closed'
+  },
+  
+  // User who closed the case
+  caseClosedBy: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'ID of the user who closed the case'
+  },
+  
+  // Email of user who closed the case
+  caseClosedByEmail: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Email of the user who closed the case'
+  },
+
 
 }, {
   underscored: true,

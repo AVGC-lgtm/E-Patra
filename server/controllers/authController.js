@@ -429,6 +429,29 @@ const logout = (req, res) => {
   return res.json(authResponses.logout());
 };
 
+// Verify token endpoint
+const verifyToken = async (req, res) => {
+  try {
+    // If the middleware passed, the token is valid
+    // Return user information from the token
+    const user = req.user;
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Token is valid',
+      user: {
+        id: user.id,
+        email: user.email,
+        roleName: user.roleName,
+        table: user.table
+      }
+    });
+  } catch (error) {
+    console.error('Error verifying token:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -439,4 +462,5 @@ module.exports = {
   updateSign,
   deleteSign,
   uploadSingle,
+  verifyToken,
 };

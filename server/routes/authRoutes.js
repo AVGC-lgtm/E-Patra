@@ -18,6 +18,9 @@ router.post('/reset-password', authController.resetPassword);
 // Register route
 router.post('/register', authController.register);
 
+// Token verification route
+router.get('/verify', authenticateToken, authController.verifyToken);
+
 // const { authenticateToken } = require('../middleware/auth');
 
 // Upload Digital Signature (protected route)

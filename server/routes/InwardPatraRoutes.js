@@ -15,6 +15,9 @@ router.post('/', patraController.createPatra);
 // Get all Patras with complete covering letter data (with role-based filtering)
 router.get('/', authenticateToken, patraController.getAllPatras);
 
+// Get letters specifically for Head (HOD approval)
+router.get('/head', authenticateToken, patraController.getHeadLetters);
+
 // Get Patra by reference number (MUST BE BEFORE /:id route)
 router.get('/reference/:referenceNumber', patraController.getPatraByReferenceNumber);
 
@@ -38,6 +41,12 @@ router.put('/:id/approve', patraController.approveLetter);
 
 // Resend letter back to Inward Letters (HOD action) (MUST BE BEFORE /:id route)
 router.put('/:id/resend', patraController.resendLetter);
+
+// Upload report files for completed letters (MUST BE BEFORE /:id route)
+router.post('/:id/upload-report', authenticateToken, patraController.uploadReportFiles);
+
+// Close case for letters with uploaded reports (MUST BE BEFORE /:id route)
+router.put('/:id/close-case', authenticateToken, patraController.closeCase);
 
 // Get a Patra by ID with complete covering letter data
 router.get('/:id', patraController.getPatraById);
