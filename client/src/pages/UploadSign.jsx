@@ -18,7 +18,7 @@ const UploadSign = () => {
 
   // Get user data from token
   const getUserFromToken = () => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) return null;
     
     try {
@@ -54,7 +54,7 @@ const UploadSign = () => {
       // Fetch signature from the database using the same API as HODLetters
       const response = await axios.get(`http://localhost:5000/api/head/head-signature/${user.userId}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         }
       });
       
@@ -162,7 +162,7 @@ const UploadSign = () => {
       const response = await axios.put('http://localhost:5000/api/auth/update-sign', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         }
       });
 
@@ -202,7 +202,7 @@ const UploadSign = () => {
           userId: user?.userId || user?.id
         },
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         }
       });
 

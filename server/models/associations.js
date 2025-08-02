@@ -7,6 +7,7 @@ const File = require('./File');
 const Head = require('./Head');
 const CoveringLetter = require('./CoveringLetter');
 const User = require('./User'); // You'll need this for associations
+const Role = require('./Role'); // Add Role model import
 
 // Define associations
 
@@ -116,5 +117,6 @@ module.exports = {
   Head,
   CoveringLetter,
   User,
+  Role, // Add Role model to exports
   sequelize // Export sequelize instance as well
 };

@@ -123,7 +123,7 @@ const HeadDashboard = () => {
   const fetchPatras = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const config = token ? {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -196,7 +196,7 @@ const HeadDashboard = () => {
       // Handle authentication errors
       if (err.response?.status === 401) {
         setError('Authentication failed. Please login again.');
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         window.location.href = '/login';
         return;
       }
@@ -275,12 +275,13 @@ const HeadDashboard = () => {
     if (statusLower.includes('approved') || statusLower.includes('मंजूर')) return 'approved';
     if (statusLower.includes('rejected') || statusLower.includes('नाकारले')) return 'rejected';
     if (statusLower.includes('sent to head') || statusLower.includes('प्रमुखांकडे पाठवले')) return 'sent_to_head';
+    if (statusLower.includes('case close') || statusLower.includes('केस बंद') || statusLower.includes('closed')) return 'closed';
     return 'other';
   };
 
   const headRelevantLetters = patras.filter(p => {
     const status = getNormalizedStatus(p.letterStatus);
-    return ['sent_to_head', 'pending', 'approved', 'rejected'].includes(status);
+    return ['sent_to_head', 'pending', 'approved', 'rejected', 'closed'].includes(status);
   });
 
   const pendingCount = headRelevantLetters.filter(p => 
@@ -297,6 +298,11 @@ const HeadDashboard = () => {
 
   const sentToHeadCount = headRelevantLetters.filter(p => 
     getNormalizedStatus(p.letterStatus) === 'sent_to_head'
+  ).length;
+
+  // Calculate closed cases count
+  const closedCasesCount = headRelevantLetters.filter(p => 
+    getNormalizedStatus(p.letterStatus) === 'closed'
   ).length;
 
   // Calculate signed letters count
@@ -676,7 +682,7 @@ const HeadDashboard = () => {
       </div>
 
       {/* Stats Cards - Matching SP dashboard design with gradients */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <StatCard
           title={language === 'mr' ? 'आजची पत्रे' : 'Today\'s Letters'}
           value={todayCount}
@@ -704,6 +710,13 @@ const HeadDashboard = () => {
           subtitle={`${signedLettersCount}%`}
           icon={<FiSigned className="w-6 h-6 text-white" />}
           color="bg-gradient-to-br from-emerald-400 to-emerald-600"
+        />
+        <StatCard
+          title={language === 'mr' ? 'केस बंद' : 'Closed Cases'}
+          value={closedCasesCount}
+          subtitle={`${closedCasesCount} cases`}
+          icon={<FiXCircle className="w-6 h-6 text-white" />}
+          color="bg-gradient-to-br from-red-400 to-red-600"
         />
       </div>
 

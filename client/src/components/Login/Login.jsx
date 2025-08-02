@@ -80,15 +80,15 @@ const Login = ({ onLogin }) => {
         if (decodedToken) {
           console.log('Decoded token:', decodedToken);
           
-          // ADDED: Store all user information in localStorage
-          localStorage.setItem('token', data.token);
-          localStorage.setItem('userId', decodedToken.id.toString());
-          localStorage.setItem('userEmail', decodedToken.email);
-          localStorage.setItem('userRole', decodedToken.roleName);
-          localStorage.setItem('userRoleId', decodedToken.roleId.toString());
-          localStorage.setItem('userStation', decodedToken.stationName);
+          // Store user information in sessionStorage for tab-specific sessions
+          sessionStorage.setItem('token', data.token);
+          sessionStorage.setItem('userId', decodedToken.id.toString());
+          sessionStorage.setItem('userEmail', decodedToken.email);
+          sessionStorage.setItem('userRole', decodedToken.roleName);
+          sessionStorage.setItem('userRoleId', decodedToken.roleId.toString());
+          sessionStorage.setItem('userStation', decodedToken.stationName);
           
-          // ADDED: Store the complete user object for easy access
+          // Store the complete user object for easy access
           const userInfo = {
             id: decodedToken.id,
             email: decodedToken.email,
@@ -97,9 +97,9 @@ const Login = ({ onLogin }) => {
             stationName: decodedToken.stationName,
             token: data.token
           };
-          localStorage.setItem('userInfo', JSON.stringify(userInfo));
+          sessionStorage.setItem('userInfo', JSON.stringify(userInfo));
           
-          console.log('User info stored:', userInfo);
+          console.log('User info stored in sessionStorage:', userInfo);
           
           // Call the onLogin callback with the token
           onLogin(data.token);

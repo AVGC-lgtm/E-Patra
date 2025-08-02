@@ -30,7 +30,7 @@ const AllLetters = () => {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setError('Please login first');
         navigate('/login');
@@ -55,7 +55,7 @@ const AllLetters = () => {
       // Handle authentication errors
       if (err.response?.status === 401) {
         setError('Authentication failed. Please login again.');
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         navigate('/login');
         return;
       }
@@ -82,7 +82,7 @@ const AllLetters = () => {
 
   const handleDownload = async (filePath, originalName) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setError('Please login first');
         navigate('/login');
@@ -111,7 +111,7 @@ const AllLetters = () => {
       // Handle authentication errors
       if (error.response?.status === 401) {
         setError('Authentication failed. Please login again.');
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         navigate('/login');
         return;
       }

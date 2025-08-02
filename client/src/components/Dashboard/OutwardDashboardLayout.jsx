@@ -23,7 +23,7 @@ const OutwardDashboardLayout = ({ children, onLogout }) => {
   ];
 
   // Get user info from localStorage
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+      const userInfo = JSON.parse(sessionStorage.getItem('userInfo') || '{}');
 
   // Toggle mobile sidebar
   const toggleMobileSidebar = () => {

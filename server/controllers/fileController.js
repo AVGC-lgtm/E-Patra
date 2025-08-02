@@ -249,133 +249,239 @@ const convertMarathiToEnglish = (text) => {
     return text.replace(/[०-९]/g, (match) => marathiToEnglish[match] || match);
 };
 
-// Enhanced function to extract receipt date dynamically
-const extractReceiptDate = (text) => {
-    const textWithEnglishDigits = convertMarathiToEnglish(text);
-    const combinedText = text + ' ' + textWithEnglishDigits;
 
-    console.log('Searching for receipt date in text...');
 
-    // Comprehensive patterns for receipt date extraction
-    const receiptDatePatterns = [
-        // Marathi patterns for receipt date
-        /प्राप्त\s*झाल्याचा\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /प्राप्त\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /मिळाल्याचा\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /येत\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /आले\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /प्राप्ती\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /इनवर्ड\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
 
-        // English patterns
-        /received\s*on[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /received\s*date[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /receipt\s*date[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /date\s*received[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
 
-        // Diary date patterns (often receipt date in government offices)
-        /डायरी\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /diary\s*date[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /diarised\s*date[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /diarised\s*by[:\s]*.*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
 
-        // Date in format like "15 OCT 2024", "21 MAR 2025" etc.
-        /(\d{1,2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+\d{4})/gi,
-
-        // Marathi month patterns
-        /(\d{1,2}\s+(?:जानेवारी|फेब्रुवारी|मार्च|एप्रिल|मे|जून|जुलै|ऑगस्ट|सप्टेंबर|ऑक्टोबर|नोव्हेंबर|डिसेंबर)\s+\d{4})/gi,
-
-        // Office stamp date patterns
-        /दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-
-        // General patterns that could be receipt date
-        /प्राप्त.*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /received.*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-
-        // Date patterns with specific context
-        /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}).*प्राप्त/gi,
-        /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}).*received/gi,
-
-        // Stamp date patterns
-        /स्टॅम्प.*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
-        /stamp.*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi
-    ];
-
-    // Try to find receipt date
-    for (const pattern of receiptDatePatterns) {
-        const matches = combinedText.match(pattern);
-        if (matches) {
-            for (const match of matches) {
-                // Extract date part from match
-                const dateMatch = match.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
-                if (dateMatch) {
-                    const extractedDate = dateMatch[1].trim();
-                    // Validate year (should be reasonable - 2020-2030)
-                    if (extractedDate.match(/20[2-3]\d/)) {
-                        console.log('Found receipt date:', extractedDate);
-                        return extractedDate;
-                    }
-                }
-
-                // Handle month format dates like "15 OCT 2024"
-                const monthMatch = match.match(/(\d{1,2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+\d{4})/i);
-                if (monthMatch) {
-                    console.log('Found receipt date (month format):', monthMatch[1]);
-                    return monthMatch[1];
-                }
-            }
-        }
-    }
-
-    console.log('No receipt date found in PDF');
-    return '';
-};
-
-// FIXED Enhanced function to extract sender names and designations from document text
+// Enhanced function to extract sender names and designations from document text
 function extractSenderNameAndDesignation(text) {
     console.log('Starting enhanced sender extraction...');
 
     // Look for sender patterns at the end of the document
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    
-    // Search from the bottom up for signature patterns
-    const lastSection = lines.slice(-15); // Last 15 lines
-    
+
+    // Search from the bottom up for signature patterns - increased range
+    const lastSection = lines.slice(-25); // Last 25 lines to capture more signature area
+
     let bestMatch = {
         name: '',
         designation: '',
         confidence: 0
     };
 
-    // Pattern 1: Look for "आपला विश्वासू" followed by name on next line
+    // Pattern 1: Look for name in parentheses followed by designation
+    // This handles patterns like: (स.म.सालमे) followed by कक्ष अधिकारी, यूजी विभाग, महाराष्ट्र शासन
     for (let i = 0; i < lastSection.length - 1; i++) {
-        const currentLine = lastSection[i].toLowerCase();
+        const currentLine = lastSection[i];
         const nextLine = lastSection[i + 1];
-        
-        if (currentLine.includes('आपला') && currentLine.includes('विश्वासू')) {
-            // Check if next line has a name
-            const cleanNextLine = nextLine.replace(/[()[\]{}]/g, '').trim();
-            
-            // Skip if it's just signature phrase repetition
-            if (!cleanNextLine.toLowerCase().includes('विश्वासू') && 
-                !cleanNextLine.toLowerCase().includes('आपला') &&
-                cleanNextLine.length > 3) {
-                
+
+        // Look for name in parentheses pattern like (स.म.सालमे)
+        const nameInParentheses = currentLine.match(/^\([^\)]+\)$/);
+        if (nameInParentheses) {
+            const extractedName = nameInParentheses[0].replace(/[\(\)]/g, '').trim();
+
+            // Check if next line has designation keywords
+            if (nextLine && (
+                nextLine.includes('अधिकारी') ||
+                nextLine.includes('विभाग') ||
+                nextLine.includes('शासन') ||
+                nextLine.includes('कार्यालय') ||
+                nextLine.includes('संचालक') ||
+                nextLine.includes('अधीक्षक') ||
+                nextLine.includes('आयुक्त') ||
+                nextLine.includes('Officer') ||
+                nextLine.includes('Commissioner') ||
+                nextLine.includes('Superintendent')
+            )) {
                 bestMatch = {
-                    name: cleanNextLine,
-                    designation: '',
-                    confidence: 5
+                    name: extractedName,
+                    designation: nextLine.trim(),
+                    confidence: 8
                 };
                 break;
             }
         }
     }
 
-    // Pattern 2: Look for name patterns in signature area
+    // Pattern 2: Look for "आपला विश्वासू" followed by name on next line
+    if (bestMatch.confidence === 0) {
+        for (let i = 0; i < lastSection.length - 1; i++) {
+            const currentLine = lastSection[i].toLowerCase();
+            const nextLine = lastSection[i + 1];
+
+            if ((currentLine.includes('आपला') && currentLine.includes('विश्वासू')) ||
+                currentLine.includes('आपला,') ||
+                currentLine.includes('yours faithfully') ||
+                currentLine.includes('sincerely')) {
+
+                // Check if next line has a name (skip if it's just signature phrase repetition)
+                const cleanNextLine = nextLine.replace(/[()[\]{}]/g, '').trim();
+
+                if (!cleanNextLine.toLowerCase().includes('विश्वासू') &&
+                    !cleanNextLine.toLowerCase().includes('आपला') &&
+                    cleanNextLine.length > 3) {
+
+                    bestMatch = {
+                        name: cleanNextLine,
+                        designation: '',
+                        confidence: 6
+                    };
+                    break;
+                }
+            }
+        }
+    }
+
+    // Pattern 3: Look for signature with designation patterns in same line or nearby
+    if (bestMatch.confidence < 6) {
+        const signaturePatterns = [
+            // Enhanced patterns for government officers with multiple designation formats
+            {
+                pattern: /(?:कक्ष\s*अधिकारी|Office\s*Officer)[,\s]*([^\n\r]+)/gi,
+                designation: 'कक्ष अधिकारी'
+            },
+            {
+                pattern: /(?:पोलिस\s*अधीक्षक|Superintendent\s*of\s*Police)[,\s]*([^\n\r]+)/gi,
+                designation: 'पोलिस अधीक्षक'
+            },
+            {
+                pattern: /(?:जिल्हाधिकारी|District\s*Collector)[,\s]*([^\n\r]+)/gi,
+                designation: 'जिल्हाधिकारी'
+            },
+            {
+                pattern: /(?:पोलिस\s*आयुक्त|Police\s*Commissioner)[,\s]*([^\n\r]+)/gi,
+                designation: 'पोलिस आयुक्त'
+            },
+            {
+                pattern: /(?:अप्पर\s*पोलिस\s*अधीक्षक|Additional\s*SP)[,\s]*([^\n\r]+)/gi,
+                designation: 'अप्पर पोलिस अधीक्षक'
+            },
+            {
+                pattern: /(?:विभागीय\s*आयुक्त|Divisional\s*Commissioner)[,\s]*([^\n\r]+)/gi,
+                designation: 'विभागीय आयुक्त'
+            },
+            {
+                pattern: /(?:Deputy\s*Commander)[,\s]*([^\n\r]+)/gi,
+                designation: 'Deputy Commander'
+            },
+            {
+                pattern: /(?:Colonel)[,\s]*([^\n\r]+)/gi,
+                designation: 'Colonel'
+            },
+            {
+                pattern: /(?:Inspector)[,\s]*([^\n\r]+)/gi,
+                designation: 'Inspector'
+            },
+            {
+                pattern: /(?:संचालक|Director)[,\s]*([^\n\r]+)/gi,
+                designation: 'संचालक'
+            },
+            {
+                pattern: /(?:सहायक|Assistant)[,\s]*([^\n\r]+)/gi,
+                designation: 'सहायक'
+            }
+        ];
+
+        for (const patternInfo of signaturePatterns) {
+            const matches = text.match(patternInfo.pattern);
+            if (matches) {
+                for (const match of matches) {
+                    // Extract name from the match
+                    let extractedName = match.replace(patternInfo.pattern, '').trim();
+                    extractedName = extractedName.replace(/[()[\]{}]/g, '').replace(/\s+/g, ' ').trim();
+
+                    if (extractedName.length > 3 && extractedName.length < 50) {
+                        bestMatch = {
+                            name: extractedName,
+                            designation: patternInfo.designation,
+                            confidence: 5
+                        };
+                        break;
+                    }
+                }
+            }
+            if (bestMatch.confidence > 0) break;
+        }
+    }
+
+    // Pattern 4: Look for names before designations (reverse pattern)
+    if (bestMatch.confidence < 5) {
+        const reversePatterns = [
+            /([A-Za-z\u0900-\u097F\s\.]+)\s*[-\(\s]*(?:कक्ष\s*अधिकारी)/gi,
+            /([A-Za-z\u0900-\u097F\s\.]+)\s*[-\(\s]*(?:पोलिस\s*अधीक्षक|Superintendent\s*of\s*Police)/gi,
+            /([A-Za-z\u0900-\u097F\s\.]+)\s*[-\(\s]*(?:जिल्हाधिकारी|District\s*Collector)/gi,
+            /([A-Za-z\u0900-\u097F\s\.]+)\s*[-\(\s]*(?:Colonel|Inspector)/gi,
+            /([A-Za-z\u0900-\u097F\s\.]+)\s*[-\(\s]*(?:संचालक|Director)/gi
+        ];
+
+        for (const pattern of reversePatterns) {
+            const matches = text.match(pattern);
+            if (matches) {
+                for (const match of matches) {
+                    let extractedName = match.replace(pattern, '$1').trim();
+                    extractedName = extractedName.replace(/[()[\]{}]/g, '').replace(/\s+/g, ' ').trim();
+
+                    let designation = '';
+                    if (match.includes('कक्ष अधिकारी')) designation = 'कक्ष अधिकारी';
+                    else if (match.includes('पोलिस अधीक्षक') || match.includes('Superintendent')) designation = 'पोलिस अधीक्षक';
+                    else if (match.includes('जिल्हाधिकारी') || match.includes('District Collector')) designation = 'जिल्हाधिकारी';
+                    else if (match.includes('Colonel')) designation = 'Colonel';
+                    else if (match.includes('Inspector')) designation = 'Inspector';
+                    else if (match.includes('संचालक') || match.includes('Director')) designation = 'संचालक';
+
+                    if (extractedName.length > 3 && extractedName.length < 50) {
+                        bestMatch = {
+                            name: extractedName,
+                            designation: designation,
+                            confidence: 4
+                        };
+                        break;
+                    }
+                }
+            }
+            if (bestMatch.confidence > 0) break;
+        }
+    }
+
+    // Pattern 5: Look for initials pattern like स.म.सालमे (common in Marathi names)
+    if (bestMatch.confidence < 4) {
+        for (const line of lastSection) {
+            const cleanLine = line.trim();
+
+            // Look for Marathi initials pattern (स.म.सालमे type)
+            const initialsPattern = /([अ-ह]\.[अ-ह]\.[अ-ह][क-ह]+)/g;
+            const initialsMatch = cleanLine.match(initialsPattern);
+
+            if (initialsMatch) {
+                bestMatch = {
+                    name: initialsMatch[0],
+                    designation: '',
+                    confidence: 3
+                };
+                break;
+            }
+
+            // Look for English initials pattern (A.B.Sharma type)
+            const englishInitialsPattern = /([A-Z]\.[A-Z]\.[A-Za-z]+)/g;
+            const englishInitialsMatch = cleanLine.match(englishInitialsPattern);
+
+            if (englishInitialsMatch) {
+                bestMatch = {
+                    name: englishInitialsMatch[0],
+                    designation: '',
+                    confidence: 3
+                };
+                break;
+            }
+        }
+    }
+
+    // Pattern 6: Look for name-like patterns in signature area (fallback)
     if (bestMatch.confidence === 0) {
         for (const line of lastSection.reverse()) {
             const cleanLine = line.trim();
-            
+
             // Skip common words and short lines
             if (cleanLine.length < 5 ||
                 /^(date|place|copy|to|from|subject|ref|page|\d+|आपला|विश्वासू|your|faithfully|sincerely)$/i.test(cleanLine)) {
@@ -385,54 +491,18 @@ function extractSenderNameAndDesignation(text) {
             // Look for name-like patterns (multiple words, proper case)
             if (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)+$/i.test(cleanLine) ||
                 /^[अ-ह][क-ह]+(\s+[अ-ह][क-ह]+)+$/i.test(cleanLine)) {
-                
+
                 bestMatch = {
                     name: cleanLine,
                     designation: '',
-                    confidence: 3
+                    confidence: 2
                 };
                 break;
             }
         }
     }
 
-    // Pattern 3: Look for official designations with names
-    if (bestMatch.confidence < 3) {
-        const designationPatterns = [
-            { pattern: /(?:colonel|कर्नल)[\s\n]*([^\n]+)/gi, designation: 'Colonel' },
-            { pattern: /(?:inspector|निरीक्षक)[\s\n]*([^\n]+)/gi, designation: 'Inspector' },
-            { pattern: /(?:superintendent|अधीक्षक)[\s\n]*([^\n]+)/gi, designation: 'Superintendent' },
-            { pattern: /deputy\s*commander[\s\n]*([^\n]+)/gi, designation: 'Deputy Commander' },
-            { pattern: /(?:संचालक|director)[\s\n]*([^\n]+)/gi, designation: 'Director' },
-            { pattern: /(?:सहायक|assistant)[\s\n]*([^\n]+)/gi, designation: 'Assistant' }
-        ];
-
-        for (const patternInfo of designationPatterns) {
-            const matches = text.match(patternInfo.pattern);
-            if (matches) {
-                for (const match of matches) {
-                    const parts = match.split(/[\s\n]+/);
-                    if (parts.length > 1) {
-                        const extractedName = parts.slice(1).join(' ').trim()
-                            .replace(/[()[\]{}]/g, '')
-                            .replace(/\s+/g, ' ');
-
-                        if (extractedName.length > 3) {
-                            bestMatch = {
-                                name: extractedName,
-                                designation: patternInfo.designation,
-                                confidence: 4
-                            };
-                            break;
-                        }
-                    }
-                }
-            }
-            if (bestMatch.confidence > 0) break;
-        }
-    }
-
-    // Format the final result
+    // Format the response
     let result = bestMatch.name;
     if (bestMatch.designation && bestMatch.designation.trim()) {
         result = `${bestMatch.name} - ${bestMatch.designation}`;
@@ -448,6 +518,36 @@ function extractSenderNameAndDesignation(text) {
         confidence: bestMatch.confidence
     };
 }
+
+// Test function specifically for the signature pattern you showed
+function testSignatureExtraction() {
+    const testText = `
+    आपला,
+    (स.म.सालमे)
+    कक्ष अधिकारी, यूजी विभाग, महाराष्ट्र शासन
+    `;
+
+    const result = extractSenderNameAndDesignation(testText);
+    console.log('Test Result:', result);
+
+    // Expected: name = "स.म.सालमे", designation = "कक्ष अधिकारी, यूजी विभाग, महाराष्ट्र शासन"
+    return result;
+}
+
+// Additional patterns for common Marathi government signatures
+const marathiSignaturePatterns = {
+    // Pattern for initials in parentheses followed by designation
+    initialsWithDesignation: /\(([अ-ह]\.[अ-ह]\.[अ-ह][क-ह]+)\)\s*\n\s*([^\n]+(?:अधिकारी|विभाग|शासन|कार्यालय)[^\n]*)/gi,
+
+    // Pattern for English initials in parentheses
+    englishInitialsWithDesignation: /\(([A-Z]\.[A-Z]\.[A-Za-z]+)\)\s*\n\s*([^\n]+(?:Officer|Department|Government|Office)[^\n]*)/gi,
+
+    // Pattern for full names in parentheses
+    fullNameWithDesignation: /\(([अ-ह][क-ह\s]+)\)\s*\n\s*([^\n]+(?:अधिकारी|विभाग|शासन)[^\n]*)/gi,
+
+    // Pattern for आपला followed by name in parentheses
+    aaplaWithParentheses: /आपला[,\s]*\n\s*\(([^\)]+)\)\s*\n\s*([^\n]+)/gi
+};
 
 // Enhanced function specifically for the existing codebase
 function extractSenderWithMultipleApproaches(text) {
@@ -465,124 +565,6 @@ function extractSenderWithMultipleApproaches(text) {
     return '';
 }
 
-// Enhanced function to extract outward letter number dynamically
-const extractOutwardLetterNumber = (text) => {
-    console.log('Searching for outward letter number...');
-
-    const textWithEnglishDigits = convertMarathiToEnglish(text);
-    const combinedText = text + ' ' + textWithEnglishDigits;
-
-    const outwardLetterPatterns = [
-        // Marathi patterns
-        /जावक\s*पत्र\s*क्रमांक[:\s]*([A-Z0-9\/\-\u0900-\u097F]+)/gi,
-        /जावक\s*क्रमांक[:\s]*([A-Z0-9\/\-\u0900-\u097F]+)/gi,
-        /बाह्य\s*पत्र\s*क्रमांक[:\s]*([A-Z0-9\/\-\u0900-\u097F]+)/gi,
-
-        // English patterns
-        /outward\s*letter\s*number[:\s]*([A-Z0-9\/\-]+)/gi,
-        /outward\s*no[:\s\.]*([A-Z0-9\/\-]+)/gi,
-        /reference\s*no[:\s\.]*([A-Z0-9\/\-]+)/gi,
-        /letter\s*ref[:\s\.]*([A-Z0-9\/\-]+)/gi,
-        /ref[:\s\.]*([A-Z0-9\/\-]{3,20})/gi,
-
-        // Government file number patterns
-        /([A-Z]{1,6}\/[0-9]{1,8}\/[0-9]{4})/g,
-        /([0-9]{1,6}\/[A-Z0-9]{1,8}\/[0-9]{4})/g,
-        /(DESK-\d+[A-Z\-]*)/gi,
-        /(DGPMS)/gi,
-        /(COLAHM[A-Z0-9\-\/]*)/gi,
-
-        // Receipt and complaint numbers
-        /(?:Receipt\s*No|Receipt\s*Number)[:\s\.]*([A-Z0-9\/\-]{3,25})/gi,
-        /(?:Comp\.\s*No|Complaint\s*No)[:\s\.]*([A-Z0-9\/\-]{3,25})/gi,
-
-        // Common number patterns with context
-        /(?:No\.|क्र\.|क्रमांक|Number)[:\s]*([A-Z0-9\/\-]{3,25})/gi,
-
-        // File reference patterns
-        /File\s*No[:\s\.]*([A-Z0-9\/\-]{3,25})/gi,
-        /फाइल\s*क्र[:\s]*([A-Z0-9\/\-\u0900-\u097F]{3,25})/gi,
-
-        // Letter number patterns
-        /Letter\s*No[:\s\.]*([A-Z0-9\/\-]{3,25})/gi,
-        /पत्र\s*क्रमांक[:\s]*([A-Z0-9\/\-\u0900-\u097F]{3,25})/gi,
-
-        // Office specific patterns
-        /(HQ\s*\d+[A-Z0-9\s]*)/gi,
-        /(\d+\/[A-Z]+\/\d+)/g,
-
-        // FIR and case numbers
-        /(FIR\s*No[:\s\.]*[A-Z0-9\/\-]{3,20})/gi,
-        /(Case\s*No[:\s\.]*[A-Z0-9\/\-]{3,20})/gi,
-
-        // NCR patterns
-        /(NCR\s*No[:\s\.]*[A-Z0-9\/\-]{3,20})/gi,
-
-        // Communication reference patterns
-        /([A-Z]{2,6}\-[0-9]{2,8})/g,
-        /([0-9]{3,8}\/[0-9]{4})/g
-    ];
-
-    let bestMatch = '';
-    let maxScore = 0;
-
-    for (const pattern of outwardLetterPatterns) {
-        const matches = combinedText.match(pattern);
-        if (matches && matches.length > 0) {
-            for (const match of matches) {
-                // Extract the alphanumeric part
-                let numberPart = '';
-                if (match.includes(':') || match.includes('.')) {
-                    const parts = match.split(/[:.]/);
-                    numberPart = parts[parts.length - 1].trim();
-                } else {
-                    const numberMatch = match.match(/([A-Z0-9\/\-\u0900-\u097F]{3,25})/);
-                    if (numberMatch) {
-                        numberPart = numberMatch[1];
-                    }
-                }
-
-                if (numberPart && numberPart.length >= 3) {
-                    // Score based on patterns that typically indicate official numbers
-                    let score = 0;
-
-                    // Higher score for patterns with slashes (common in govt docs)
-                    if (numberPart.includes('/')) score += 3;
-
-                    // Higher score for patterns with specific keywords
-                    if (match.toLowerCase().includes('outward')) score += 5;
-                    if (match.toLowerCase().includes('ref')) score += 4;
-                    if (match.toLowerCase().includes('letter')) score += 4;
-                    if (match.toLowerCase().includes('जावक')) score += 5;
-
-                    // Higher score for government office patterns
-                    if (numberPart.includes('DESK')) score += 4;
-                    if (numberPart.includes('DGPMS')) score += 4;
-                    if (numberPart.includes('COLAHM')) score += 4;
-
-                    // Higher score for year patterns
-                    if (numberPart.match(/20[2-3]\d/)) score += 2;
-
-                    // Prefer longer, more structured numbers
-                    if (numberPart.length > 10) score += 1;
-
-                    if (score > maxScore) {
-                        maxScore = score;
-                        bestMatch = numberPart.trim();
-                    }
-                }
-            }
-        }
-    }
-
-    if (bestMatch) {
-        console.log('Found outward letter number:', bestMatch);
-        return bestMatch;
-    }
-
-    console.log('No outward letter number found');
-    return '';
-};
 
 // Function to determine letter classification and type based on content
 const determineLetterClassificationAndType = (text) => {
@@ -710,8 +692,272 @@ const extractMobileNumbers = (text) => {
     console.log('No mobile numbers found');
     return '';
 };
+// Enhanced function to extract receipt date dynamically
+const extractReceiptDate = (text) => {
+    const textWithEnglishDigits = convertMarathiToEnglish(text);
+    const combinedText = text + ' ' + textWithEnglishDigits;
 
-// Main function to extract structured data dynamically
+    console.log('Searching for receipt date in text...');
+
+    // Comprehensive patterns for receipt date extraction - ORDERED BY PRIORITY
+    const receiptDatePatterns = [
+        // HIGHEST PRIORITY - Explicit receipt date patterns
+        /प्राप्त\s*झाल्याचा\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /प्राप्त\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /मिळाल्याच[ाे]\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /पत्र\s*मिळाल्याचा\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /येत\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /आले\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /प्राप्ती\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        
+        // English explicit patterns
+        /received\s*on[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /received\s*date[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /receipt\s*date[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /date\s*received[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+
+        // HIGH PRIORITY - Office processing dates
+        /डायरी\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /diary\s*date[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /diarised\s*date[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /diarised\s*by[:\s]*.*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /इनवर्ड\s*दिनांक[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /inward\s*date[:\s]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+
+        // MEDIUM PRIORITY - Context-based patterns
+        /प्राप्त.*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /received.*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /मिळाल[ाे].*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}).*प्राप्त/gi,
+        /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}).*received/gi,
+        /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}).*मिळाल[ाे]/gi,
+
+        // LOWER PRIORITY - Date formats with context
+        /(\d{1,2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+\d{4})/gi,
+        /(\d{1,2}\s+(?:जानेवारी|फेब्रुवारी|मार्च|एप्रिल|मे|जून|जुलै|ऑगस्ट|सप्टेंबर|ऑक्टोबर|नोव्हेंबर|डिसेंबर)\s+\d{4})/gi,
+
+        // LOWEST PRIORITY - Stamp dates
+        /stamp.*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi,
+        /स्टॅम्प.*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/gi
+    ];
+
+    let bestMatch = '';
+    let maxScore = 0;
+
+    for (let i = 0; i < receiptDatePatterns.length; i++) {
+        const pattern = receiptDatePatterns[i];
+        const matches = combinedText.match(pattern);
+        
+        if (matches) {
+            for (const match of matches) {
+                // Extract date part from match
+                const dateMatch = match.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})/);
+                if (dateMatch) {
+                    const extractedDate = dateMatch[1].trim();
+                    
+                    // Validate year (should be reasonable - 2020-2030)
+                    if (extractedDate.match(/20[2-3]\d/)) {
+                        let score = 0;
+                        
+                        // Score based on pattern priority (earlier patterns get higher base scores)
+                        score = 100 - i; // First pattern gets 100, second gets 99, etc.
+                        
+                        // Additional scoring for specific keywords
+                        if (match.toLowerCase().includes('प्राप्त') && match.toLowerCase().includes('दिनांक')) score += 50;
+                        if (match.toLowerCase().includes('मिळाल') && match.toLowerCase().includes('दिनांक')) score += 45;
+                        if (match.toLowerCase().includes('received') && match.toLowerCase().includes('date')) score += 40;
+                        if (match.toLowerCase().includes('डायरी') && match.toLowerCase().includes('दिनांक')) score += 35;
+                        if (match.toLowerCase().includes('इनवर्ड') && match.toLowerCase().includes('दिनांक')) score += 30;
+                        
+                        // Penalty for generic patterns
+                        if (match.toLowerCase().includes('stamp') || match.toLowerCase().includes('स्टॅम्प')) score -= 20;
+                        
+                        if (score > maxScore) {
+                            maxScore = score;
+                            bestMatch = extractedDate;
+                            console.log(`Found receipt date candidate: ${extractedDate} with score: ${score} from pattern: ${match}`);
+                        }
+                    }
+                }
+
+                // Handle month format dates like "15 OCT 2024"
+                const monthMatch = match.match(/(\d{1,2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+\d{4})/i);
+                if (monthMatch && maxScore < 50) {
+                    bestMatch = monthMatch[1];
+                    maxScore = 30;
+                    console.log(`Found receipt date (month format): ${monthMatch[1]}`);
+                }
+            }
+        }
+    }
+
+    if (bestMatch) {
+        console.log('Final receipt date selected:', bestMatch);
+        return bestMatch;
+    }
+
+    console.log('No receipt date found in PDF');
+    return '';
+};
+
+// Enhanced function to extract outward letter number dynamically
+const extractOutwardLetterNumber = (text) => {
+    console.log('Searching for outward letter number...');
+
+    const textWithEnglishDigits = convertMarathiToEnglish(text);
+    const combinedText = text + ' ' + textWithEnglishDigits;
+
+    const outwardLetterPatterns = [
+        // HIGHEST PRIORITY - Explicit Marathi जावक patterns
+        /जावक\s*पत्र\s*क्रमांक[:\s]*([A-Z0-9\/\-\u0900-\u097F\.]+)/gi,
+        /जावक\s*क्रमांक[:\s]*([A-Z0-9\/\-\u0900-\u097F\.]+)/gi,
+        /प्राप्त\s*पत्राचा\s*जावक\s*क्रमांक[:\s]*([A-Z0-9\/\-\u0900-\u097F\.]+)/gi,
+        /बाह्य\s*पत्र\s*क्रमांक[:\s]*([A-Z0-9\/\-\u0900-\u097F\.]+)/gi,
+
+        // VERY HIGH PRIORITY - Marathi office number patterns (क्र., क्रमांक)
+        /क्र\.\s*([A-Z0-9\u0900-\u097F][A-Z0-9\u0900-\u097F\/\-\.]+)/gi,
+        /क्रमांक[:\s]*([A-Z0-9\u0900-\u097F][A-Z0-9\u0900-\u097F\/\-\.]+)/gi,
+        /क्रमांक\s*:\s*([A-Z0-9\u0900-\u097F][A-Z0-9\u0900-\u097F\/\-\.]+)/gi,
+
+        // HIGH PRIORITY - Government office patterns with specific structure
+        /([A-Z\u0900-\u097F]{3,}[०-९\d]{3,}\/[A-Z\u0900-\u097F\.]{2,}[०-९\d]+\/[A-Z\u0900-\u097F\-०-९\d]+)/g,
+        /([A-Z\u0900-\u097F]+[०-९\d]+\/[A-Z\u0900-\u097F\.]{2,}[०-९\d]+\/[०-९\d]{4})/g,
+        /(तकर[०-९\d]+\/[A-Z\u0900-\u097F\.]{2,}[०-९\d]+\/[A-Z\u0900-\u097F\-०-९\d]+)/gi,
+        /(चितरमय[०-९\d]+\/[A-Z\u0900-\u097F\.]{2,}[०-९\d]+\/[A-Z\u0900-\u097F\-०-९\d]+)/gi,
+        /(दि\.ची\.कार्य[A-Z0-9\u0900-\u097F\-\/]+)/gi,
+
+        // HIGH PRIORITY - English outward patterns
+        /outward\s*letter\s*number[:\s]*([A-Z0-9\/\-]+)/gi,
+        /outward\s*no[:\s\.]*([A-Z0-9\/\-]+)/gi,
+        /outgoing\s*letter\s*no[:\s\.]*([A-Z0-9\/\-]+)/gi,
+
+        // MEDIUM PRIORITY - Structured government patterns
+        /([A-Z]{2,6}\/[0-9]{3,8}\/[0-9]{4})/g,
+        /(DESK-\d+[A-Z\-]*\/[0-9]{4})/gi,
+        /(DGPMS[A-Z0-9\-\/]+\/[0-9]{4})/gi,
+        /(COLAHM[A-Z0-9\-\/]+\/[0-9]{4})/gi,
+        /(HQ\s*[0-9]+[A-Z0-9\s\/\-]+\/[0-9]{4})/gi,
+
+        // LOWER PRIORITY - Generic reference patterns (only substantial ones)
+        /reference\s*no[:\s\.]*([A-Z0-9\/\-]{8,25})/gi,
+        /letter\s*ref[:\s\.]*([A-Z0-9\/\-]{8,25})/gi,
+        /File\s*No[:\s\.]*([A-Z0-9\/\-]{8,25})/gi,
+        /फाइल\s*क्र[:\s]*([A-Z0-9\/\-\u0900-\u097F]{8,25})/gi,
+        /Letter\s*No[:\s\.]*([A-Z0-9\/\-]{8,25})/gi,
+        /पत्र\s*क्रमांक[:\s]*([A-Z0-9\/\-\u0900-\u097F]{8,25})/gi,
+    ];
+
+    let bestMatch = '';
+    let maxScore = 0;
+
+    for (let i = 0; i < outwardLetterPatterns.length; i++) {
+        const pattern = outwardLetterPatterns[i];
+        const matches = combinedText.match(pattern);
+        
+        if (matches && matches.length > 0) {
+            for (const match of matches) {
+                let numberPart = '';
+                
+                // Extract the alphanumeric part
+                if (match.includes(':') && !match.includes('क्र.')) {
+                    const parts = match.split(/[:]/);
+                    numberPart = parts[parts.length - 1].trim();
+                } else if (match.includes('क्र.')) {
+                    // Handle क्र. patterns specially
+                    const krMatch = match.match(/क्र\.\s*([A-Z0-9\u0900-\u097F][A-Z0-9\u0900-\u097F\/\-\.]+)/);
+                    if (krMatch) {
+                        numberPart = krMatch[1].trim();
+                    }
+                } else if (match.includes('क्रमांक')) {
+                    // Handle क्रमांक patterns
+                    const kramankMatch = match.match(/क्रमांक[:\s]*([A-Z0-9\u0900-\u097F][A-Z0-9\u0900-\u097F\/\-\.]+)/);
+                    if (kramankMatch) {
+                        numberPart = kramankMatch[1].trim();
+                    }
+                } else {
+                    // Direct pattern match
+                    const numberMatch = match.match(/([A-Z0-9\/\-\u0900-\u097F\.]{4,30})/);
+                    if (numberMatch) {
+                        numberPart = numberMatch[1];
+                    }
+                }
+
+                if (numberPart && numberPart.length >= 4 && numberPart.length <= 60) {
+                    // Skip if it looks like a date (DD/MM/YYYY or similar)
+                    if (numberPart.match(/^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}$/)) {
+                        console.log(`Skipping date-like pattern: ${numberPart}`);
+                        continue;
+                    }
+                    
+                    // Skip if it looks like a phone number
+                    if (numberPart.match(/^\d{10}$/) || numberPart.match(/^\+\d{10,15}$/)) {
+                        console.log(`Skipping phone number pattern: ${numberPart}`);
+                        continue;
+                    }
+                    
+                    // Skip receipt numbers, complaint numbers, etc.
+                    if (match.toLowerCase().includes('receipt') || 
+                        match.toLowerCase().includes('comp.') ||
+                        match.toLowerCase().includes('ncr')) {
+                        console.log(`Skipping receipt/complaint pattern: ${numberPart}`);
+                        continue;
+                    }
+
+                    let score = 0;
+
+                    // Score based on pattern priority (earlier patterns get higher base scores)
+                    score = 300 - (i * 10); // First pattern gets 300, second gets 290, etc.
+
+                    // Additional scoring for specific keywords
+                    if (match.toLowerCase().includes('जावक') && match.toLowerCase().includes('पत्र')) score += 150;
+                    if (match.toLowerCase().includes('जावक') && match.toLowerCase().includes('क्रमांक')) score += 140;
+                    if (match.toLowerCase().includes('प्राप्त') && match.toLowerCase().includes('जावक')) score += 160;
+                    if (match.includes('क्र.')) score += 100; // Marathi abbreviation for number
+                    if (match.includes('क्रमांक')) score += 90; // Marathi word for number
+
+                    // Bonus for Marathi office patterns
+                    if (numberPart.includes('तकर') || numberPart.includes('चितरमय')) score += 80;
+                    if (numberPart.includes('दि.ची.कार्य') || numberPart.includes('कार्य')) score += 70;
+                    if (numberPart.includes('प्र.क्र.') || numberPart.includes('फसल') || numberPart.includes('फोन')) score += 60;
+
+                    // Bonus for government office patterns
+                    if (numberPart.includes('DESK')) score += 40;
+                    if (numberPart.includes('DGPMS')) score += 40;
+                    if (numberPart.includes('COLAHM')) score += 40;
+                    if (numberPart.includes('HQ')) score += 35;
+
+                    // Bonus for structured patterns with slashes and years
+                    if (numberPart.includes('/') && numberPart.match(/20[2-3]\d/)) score += 30;
+                    if (numberPart.includes('/') && numberPart.split('/').length >= 3) score += 25; // Multi-part numbers
+                    if (numberPart.includes('-') && numberPart.length > 10) score += 20;
+
+                    // Bonus for mixed Marathi-English patterns
+                    if (numberPart.match(/[A-Z]/) && numberPart.match(/[\u0900-\u097F]/)) score += 15;
+
+                    // Penalty for very short or very simple patterns
+                    if (numberPart.length < 6) score -= 50;
+                    if (numberPart.match(/^\d+$/)) score -= 40; // Pure numeric
+
+                    if (score > maxScore && score > 80) { // Higher minimum threshold
+                        maxScore = score;
+                        bestMatch = numberPart.trim();
+                        console.log(`Found outward letter candidate: ${numberPart} with score: ${score} from pattern: ${match}`);
+                    }
+                }
+            }
+        }
+    }
+
+    if (bestMatch) {
+        console.log('Final outward letter number selected:', bestMatch);
+        return bestMatch;
+    }
+
+    console.log('No outward letter number found');
+    return '';
+};
+
+// Updated extractStructuredData function
 const extractStructuredData = (text) => {
     // Remove image tags and other markdown, clean the text
     const cleanText = text.replace(/!\[.*?\]\(.*?\)/g, '')
@@ -736,10 +982,10 @@ const extractStructuredData = (text) => {
         numberOfCopies: '' // 11. सह कागद पत्राची संख्या
     };
 
-    // Apply dynamic extractions for the main fields
+    // Apply enhanced extractions for key fields
     result.dateOfReceiptOfLetter = extractReceiptDate(cleanText);
-    result.senderNameAndDesignation = extractSenderWithMultipleApproaches(cleanText);
     result.outwardLetterNumber = extractOutwardLetterNumber(cleanText);
+    result.senderNameAndDesignation = extractSenderWithMultipleApproaches(cleanText);
     result.mobileNumber = extractMobileNumbers(cleanText);
 
     // Extract office sending letter
@@ -808,7 +1054,7 @@ const extractStructuredData = (text) => {
         }
     }
 
-    // Set letter date to today's date
+    // Set letter date to today's date if not found
     result.letterDate = new Date().toLocaleDateString('en-GB');
 
     // Extract letter medium
@@ -1151,5 +1397,9 @@ module.exports = {
     getExtractedData,
     extractStructuredData,
     extractSenderNameAndDesignation,
-    extractSenderWithMultipleApproaches
+    extractSenderWithMultipleApproaches,
+    testSignatureExtraction,
+    marathiSignaturePatterns
 };
+    
+

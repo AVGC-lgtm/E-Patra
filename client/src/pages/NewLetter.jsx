@@ -20,26 +20,26 @@ const NewLetter = () => {
   
   // Get user information on component mount
   useEffect(() => {
-    const storedUserId = localStorage.getItem('userId');
-    const storedUserInfo = localStorage.getItem('userInfo');
+    const storedUserId = sessionStorage.getItem('userId');
+    const storedUserInfo = sessionStorage.getItem('userInfo');
     
     if (storedUserId) {
       setUserId(parseInt(storedUserId));
-      console.log('Found user ID:', storedUserId);
+      console.log('Found user ID from sessionStorage:', storedUserId);
     }
     
     if (storedUserInfo) {
       try {
         const parsedUserInfo = JSON.parse(storedUserInfo);
         setUserInfo(parsedUserInfo);
-        console.log('User info loaded:', parsedUserInfo);
+        console.log('User info loaded from sessionStorage:', parsedUserInfo);
       } catch (error) {
         console.error('Error parsing user info:', error);
       }
     }
     
     if (!storedUserId) {
-      console.warn('No user ID found. User might not be logged in.');
+      console.warn('No user ID found in sessionStorage. User might not be logged in.');
     }
   }, []);
 
@@ -52,7 +52,7 @@ const NewLetter = () => {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         }
       });
       
@@ -460,7 +460,6 @@ const NewLetter = () => {
       'Collector Table': 'कलेक्टर टेबल',
       'Home Table': 'होम टेबल',
       'Shanik Table': 'शैक्षणिक टेबल',
-      'Admin Table': 'प्रशासक टेबल'
     };
     return marathiMap[englishLabel] || englishLabel;
   };
@@ -476,7 +475,7 @@ const NewLetter = () => {
   useEffect(() => {
     const fetchForwardToOptions = async () => {
       try {
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         const response = await axios.get('http://localhost:5000/api/patras/forward-to-options', {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -983,7 +982,7 @@ const NewLetter = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         },
         body: JSON.stringify(jsonPayload)
       });

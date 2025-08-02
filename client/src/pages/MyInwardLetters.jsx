@@ -23,7 +23,7 @@ const MyInwardLetters = () => {
   const fetchMyLetters = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setError(language === 'mr' ? 'कृपया लॉगिन करा' : 'Please login first');
         return;
@@ -33,7 +33,7 @@ const MyInwardLetters = () => {
       const tokenData = JSON.parse(atob(token.split('.')[1]));
       const userId = tokenData.id || tokenData.userId;
 
-      const response = await axios.get('http://localhost:5000/api/patras', {
+      const response = await axios.get(`http://localhost:5000/api/patras/user/${userId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -54,13 +54,8 @@ const MyInwardLetters = () => {
         lettersData = response.data;
       }
       
-      // Filter only letters created by current user
-      const userLetters = lettersData.filter(letter => 
-        letter.userId === userId || letter.User?.id === userId
-      );
-      
       // Sort by createdAt in descending order (newest first)
-      const sortedData = [...userLetters].sort((a, b) => 
+      const sortedData = [...lettersData].sort((a, b) => 
         new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
       );
       
@@ -119,7 +114,7 @@ const MyInwardLetters = () => {
         fileUrl = letter.upload.fileUrl;
       } else if (letter.fileId) {
         // Get file URL from API
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         const response = await fetch(`http://localhost:5000/api/files/${letter.fileId}`, {
           headers: {
             'Authorization': `Bearer ${token}`

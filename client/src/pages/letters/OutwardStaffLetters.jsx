@@ -8,7 +8,7 @@ import axios from 'axios';
 
 // Helper function to get user role from token
 const getUserRole = () => {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   if (!token) return 'outward_staff';
   
   try {
@@ -118,7 +118,7 @@ const OutwardStaffLetters = () => {
 
     setUploading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const formData = new FormData();
       
       // Add all files to form data
@@ -181,7 +181,7 @@ const OutwardStaffLetters = () => {
 
     setClosingCase(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const response = await axios.put(
         `http://localhost:5000/api/patras/${letter.id}/close-case`,
         {},

@@ -380,7 +380,7 @@ const InwardStaffLetters = () => {
   // Function to send letter to HOD for approval
   const sendToHODForApproval = async (letterId) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       if (!token) {
         alert(language === 'mr' ? 
@@ -551,7 +551,7 @@ const InwardStaffLetters = () => {
       
       if (!confirmDelete) return;
       
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       const response = await axios.delete(
         `http://localhost:5000/api/letters/${coveringLetterId}`,
@@ -603,7 +603,7 @@ const InwardStaffLetters = () => {
   const handleGenerateCoveringLetter = async (letter) => {
     try {
       setGeneratingCoveringLetter(true);
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       const generateData = {
         patraId: letter._id || letter.id,
@@ -681,7 +681,7 @@ const InwardStaffLetters = () => {
       // Show loading state
       setUploadingCoveringLetter(true);
       
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const formData = new FormData();
       
       formData.append('coveringLetterFile', file);
@@ -756,7 +756,7 @@ const InwardStaffLetters = () => {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       const response = await axios.get('http://localhost:5000/api/patras', {
         headers: {
@@ -818,8 +818,8 @@ const InwardStaffLetters = () => {
         alert(language === 'mr' ? 
           'आपली सत्र संपली आहे. कृपया पुन्हा लॉगिन करा.' : 
           'Your session has expired. Please login again.');
-        localStorage.removeItem('token');
-        localStorage.removeItem('userInfo');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('userInfo');
         navigate('/login');
         return;
       }
@@ -849,7 +849,7 @@ const InwardStaffLetters = () => {
   // Fetch data on component mount
   useEffect(() => {
     // Check if user is authenticated
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) {
       alert(language === 'mr' ? 
         'कृपया प्रथम लॉगिन करा!' : 
@@ -1048,7 +1048,7 @@ const InwardStaffLetters = () => {
     setSendingReply(true);
     
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       const response = await axios.post(
         'http://localhost:5000/api/imap/reply',
@@ -1561,7 +1561,7 @@ const organizeEmailsInThreadImproved = (emails) => {
                                 
                                 if (!confirmSend) return;
                                 
-                                const token = localStorage.getItem('token');
+                                const token = sessionStorage.getItem('token');
                                 
                                 const response = await axios.put(
                                   `http://localhost:5000/api/patras/${letter._id || letter.id}/send-to-hod`,
@@ -1627,7 +1627,7 @@ const organizeEmailsInThreadImproved = (emails) => {
                               console.log('🔍 Fetching emails for reference:', letter.referenceNumber);
                               
                               // Fetch all emails for this reference number to get complete conversation
-                              const token = localStorage.getItem('token');
+                              const token = sessionStorage.getItem('token');
                               const response = await axios.get(`http://localhost:5000/api/imap/emails/reference/${letter.referenceNumber}`, {
                                 headers: {
                                   'Content-Type': 'application/json',

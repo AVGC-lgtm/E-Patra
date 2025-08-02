@@ -60,7 +60,7 @@ const InwardDashboard = () => {
   const fetchMyLetters = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = getAuthToken();
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setError(language === 'mr' ? 'कृपया लॉगिन करा' : 'Please login first');
         return;
@@ -70,12 +70,11 @@ const InwardDashboard = () => {
       const tokenData = JSON.parse(atob(token.split('.')[1]));
       const userId = tokenData.id || tokenData.userId;
 
-      const response = await axios.get('http://localhost:5000/api/patras', {
+      const response = await axios.get(`http://localhost:5000/api/patras/user/${userId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
         params: {
-          userId: userId, // Filter by current user
           _t: new Date().getTime() // Prevent caching
         }
       });
@@ -92,13 +91,8 @@ const InwardDashboard = () => {
         lettersData = response.data;
       }
       
-      // Filter only letters created by current user
-      const userLetters = lettersData.filter(letter => 
-        letter.userId === userId || letter.User?.id === userId
-      );
-      
       // Sort by createdAt in descending order (newest first)
-      const sortedData = [...userLetters].sort((a, b) => 
+      const sortedData = [...lettersData].sort((a, b) => 
         new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
       );
       

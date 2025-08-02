@@ -13,6 +13,7 @@ const StatCard = ({ title, value, change, icon, color }) => {
     green: 'from-emerald-500 to-teal-600',
     amber: 'from-amber-500 to-orange-500',
     indigo: 'from-indigo-500 to-violet-600',
+    red: 'from-red-500 to-red-600',
   };
 
   return (
@@ -158,6 +159,20 @@ const OutwardDashboard = () => {
       change: 'Signed',
       icon: <FiCheckCircle />,
       color: 'amber'
+    },
+    {
+      title: language === 'mr' ? 'केस बंद' : 'Closed Cases',
+      value: letters.filter(letter => 
+        letter.letterStatus && (
+          letter.letterStatus.toLowerCase().includes('case close') ||
+          letter.letterStatus.toLowerCase().includes('केस बंद') ||
+          letter.letterStatus.toLowerCase().includes('closed') ||
+          letter.inwardPatraClose === true
+        )
+      ).length,
+      change: 'Closed',
+      icon: <FiXCircle />,
+      color: 'red'
     }
   ];
 
@@ -262,7 +277,7 @@ const OutwardDashboard = () => {
 
       {/* Stats Cards */}
       <motion.div 
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-8"
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mt-8"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, staggerChildren: 0.1 }}

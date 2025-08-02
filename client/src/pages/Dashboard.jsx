@@ -55,7 +55,7 @@ const Dashboard = () => {
   const fetchPatras = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const config = token ? {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -126,7 +126,7 @@ const Dashboard = () => {
       if (err.response?.status === 401) {
         setError('Authentication failed. Please login again.');
         // Optionally redirect to login
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         window.location.href = '/login';
         return;
       }
