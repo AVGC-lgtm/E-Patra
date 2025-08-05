@@ -6,6 +6,9 @@ import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
 
 const HODLetters = () => {
+
+  const apiUrl = import.meta.env.VITE_API_URL ;
+
   const navigate = useNavigate();
   const { language } = useLanguage();
   const t = translations[language] || translations['en'];
@@ -110,8 +113,8 @@ const HODLetters = () => {
 
   // Helper function to get user data
   const getUserData = () => {
-    const token = localStorage.getItem('token');
-    const userInfo = localStorage.getItem('userInfo') || localStorage.getItem('user');
+    const token = sessionStorage.getItem('token');
+    const userInfo = sessionStorage.getItem('userInfo') || sessionStorage.getItem('user');
     
     let userData = null;
     
@@ -208,11 +211,11 @@ const HODLetters = () => {
     try {
       console.log('Fetching file URL for ID:', fileId);
       
-      const response = await fetch(`http://localhost:5000/api/files/${fileId}`, {
+      const response = await fetch(`${apiUrl}/api/files/${fileId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         }
       });
       
@@ -316,9 +319,9 @@ const HODLetters = () => {
       console.log('Fetching signatures for user:', user.id);
 
       // Call the new Head signature API
-      const response = await axios.get(`http://localhost:5000/api/head/head-signature/${user.id}`, {
+      const response = await axios.get(`${apiUrl}/api/head/head-signature/${user.id}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         }
       });
       
@@ -392,7 +395,7 @@ const HODLetters = () => {
       // Set loading state for this specific letter
       setResendingLetters(prev => new Set(prev).add(letterId));
       
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       if (!token) {
         alert(language === 'mr' ? 
@@ -411,7 +414,7 @@ const HODLetters = () => {
 
       // Update letter status and forwardTo to send it back to the original table
       const response = await axios.put(
-        `http://localhost:5000/api/patras/${letterId}/resend`,
+        `${apiUrl}/api/patras/${letterId}/resend`,
         {
           newStatus: 'pending', // Set to pending so it appears in the original table
           forwardTo: sourceTable, // Set forwardTo to the original source table
@@ -460,10 +463,10 @@ const HODLetters = () => {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       // Use the specific Head letters endpoint
-      const response = await axios.get('http://localhost:5000/api/patras/head', {
+      const response = await axios.get(`${apiUrl}/api/patras/head`, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -526,9 +529,9 @@ const HODLetters = () => {
         alert(language === 'mr' ? 
           'आपली सत्र संपली आहे. कृपया पुन्हा लॉगिन करा.' : 
           'Your session has expired. Please login again.');
-        localStorage.removeItem('token');
-        localStorage.removeItem('userInfo');
-        localStorage.removeItem('user');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('userInfo');
+        sessionStorage.removeItem('user');
         navigate('/login');
         return;
       }
@@ -544,7 +547,7 @@ const HODLetters = () => {
   // Fetch data on component mount
   useEffect(() => {
     // Check if user is authenticated
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) {
       alert(language === 'mr' ? 
         'कृपया प्रथम लॉगिन करा!' : 
@@ -911,7 +914,7 @@ const HODLetters = () => {
       }
 
       // Get user data from token
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         alert(language === 'mr' ? 'कृपया पुन्हा लॉगिन करा!' : 'Please login again!');
         return;
@@ -931,7 +934,7 @@ const HODLetters = () => {
 
       // Call the new Head signature API
       const response = await axios.post(
-        `http://localhost:5000/api/head/upload-signature/${selectedLetterForCovering.id}`,
+        `${apiUrl}/api/head/upload-signature/${selectedLetterForCovering.id}`,
         {
           userId: userId,
           signaturePosition: 'top-right', // Default position

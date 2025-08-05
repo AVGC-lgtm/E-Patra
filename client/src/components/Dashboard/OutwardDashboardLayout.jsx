@@ -23,7 +23,7 @@ const OutwardDashboardLayout = ({ children, onLogout }) => {
   ];
 
   // Get user info from localStorage
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+      const userInfo = JSON.parse(sessionStorage.getItem('userInfo') || '{}');
 
   // Toggle mobile sidebar
   const toggleMobileSidebar = () => {
@@ -96,10 +96,12 @@ const OutwardDashboardLayout = ({ children, onLogout }) => {
           <div className="flex items-center justify-between mb-8">
             <div className={`transition-opacity duration-300 ${isDesktopSidebarOpen ? 'opacity-100' : 'opacity-0'}`}>
               {isDesktopSidebarOpen && (
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                    <span className="text-blue-600 font-bold text-lg">📤</span>
-                  </div>
+                <div className="flex items-center space-x-4">
+                  <img 
+                    src="/web icon (1).png" 
+                    alt="ई-पत्र Logo" 
+                    className="w-14 h-14 rounded-xl shadow-lg border-2 border-white/20 hover:scale-105 transition-transform duration-200"
+                  />
                   <div>
                     <h1 className="text-xl font-bold">E-Patra</h1>
                     <p className="text-xs text-blue-200">{language === 'mr' ? 'जावक' : 'Outward'}</p>
@@ -203,10 +205,12 @@ const OutwardDashboardLayout = ({ children, onLogout }) => {
         <div className="p-4 h-full flex flex-col">
           {/* Mobile Header */}
           <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                <span className="text-blue-600 font-bold text-lg">📤</span>
-              </div>
+            <div className="flex items-center space-x-4">
+              <img 
+                src="/web icon (1).png" 
+                alt="ई-पत्र Logo" 
+                className="w-14 h-14 rounded-xl shadow-lg border-2 border-white/20 hover:scale-105 transition-transform duration-200"
+              />
               <div>
                 <h1 className="text-xl font-bold">E-Patra</h1>
                 <p className="text-xs text-blue-200">{language === 'mr' ? 'जावक' : 'Outward'}</p>

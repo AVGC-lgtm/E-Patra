@@ -4,6 +4,7 @@ import { FiEye, FiDownload, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink 
 import axios from 'axios';
 import { useLanguage } from '../context/LanguageContext';
 import translations from '../translations';
+const apiUrl = import.meta.env.VITE_API_URL ;
 
 const AllLetters = () => {
   const navigate = useNavigate();
@@ -30,14 +31,14 @@ const AllLetters = () => {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setError('Please login first');
         navigate('/login');
         return;
       }
 
-      const response = await axios.get('http://localhost:5000/api/patras', {
+      const response = await axios.get(`${apiUrl}/api/patras`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -55,7 +56,7 @@ const AllLetters = () => {
       // Handle authentication errors
       if (err.response?.status === 401) {
         setError('Authentication failed. Please login again.');
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         navigate('/login');
         return;
       }
@@ -82,7 +83,7 @@ const AllLetters = () => {
 
   const handleDownload = async (filePath, originalName) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setError('Please login first');
         navigate('/login');
@@ -90,7 +91,7 @@ const AllLetters = () => {
       }
 
       const response = await axios({
-        url: `http://localhost:5000/${filePath.replace(/\\/g, '/')}`,
+        url: `${apiUrl}/${filePath.replace(/\\/g, '/')}`,
         method: 'GET',
         responseType: 'blob',
         headers: {
@@ -111,7 +112,7 @@ const AllLetters = () => {
       // Handle authentication errors
       if (error.response?.status === 401) {
         setError('Authentication failed. Please login again.');
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         navigate('/login');
         return;
       }

@@ -6,13 +6,14 @@ import { getAuthToken } from '../utils/auth';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { FiFileText, FiSend, FiClock, FiCheckCircle, FiXCircle, FiRefreshCw, FiPlus, FiEye, FiChevronUp, FiChevronDown, FiExternalLink } from 'react-icons/fi';
 import { useLanguage } from '../context/LanguageContext';
-
+const apiUrl = import.meta.env.VITE_API_URL ;
 const StatCard = ({ title, value, change, icon, color }) => {
   const colorVariants = {
     blue: 'from-blue-500 to-blue-600',
     green: 'from-emerald-500 to-teal-600',
     amber: 'from-amber-500 to-orange-500',
     indigo: 'from-indigo-500 to-violet-600',
+    red: 'from-red-500 to-red-600',
   };
 
   return (
@@ -75,7 +76,7 @@ const OutwardDashboard = () => {
       
       console.log('User Role:', userRole, 'User Table:', userTable);
 
-      const response = await axios.get('http://localhost:5000/api/patras', {
+      const response = await axios.get(`${apiUrl}/api/patras`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -158,6 +159,20 @@ const OutwardDashboard = () => {
       change: 'Signed',
       icon: <FiCheckCircle />,
       color: 'amber'
+    },
+    {
+      title: language === 'mr' ? 'केस बंद' : 'Closed Cases',
+      value: letters.filter(letter => 
+        letter.letterStatus && (
+          letter.letterStatus.toLowerCase().includes('case close') ||
+          letter.letterStatus.toLowerCase().includes('केस बंद') ||
+          letter.letterStatus.toLowerCase().includes('closed') ||
+          letter.inwardPatraClose === true
+        )
+      ).length,
+      change: 'Closed',
+      icon: <FiXCircle />,
+      color: 'red'
     }
   ];
 
@@ -238,12 +253,24 @@ const OutwardDashboard = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-          {userInfo?.table ? 
-            (language === 'mr' ? `${userInfo.table.toUpperCase()} डॅशबोर्ड` : `${userInfo.table.toUpperCase()} Dashboard`) :
-            (language === 'mr' ? 'जावक डॅशबोर्ड' : 'Outward Dashboard')
-          }
-        </h1>
+        <div className="flex items-center space-x-6 mb-6">
+          <div className="relative">
+            <img 
+              src="/web icon (1).png" 
+              alt="ई-पत्र Logo" 
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl shadow-xl border-4 border-blue-100 hover:scale-110 transition-all duration-300 hover:shadow-2xl"
+            />
+            <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+              <span className="text-white text-xs font-bold">✓</span>
+            </div>
+          </div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            {userInfo?.table ? 
+              (language === 'mr' ? `${userInfo.table.toUpperCase()} डॅशबोर्ड` : `${userInfo.table.toUpperCase()} Dashboard`) :
+              (language === 'mr' ? 'जावक डॅशबोर्ड' : 'Outward Dashboard')
+            }
+          </h1>
+        </div>
         <p className="text-gray-500 mt-1">
           {userInfo?.table ? 
             (language === 'mr' ? `${userInfo.table} टेबलला पाठवलेली पत्रे` : `Letters forwarded to ${userInfo.table} table`) :
@@ -262,7 +289,7 @@ const OutwardDashboard = () => {
 
       {/* Stats Cards */}
       <motion.div 
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-8"
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mt-8"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, staggerChildren: 0.1 }}

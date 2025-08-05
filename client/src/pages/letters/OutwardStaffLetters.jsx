@@ -5,10 +5,10 @@ import translations from '../../translations';
 import { useState } from 'react';
 import { FiUpload, FiX, FiFile, FiTrash2, FiDownload } from 'react-icons/fi';
 import axios from 'axios';
-
+const apiUrl = import.meta.env.VITE_API_URL;
 // Helper function to get user role from token
 const getUserRole = () => {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   if (!token) return 'outward_staff';
   
   try {
@@ -118,7 +118,7 @@ const OutwardStaffLetters = () => {
 
     setUploading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const formData = new FormData();
       
       // Add all files to form data
@@ -130,13 +130,13 @@ const OutwardStaffLetters = () => {
       formData.append('letterId', selectedLetterForUpload.id);
       formData.append('letterReference', selectedLetterForUpload.referenceNumber);
 
-      console.log('Uploading to:', `http://localhost:5000/api/patras/${selectedLetterForUpload.id}/upload-report`);
+      console.log('Uploading to:', `${apiUrl}/api/patras/${selectedLetterForUpload.id}/upload-report`);
       console.log('Token:', token ? 'Present' : 'Missing');
       console.log('Files count:', uploadFiles.length);
       console.log('Letter ID:', selectedLetterForUpload.id);
 
       const response = await axios.post(
-        `http://localhost:5000/api/patras/${selectedLetterForUpload.id}/upload-report`,
+        `${apiUrl}/api/patras/${selectedLetterForUpload.id}/upload-report`,
         formData,
         {
           headers: {
@@ -181,9 +181,9 @@ const OutwardStaffLetters = () => {
 
     setClosingCase(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const response = await axios.put(
-        `http://localhost:5000/api/patras/${letter.id}/close-case`,
+        `${apiUrl}/api/patras/${letter.id}/close-case`,
         {},
         {
           headers: {
@@ -362,7 +362,7 @@ const OutwardStaffLetters = () => {
     <>
     <BaseLetterComponent
       role={userRole}
-      apiEndpoint="http://localhost:5000/api/patras"
+      apiEndpoint={`${apiUrl}/api/patras`}
       additionalColumns={additionalColumns}
     />
 

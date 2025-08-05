@@ -3,6 +3,7 @@ import { FiUpload, FiTrash2, FiEye, FiCheck, FiX, FiDownload } from 'react-icons
 import axios from 'axios';
 import { useLanguage } from '../context/LanguageContext';
 import translations from '../translations';
+const apiUrl = import.meta.env.VITE_API_URL ;
 
 const UploadSign = () => {
   const { language } = useLanguage();
@@ -18,7 +19,7 @@ const UploadSign = () => {
 
   // Get user data from token
   const getUserFromToken = () => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) return null;
     
     try {
@@ -52,9 +53,9 @@ const UploadSign = () => {
       }
 
       // Fetch signature from the database using the same API as HODLetters
-      const response = await axios.get(`http://localhost:5000/api/head/head-signature/${user.userId}`, {
+      const response = await axios.get(`${apiUrl}/api/head/head-signature/${user.userId}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         }
       });
       
@@ -159,10 +160,10 @@ const UploadSign = () => {
       formData.append('userId', user?.userId || user?.id);
 
       // Call the backend API
-      const response = await axios.put('http://localhost:5000/api/auth/update-sign', formData, {
+      const response = await axios.put(`${apiUrl}/api/auth/update-sign`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         }
       });
 
@@ -197,12 +198,12 @@ const UploadSign = () => {
       setError('');
 
       // Call the backend API to delete the signature
-      const response = await axios.delete('http://localhost:5000/api/auth/delete-sign', {
+      const response = await axios.delete(`${apiUrl}/api/auth/delete-sign`, {
         data: {
           userId: user?.userId || user?.id
         },
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         }
       });
 

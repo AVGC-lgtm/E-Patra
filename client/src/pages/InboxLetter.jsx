@@ -4,6 +4,8 @@ import { FiEye, FiDownload, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink,
 import axios from 'axios';
 import { useLanguage } from '../context/LanguageContext';
 import translations from '../translations/index';
+const apiUrl = import.meta.env.VITE_API_URL ;
+
 
 const InboxLetter = () => {
   const navigate = useNavigate();
@@ -118,7 +120,7 @@ const InboxLetter = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await axios.get('http://localhost:5000/api/outward-letters', {
+      const response = await axios.get(`${apiUrl}/api/outward-letters`, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -183,7 +185,7 @@ const InboxLetter = () => {
 
       // Clean up the file path
       const cleanPath = fileData.filePath.replace(/\\/g, '/').replace(/^\/+/, '');
-      const fullUrl = `http://localhost:5000/${cleanPath}`;
+      const fullUrl = `${apiUrl}/${cleanPath}`;
       
       console.log('Attempting to download from:', fullUrl);
       

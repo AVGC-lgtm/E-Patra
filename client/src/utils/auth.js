@@ -1,5 +1,5 @@
 // Authentication utility functions with enhanced security
-
+const apiUrl = import.meta.env.VITE_API_URL ;
 // Check if user has valid session
 export const isValidSession = () => {
   const token = getAuthToken();
@@ -37,7 +37,7 @@ export const validateTokenWithServer = async () => {
   if (!token) return false;
   
   try {
-    const response = await fetch('http://localhost:5000/api/auth/verify', {
+    const response = await fetch(`${apiUrl}/api/auth/verify`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -65,13 +65,13 @@ export const validateTokenWithServer = async () => {
 
 // Authentication utility functions
 export const getAuthToken = () => {
-  // Try sessionStorage first, then localStorage as fallback
-  return sessionStorage.getItem('token') || localStorage.getItem('token');
+  // Use only sessionStorage for tab-specific authentication
+  return sessionStorage.getItem('token');
 };
 
 export const setAuthToken = (token) => {
+  // Store only in sessionStorage to keep sessions tab-specific
   sessionStorage.setItem('token', token);
-  localStorage.setItem('token', token);
   sessionStorage.setItem('sessionActive', 'true');
   sessionStorage.setItem('lastActivity', Date.now().toString());
 };
@@ -80,7 +80,14 @@ export const clearAuthTokens = () => {
   sessionStorage.removeItem('token');
   sessionStorage.removeItem('sessionActive');
   sessionStorage.removeItem('lastActivity');
+  // Also clear localStorage to prevent conflicts
   localStorage.removeItem('token');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('userEmail');
+  localStorage.removeItem('userRole');
+  localStorage.removeItem('userRoleId');
+  localStorage.removeItem('userStation');
+  localStorage.removeItem('userInfo');
 };
 
 export const isSessionActive = () => {

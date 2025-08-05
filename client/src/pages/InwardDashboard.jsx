@@ -5,6 +5,7 @@ import { FiMail, FiFileText, FiClock, FiChevronUp, FiChevronDown, FiRefreshCw, F
 import { motion } from 'framer-motion';
 import { useLanguage } from '../context/LanguageContext';
 import { getAuthToken } from '../utils/auth';
+const apiUrl = import.meta.env.VITE_API_URL ;
 
 const StatCard = ({ title, value, change, icon, color }) => {
   const colorVariants = {
@@ -60,7 +61,7 @@ const InwardDashboard = () => {
   const fetchMyLetters = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = getAuthToken();
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setError(language === 'mr' ? 'कृपया लॉगिन करा' : 'Please login first');
         return;
@@ -70,12 +71,11 @@ const InwardDashboard = () => {
       const tokenData = JSON.parse(atob(token.split('.')[1]));
       const userId = tokenData.id || tokenData.userId;
 
-      const response = await axios.get('http://localhost:5000/api/patras', {
+      const response = await axios.get(`${apiUrl}/api/patras/user/${userId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
         params: {
-          userId: userId, // Filter by current user
           _t: new Date().getTime() // Prevent caching
         }
       });
@@ -92,13 +92,8 @@ const InwardDashboard = () => {
         lettersData = response.data;
       }
       
-      // Filter only letters created by current user
-      const userLetters = lettersData.filter(letter => 
-        letter.userId === userId || letter.User?.id === userId
-      );
-      
       // Sort by createdAt in descending order (newest first)
-      const sortedData = [...userLetters].sort((a, b) => 
+      const sortedData = [...lettersData].sort((a, b) => 
         new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
       );
       
@@ -216,31 +211,41 @@ const InwardDashboard = () => {
     const tableCounts = {};
     const now = new Date();
     
-    // Filter letters based on time period
-    const filteredLetters = lettersData.filter(letter => {
-      if (!letter.createdAt) return false;
-      const letterDate = new Date(letter.createdAt);
-      
-      if (timeFilter === 'daily') {
-        // Show only today's letters
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        letterDate.setHours(0, 0, 0, 0);
-        return letterDate.getTime() === today.getTime();
-      } else if (timeFilter === 'monthly') {
-        // Show letters from current month
-        return letterDate.getMonth() === now.getMonth() && 
-               letterDate.getFullYear() === now.getFullYear();
-      }
-      return true; // Show all letters for other cases
-    });
+    console.log('=== TABLE DISTRIBUTION DEBUG ===');
+    console.log('Total letters received:', lettersData.length);
+    console.log('Current time filter:', timeFilter);
+    console.log('Current date:', now.toISOString());
+    
+    // TEMPORARILY DISABLE TIME FILTERING TO SEE ALL LETTERS
+    const filteredLetters = lettersData; // Show all letters for now
+    
+    console.log('Filtered letters (all letters):', filteredLetters.length);
+    console.log('Sample letters:', filteredLetters.slice(0, 3).map(l => ({
+      id: l.id,
+      forwardTo: l.forwardTo,
+      createdAt: l.createdAt,
+      letterStatus: l.letterStatus
+    })));
     
     filteredLetters.forEach(letter => {
+      console.log('Processing letter:', {
+        id: letter.id,
+        forwardTo: letter.forwardTo,
+        sentTo: letter.sentTo,
+        letterStatus: letter.letterStatus,
+        createdAt: letter.createdAt
+      });
+      
       const tableName = getSourceTableName(letter);
+      console.log('Table name for letter:', tableName);
+      
       if (tableName) {
         tableCounts[tableName] = (tableCounts[tableName] || 0) + 1;
       }
     });
+    
+    console.log('Final table counts:', tableCounts);
+    console.log('=== END DEBUG ===');
     
     return Object.entries(tableCounts).map(([table, count], index) => ({
       name: table,
@@ -413,9 +418,21 @@ const InwardDashboard = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
         >
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-            {language === 'mr' ? 'माझे डॅशबोर्ड' : 'My Dashboard'}
-          </h1>
+          <div className="flex items-center space-x-6 mb-6">
+            <div className="relative">
+              <img 
+                src="/web icon (1).png" 
+                alt="ई-पत्र Logo" 
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl shadow-xl border-4 border-blue-100 hover:scale-110 transition-all duration-300 hover:shadow-2xl"
+              />
+              <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                <span className="text-white text-xs font-bold">✓</span>
+              </div>
+            </div>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              {language === 'mr' ? 'माझे डॅशबोर्ड' : 'My Dashboard'}
+            </h1>
+          </div>
           <p className="text-gray-500 mt-2 text-sm sm:text-base">
             {language === 'mr' ? 'तुमच्या पत्रांचे विहंगावलोकन' : 'Overview of your letters and submissions'}
           </p>
@@ -454,23 +471,6 @@ const InwardDashboard = () => {
               <h3 className="text-base sm:text-lg font-semibold text-gray-800">
                 {language === 'mr' ? 'टेबल वितरण' : 'Table Distribution'}
               </h3>
-              <div className="flex items-center gap-2">
-                {/* Time Filter */}
-                <select
-                  value={timeFilter}
-                  onChange={(e) => setTimeFilter(e.target.value)}
-                  className="text-xs sm:text-sm border border-gray-200 rounded-lg px-2 sm:px-3 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                <option value="daily">{language === 'mr' ? 'दैनिक' : 'Daily'}</option>
-                <option value="monthly">{language === 'mr' ? 'मासिक' : 'Monthly'}</option>
-              </select>
-              <button 
-                onClick={fetchMyLetters}
-                className="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                <FiRefreshCw className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
           </div>
             <div className="h-48 sm:h-64">
               <ResponsiveContainer width="100%" height="100%">

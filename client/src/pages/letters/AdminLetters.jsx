@@ -7,6 +7,7 @@ const AdminLetters = () => {
   const { language } = useLanguage();
   const t = translations[language] || translations['en'];
   
+  const apiUrl = import.meta.env.VITE_API_URL ;
   // Additional columns specific to admin
   const additionalColumns = [
     {
@@ -37,7 +38,7 @@ const AdminLetters = () => {
   return (
     <BaseLetterComponent
       role="admin"
-      apiEndpoint="http://localhost:5000/api/patras/admin"
+      apiEndpoint={`${apiUrl}/api/patras/admin`}
       additionalColumns={additionalColumns}
     />
   );

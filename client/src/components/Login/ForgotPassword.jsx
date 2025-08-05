@@ -78,7 +78,7 @@ const ForgotPassword = () => {
     setError('');
     
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const apiUrl = import.meta.env.VITE_API_URL ;
       const response = await fetch(`${apiUrl}/api/auth/forgot-password`, {
         method: 'POST',
         headers: {
@@ -158,7 +158,7 @@ const ForgotPassword = () => {
     
     try {
       const otpCode = otp.join('');
-      const apiUrl = window.env?.VITE_API_URL || 'http://localhost:5000';
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       const emailToSend = email.trim().toLowerCase();
       
       const requestBody = { 
@@ -384,54 +384,73 @@ const ForgotPassword = () => {
     switch (step) {
       case 1: // Email Step
         return (
-          <form onSubmit={handleEmailSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email address
+          <form onSubmit={handleEmailSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <label htmlFor="email" className="block text-sm font-semibold text-gray-700">
+                Email Address
               </label>
-              <div className="relative">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                  </svg>
+                </div>
                 <input
                   type="email"
                   id="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="you@example.com"
+                  className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium hover:border-blue-300 hover:shadow-md"
+                  placeholder="Enter your email"
                   required
                 />
               </div>
             </div>
 
-            <div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
-              >
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`w-full relative overflow-hidden ${
+                isLoading 
+                  ? 'bg-gradient-to-r from-blue-400 to-purple-400 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:-translate-y-0.5'
+              } text-white font-bold py-4 px-4 rounded-xl shadow-lg hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/50 focus:ring-offset-2 transition-all duration-300 group`}
+            >
+              {/* Button shine effect */}
+              <div className="absolute inset-0 -top-[2px] bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
+              
+              <span className="relative z-10">
                 {isLoading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <span className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     Sending...
-                  </>
-                ) : 'Send OTP'}
-              </button>
-            </div>
+                  </span>
+                ) : (
+                  'Send OTP'
+                )}
+              </span>
+            </button>
           </form>
         );
 
       case 2: // OTP Step
         return (
           <div className="space-y-6">
-            <div className="text-center">
-              <p className="text-gray-600 mb-2">We've sent a 6-digit code to</p>
-              <p className="font-medium">{email}</p>
+            <div className="text-center space-y-3">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-2">
+                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <p className="text-gray-600">We've sent a 6-digit code to</p>
+              <p className="font-semibold text-gray-900">{email}</p>
               <button 
                 type="button" 
                 onClick={() => setStep(1)}
-                className="text-blue-600 text-sm mt-2 hover:underline"
+                className="text-sm bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:from-blue-700 hover:to-purple-700 font-semibold transition-all duration-200"
               >
                 Change email
               </button>
@@ -449,7 +468,7 @@ const ForgotPassword = () => {
                     onChange={(e) => handleOtpChange(index, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(index, e)}
                     onPaste={index === 0 ? handleOtpPaste : undefined}
-                    className="w-12 h-12 text-center text-xl border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-12 h-12 md:w-14 md:h-14 text-center text-xl font-bold border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 hover:border-blue-300"
                     autoFocus={index === 0}
                   />
                 ))}
@@ -463,7 +482,7 @@ const ForgotPassword = () => {
                   type="button"
                   onClick={handleResendOtp}
                   disabled={resendTimer > 0 || isResending}
-                  className={`text-blue-600 font-medium ${(resendTimer > 0 || isResending) ? 'opacity-50 cursor-not-allowed' : 'hover:underline'}`}
+                  className={`font-medium ${(resendTimer > 0 || isResending) ? 'text-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:from-blue-700 hover:to-purple-700'}`}
                 >
                   {isResending ? 'Sending...' : 'Resend OTP'}
                 </button>
@@ -474,34 +493,44 @@ const ForgotPassword = () => {
               type="button"
               onClick={handleOtpSubmit}
               disabled={otp.length !== 6 || otp.some(digit => digit === '' || digit === null || digit === undefined) || isLoading}
-              className={`w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${(otp.length !== 6 || otp.some(digit => digit === '' || digit === null || digit === undefined) || isLoading) ? 'opacity-70 cursor-not-allowed' : ''}`}
+              className={`w-full relative overflow-hidden ${
+                (otp.length !== 6 || otp.some(digit => digit === '' || digit === null || digit === undefined) || isLoading)
+                  ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:-translate-y-0.5'
+              } text-white font-bold py-4 px-4 rounded-xl shadow-lg hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/50 focus:ring-offset-2 transition-all duration-300 group`}
             >
-              {isLoading ? 'Verifying...' : 'Verify OTP'}
+              <div className="absolute inset-0 -top-[2px] bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
+              <span className="relative z-10">{isLoading ? 'Verifying...' : 'Verify OTP'}</span>
             </button>
           </div>
         );
 
       case 3: // New Password Step
         return (
-          <form onSubmit={handlePasswordSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
+          <form onSubmit={handlePasswordSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <label htmlFor="newPassword" className="block text-sm font-semibold text-gray-700">
                 New Password
               </label>
               <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
                 <input
                   type={showPassword ? "text" : "password"}
                   id="newPassword"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full pl-11 pr-12 py-3.5 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium hover:border-blue-300 hover:shadow-md"
                   placeholder="Enter new password"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-500"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-500 hover:text-gray-700 transition-colors duration-200"
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5" />
@@ -510,29 +539,34 @@ const ForgotPassword = () => {
                   )}
                 </button>
               </div>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="text-xs text-gray-500 pl-1">
                 Must be at least 8 characters long
               </p>
             </div>
 
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+            <div className="space-y-2">
+              <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700">
                 Confirm New Password
               </label>
               <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
                 <input
                   type={showConfirmPassword ? "text" : "password"}
                   id="confirmPassword"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full pl-11 pr-12 py-3.5 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium hover:border-blue-300 hover:shadow-md"
                   placeholder="Confirm new password"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-500"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-500 hover:text-gray-700 transition-colors duration-200"
                 >
                   {showConfirmPassword ? (
                     <EyeOff className="h-5 w-5" />
@@ -543,31 +577,40 @@ const ForgotPassword = () => {
               </div>
             </div>
 
-            <div>
-              <button
-                type="submit"
-                disabled={isLoading || !newPassword || !confirmPassword}
-                className={`w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${(isLoading || !newPassword || !confirmPassword) ? 'opacity-70 cursor-not-allowed' : ''}`}
-              >
-                {isLoading ? 'Resetting...' : 'Reset Password'}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isLoading || !newPassword || !confirmPassword}
+              className={`w-full relative overflow-hidden ${
+                (isLoading || !newPassword || !confirmPassword)
+                  ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:-translate-y-0.5'
+              } text-white font-bold py-4 px-4 rounded-xl shadow-lg hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/50 focus:ring-offset-2 transition-all duration-300 group`}
+            >
+              <div className="absolute inset-0 -top-[2px] bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
+              <span className="relative z-10">{isLoading ? 'Resetting...' : 'Reset Password'}</span>
+            </button>
           </form>
         );
 
       case 4: // Success Step
         return (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Check className="h-8 w-8 text-green-500" />
+          <div className="text-center py-8 space-y-6">
+            <div className="relative inline-flex">
+              <div className="absolute inset-0 bg-green-400 rounded-full blur-xl opacity-30 animate-pulse"></div>
+              <div className="relative w-20 h-20 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg">
+                <Check className="h-10 w-10 text-white" />
+              </div>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Password Reset Successful!</h3>
-            <p className="text-gray-600 mb-6">Your password has been updated successfully.</p>
+            <div className="space-y-2">
+              <h3 className="text-2xl font-bold text-gray-900">Password Reset Successful!</h3>
+              <p className="text-gray-600">Your password has been updated successfully.</p>
+            </div>
             <button
               onClick={handleBackToLogin}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+              className="w-full relative overflow-hidden bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-4 px-4 rounded-xl shadow-lg hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/50 focus:ring-offset-2 transition-all duration-300 transform hover:-translate-y-0.5 group"
             >
-              Back to Login
+              <div className="absolute inset-0 -top-[2px] bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
+              <span className="relative z-10">Back to Login</span>
             </button>
           </div>
         );
@@ -598,33 +641,147 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8 border border-gray-200">
-        {step !== 4 && (
-          <button 
-            onClick={step === 1 ? handleBackToLogin : () => setStep(step - 1)}
-            className="flex items-center text-gray-600 hover:text-gray-800 mb-6"
-          >
-            <ArrowLeft className="h-5 w-5 mr-1" />
-            Back
-          </button>
-        )}
-        
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">{getStepTitle()}</h2>
-          <p className="text-gray-600 mt-2">
-            {getStepDescription()}
-          </p>
+    <div className="fixed inset-0 flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Header - Premium Enhanced design */}
+      <header className="w-full bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 text-white shadow-2xl relative overflow-hidden">
+        {/* Animated background pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0 animate-pulse" style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }}></div>
         </div>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">
-            {error}
+        
+        {/* Animated gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 via-transparent to-blue-600/20 animate-gradient-x"></div>
+        
+        <div className="relative z-10 px-4 py-5 md:px-8 md:py-7">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center space-x-4 md:space-x-6">
+              {/* Premium logo container with animations */}
+              <div className="relative group">
+                {/* Glow effect */}
+                <div className="absolute -inset-1 bg-gradient-to-r from-blue-400 to-purple-400 rounded-2xl blur-lg opacity-0 group-hover:opacity-75 transition duration-1000 group-hover:duration-200 animate-pulse"></div>
+                
+                {/* Logo container */}
+                <div className="relative bg-white rounded-2xl p-3 shadow-2xl transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
+                  {/* Inner glow */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl opacity-50"></div>
+                  
+                  <img 
+                    src="/web icon (1).png" 
+                    alt="ई-पत्र Logo" 
+                    className="w-14 h-14 md:w-16 md:h-16 object-contain relative z-10 filter drop-shadow-md"
+                  />
+                  
+                  {/* Decorative corner accents */}
+                  <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-blue-500 rounded-tl-lg"></div>
+                  <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-blue-500 rounded-tr-lg"></div>
+                  <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-blue-500 rounded-bl-lg"></div>
+                  <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-blue-500 rounded-br-lg"></div>
+                </div>
+              </div>
+              
+              {/* Enhanced title section */}
+              <div className="relative">
+                {/* Title with gradient and animation */}
+                <h1 className="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-blue-200 to-white animate-text-shimmer tracking-wider">
+                  ई-पत्र
+                </h1>
+                
+                {/* Animated subtitle */}
+                <div className="flex items-center space-x-2 mt-1">
+                  <div className="h-px w-6 bg-gradient-to-r from-transparent to-blue-300 animate-expand"></div>
+                  <p className="text-blue-200 text-sm md:text-base font-medium tracking-wide animate-fade-in">
+                    Ultimate Automation System
+                  </p>
+                  <div className="h-px w-6 bg-gradient-to-l from-transparent to-blue-300 animate-expand"></div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Right side with badge effect */}
+            <div className="text-right relative">
+              <div className="absolute -inset-2 bg-blue-400/20 blur-xl rounded-full animate-pulse"></div>
+              <div className="relative">
+                <p className="text-blue-100 text-sm md:text-lg font-bold tracking-wide">Maharashtra Police</p>
+                <p className="text-blue-200 text-xs md:text-sm font-medium">Application Department</p>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
+      </header>
 
-        {renderStepContent()}
-      </div>
+      {/* Main Content */}
+      <main className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
+        {/* Animated background orbs */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-300 rounded-full opacity-10 animate-pulse"></div>
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-300 rounded-full opacity-10 animate-pulse animation-delay-1000"></div>
+        </div>
+        
+        <div className="w-full max-w-md transform hover:scale-[1.01] transition-transform duration-300 relative z-10">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl p-8 md:p-10 border border-blue-100/50 relative overflow-hidden">
+            {/* Gradient border effect */}
+            <div className="absolute inset-0 rounded-2xl p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 opacity-0 hover:opacity-20 transition-opacity duration-500"></div>
+            
+            <div className="relative z-10">
+              {step !== 4 && (
+                <button 
+                  onClick={step === 1 ? handleBackToLogin : () => setStep(step - 1)}
+                  className="flex items-center text-gray-600 hover:text-gray-800 mb-6 group transition-colors duration-200"
+                >
+                  <ArrowLeft className="h-5 w-5 mr-1 transform group-hover:-translate-x-1 transition-transform duration-200" />
+                  <span className="font-medium">Back</span>
+                </button>
+              )}
+              
+              <div className="text-center mb-8 relative">
+                {/* Decorative elements */}
+                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 w-20 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent rounded-full"></div>
+                
+                <h2 className="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 mb-3 animate-text-shimmer">
+                  {getStepTitle()}
+                </h2>
+                <p className="text-gray-600 text-base font-medium">
+                  {getStepDescription()}
+                </p>
+              </div>
+
+              {error && (
+                <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center animate-fade-in">
+                  <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm">{error}</span>
+                </div>
+              )}
+
+              {renderStepContent()}
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer - Premium Enhanced design */}
+      <footer className="w-full bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 text-white shadow-2xl relative overflow-hidden">
+        {/* Animated background pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E")`,
+          }}></div>
+        </div>
+        
+        <div className="relative z-10 px-4 py-6 md:px-8 md:py-8">
+          <div className="max-w-7xl mx-auto text-center">
+            <div className="flex items-center justify-center space-x-4 mb-2">
+              <div className="h-px w-20 bg-gradient-to-r from-transparent to-blue-400"></div>
+              <p className="text-base md:text-lg text-blue-100 font-bold tracking-wide">© 2025 E-Patra</p>
+              <div className="h-px w-20 bg-gradient-to-l from-transparent to-blue-400"></div>
+            </div>
+            <p className="text-sm md:text-base text-blue-200 font-medium">All rights reserved • Maharashtra Police Application Department</p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

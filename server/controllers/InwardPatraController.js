@@ -133,11 +133,17 @@ const createPatra = async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
+    console.log('createPatra - Received userId:', userId, 'Type:', typeof userId);
+    console.log('createPatra - Request body:', req.body);
+    
     const user = await User.findByPk(userId);
     if (!user) {
       await transaction.rollback();
+      console.log('createPatra - User not found for userId:', userId);
       return res.status(400).json({ error: 'User not found' });
     }
+    
+    console.log('createPatra - Found user:', { id: user.id, email: user.email });
 
     let validatedFileId = null;
     if (fileId) {
@@ -702,6 +708,8 @@ const getPatraByUserId = async (req, res) => {
   const { userId } = req.params;
   const { includeEmails = 'true' } = req.query;
 
+  console.log('getPatraByUserId - Requested userId:', userId, 'Type:', typeof userId);
+
   try {
     // Build includes array based on query params
     const includes = [
@@ -710,15 +718,15 @@ const getPatraByUserId = async (req, res) => {
       getCoveringLetterInclude()
     ];
 
+    console.log('getPatraByUserId - Searching for letters with userId:', userId);
+    
     const patras = await InwardPatra.findAll({
       where: { userId },
       include: includes,
       order: [['createdAt', 'DESC']]
     });
-
-    if (patras.length === 0) {
-      return res.status(404).json({ error: 'No Patra found for this user' });
-    }
+    
+    console.log('getPatraByUserId - Found', patras.length, 'letters for userId:', userId);
 
     // Format the response with Word document URLs
     const formattedPatras = patras.map(patra => ({
@@ -728,7 +736,7 @@ const getPatraByUserId = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Patras retrieved successfully with Word document support',
+      message: patras.length > 0 ? 'Patras retrieved successfully with Word document support' : 'No letters found for this user',
       data: {
         count: patras.length,
         patras: formattedPatras
@@ -1596,30 +1604,11 @@ const getCoveringLetterById = async (req, res) => {
   }
 };
 
-// NEW: Get available forward-to options based on roles table
+// NEW: Get available forward-to options - Only 6 specific tables
 const getForwardToOptions = async (req, res) => {
   try {
-    // Get all roles that have a table field (these represent forward-to destinations)
-    const roles = await Role.findAll({
-      where: {
-        table: {
-          [Op.ne]: null // Not null
-        }
-      },
-      attributes: ['id', 'roleName', 'table'],
-      order: [['table', 'ASC']]
-    });
-
-    // Transform the data to provide user-friendly options
-    const options = roles.map(role => ({
-      value: role.table,
-      label: `${role.table.charAt(0).toUpperCase() + role.table.slice(1)} Table`,
-      roleId: role.id,
-      roleName: role.roleName
-    }));
-
-    // Add some default options if they don't exist in roles
-    const defaultOptions = [
+    // Return only the 6 specific tables you want
+    const finalOptions = [
       { value: 'dg', label: 'DG Table' },
       { value: 'ig', label: 'IG Table' },
       { value: 'sp', label: 'SP Table' },
@@ -1627,11 +1616,6 @@ const getForwardToOptions = async (req, res) => {
       { value: 'home', label: 'Home Table' },
       { value: 'local', label: 'Local Table' }
     ];
-
-    // Merge and deduplicate
-    const existingValues = options.map(opt => opt.value);
-    const missingDefaults = defaultOptions.filter(def => !existingValues.includes(def.value));
-    const finalOptions = [...options, ...missingDefaults];
 
     return res.status(200).json({
       success: true,

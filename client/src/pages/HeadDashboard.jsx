@@ -3,6 +3,7 @@ import { FiTrendingUp, FiTrendingDown, FiFileText, FiCheckCircle, FiXCircle, FiC
 import axios from 'axios';
 import { useLanguage } from '../context/LanguageContext';
 import translations from '../translations';
+const apiUrl = import.meta.env.VITE_API_URL ;
 
 // Stat Card Component matching the SP dashboard design
 const StatCard = ({ title, value, subtitle, icon, color }) => {
@@ -28,6 +29,7 @@ const HeadDashboard = () => {
   const { language } = useLanguage();
   const t = translations[language] || translations['en'];
   
+
   const [patras, setPatras] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -82,31 +84,41 @@ const HeadDashboard = () => {
     const tableCounts = {};
     const now = new Date();
     
-    // Filter letters based on time period
-    const filteredLetters = lettersData.filter(letter => {
-      if (!letter.createdAt) return false;
-      const letterDate = new Date(letter.createdAt);
-      
-      if (timeFilter === 'daily') {
-        // Show only today's letters
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        letterDate.setHours(0, 0, 0, 0);
-        return letterDate.getTime() === today.getTime();
-      } else if (timeFilter === 'monthly') {
-        // Show letters from current month
-        return letterDate.getMonth() === now.getMonth() && 
-               letterDate.getFullYear() === now.getFullYear();
-      }
-      return true; // Show all letters for other cases
-    });
+    console.log('=== HEAD DASHBOARD TABLE DISTRIBUTION DEBUG ===');
+    console.log('Total letters received:', lettersData.length);
+    console.log('Current time filter:', timeFilter);
+    console.log('Current date:', now.toISOString());
+    
+    // TEMPORARILY DISABLE TIME FILTERING TO SEE ALL LETTERS
+    const filteredLetters = lettersData; // Show all letters for now
+    
+    console.log('Filtered letters (all letters):', filteredLetters.length);
+    console.log('Sample letters:', filteredLetters.slice(0, 3).map(l => ({
+      id: l.id,
+      forwardTo: l.forwardTo,
+      createdAt: l.createdAt,
+      letterStatus: l.letterStatus
+    })));
     
     filteredLetters.forEach(letter => {
+      console.log('Processing letter:', {
+        id: letter.id,
+        forwardTo: letter.forwardTo,
+        sentTo: letter.sentTo,
+        letterStatus: letter.letterStatus,
+        createdAt: letter.createdAt
+      });
+      
       const tableName = getSourceTableName(letter);
+      console.log('Table name for letter:', tableName);
+      
       if (tableName) {
         tableCounts[tableName] = (tableCounts[tableName] || 0) + 1;
       }
     });
+    
+    console.log('Final table counts:', tableCounts);
+    console.log('=== END HEAD DASHBOARD DEBUG ===');
     
     const colors = [
       '#3B82F6', '#10B981', '#F59E0B', '#EF4444', 
@@ -123,7 +135,7 @@ const HeadDashboard = () => {
   const fetchPatras = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const config = token ? {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -138,7 +150,7 @@ const HeadDashboard = () => {
       };
       
       // Use the specific Head letters endpoint for accurate data
-      const response = await axios.get('http://localhost:5000/api/patras/head', config);
+      const response = await axios.get(`${apiUrl}/api/patras/head`, config);
       
       console.log('Head Dashboard - API Response:', response.data);
       
@@ -196,7 +208,7 @@ const HeadDashboard = () => {
       // Handle authentication errors
       if (err.response?.status === 401) {
         setError('Authentication failed. Please login again.');
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         window.location.href = '/login';
         return;
       }
@@ -275,12 +287,13 @@ const HeadDashboard = () => {
     if (statusLower.includes('approved') || statusLower.includes('मंजूर')) return 'approved';
     if (statusLower.includes('rejected') || statusLower.includes('नाकारले')) return 'rejected';
     if (statusLower.includes('sent to head') || statusLower.includes('प्रमुखांकडे पाठवले')) return 'sent_to_head';
+    if (statusLower.includes('case close') || statusLower.includes('केस बंद') || statusLower.includes('closed')) return 'closed';
     return 'other';
   };
 
   const headRelevantLetters = patras.filter(p => {
     const status = getNormalizedStatus(p.letterStatus);
-    return ['sent_to_head', 'pending', 'approved', 'rejected'].includes(status);
+    return ['sent_to_head', 'pending', 'approved', 'rejected', 'closed'].includes(status);
   });
 
   const pendingCount = headRelevantLetters.filter(p => 
@@ -297,6 +310,11 @@ const HeadDashboard = () => {
 
   const sentToHeadCount = headRelevantLetters.filter(p => 
     getNormalizedStatus(p.letterStatus) === 'sent_to_head'
+  ).length;
+
+  // Calculate closed cases count
+  const closedCasesCount = headRelevantLetters.filter(p => 
+    getNormalizedStatus(p.letterStatus) === 'closed'
   ).length;
 
   // Calculate signed letters count
@@ -640,9 +658,21 @@ const HeadDashboard = () => {
     <div className="p-6">
       <div className="mb-6 flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold text-blue-600 mb-2">
-            {language === 'mr' ? 'प्रमुख डॅशबोर्ड' : 'Head Dashboard'}
-          </h1>
+          <div className="flex items-center space-x-6 mb-6">
+            <div className="relative">
+              <img 
+                src="/web icon (1).png" 
+                alt="ई-पत्र Logo" 
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl shadow-xl border-4 border-blue-100 hover:scale-110 transition-all duration-300 hover:shadow-2xl"
+              />
+              <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                <span className="text-white text-xs font-bold">✓</span>
+              </div>
+            </div>
+            <h1 className="text-3xl font-bold text-blue-600 mb-2">
+              {language === 'mr' ? 'प्रमुख डॅशबोर्ड' : 'Head Dashboard'}
+            </h1>
+          </div>
           <p className="text-gray-600">
             {language === 'mr' 
               ? 'प्रमुख टेबलला पाठवलेली पत्रे' 
@@ -676,7 +706,7 @@ const HeadDashboard = () => {
       </div>
 
       {/* Stats Cards - Matching SP dashboard design with gradients */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <StatCard
           title={language === 'mr' ? 'आजची पत्रे' : 'Today\'s Letters'}
           value={todayCount}
@@ -705,44 +735,16 @@ const HeadDashboard = () => {
           icon={<FiSigned className="w-6 h-6 text-white" />}
           color="bg-gradient-to-br from-emerald-400 to-emerald-600"
         />
+        <StatCard
+          title={language === 'mr' ? 'केस बंद' : 'Closed Cases'}
+          value={closedCasesCount}
+          subtitle={`${closedCasesCount} cases`}
+          icon={<FiXCircle className="w-6 h-6 text-white" />}
+          color="bg-gradient-to-br from-red-400 to-red-600"
+        />
       </div>
 
-      {/* Time Filter Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          {language === 'mr' ? 'कालावधी फिल्टर' : 'Time Filter'}
-        </h3>
-        <div className="flex space-x-4">
-          <button
-            onClick={() => setTimeFilter('daily')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              timeFilter === 'daily'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {language === 'mr' ? 'दैनिक' : 'Daily'}
-          </button>
-          <button
-            onClick={() => setTimeFilter('monthly')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              timeFilter === 'monthly'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {language === 'mr' ? 'मासिक' : 'Monthly'}
-          </button>
-        </div>
-        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-          <p className="text-sm text-gray-600">
-            {language === 'mr' 
-              ? `सध्या ${timeFilter === 'daily' ? 'दैनिक' : 'मासिक'} डेटा दाखवत आहे`
-              : `Currently showing ${timeFilter} data`
-            }
-          </p>
-        </div>
-      </div>
+    
 
       {/* Two Column Layout - Matching SP dashboard */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

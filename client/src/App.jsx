@@ -23,6 +23,7 @@ import NewLetter from './pages/NewLetter';
 import TrackApplication from './pages/TrackApplication';
 import InboxLetter from './pages/InboxLetter';
 import UploadSign from './pages/UploadSign';
+const apiUrl = import.meta.env.VITE_API_URL;
 // Create a wrapper component that will use the useNavigate hook
 // Helper function to normalize role names
 const normalizeRole = (role) => {
@@ -79,7 +80,7 @@ const AppContent = () => {
       if (token) {
         try {
           // Validate token by making an API call to ensure it's still valid
-          const response = await fetch('http://localhost:5000/api/auth/verify', {
+          const response = await fetch(`${apiUrl}/api/auth/verify`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
@@ -273,7 +274,7 @@ const AppContent = () => {
         
         try {
           // Validate token with server
-          const response = await fetch('http://localhost:5000/api/auth/verify', {
+          const response = await fetch(`${apiUrl}/api/auth/verify`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'

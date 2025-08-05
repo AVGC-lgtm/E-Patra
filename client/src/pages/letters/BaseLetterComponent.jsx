@@ -4,6 +4,7 @@ import { FiEye, FiDownload, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink,
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
+const apiUrl = import.meta.env.VITE_API_URL ;
 
 const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [signStatusFilter, setSignStatusFilter] = useState('All');
+  const [caseStatusFilter, setCaseStatusFilter] = useState('All');
   const [letters, setLetters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -56,6 +58,13 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
     { value: 'completed', label: language === 'mr' ? 'स्वाक्षरी पूर्ण' : 'Sign Completed' }
   ];
 
+  // Case Status filter options
+  const caseStatusOptions = [
+    { value: 'All', label: language === 'mr' ? 'सर्व केस' : 'All Cases' },
+    { value: 'open', label: language === 'mr' ? 'खुले केस' : 'Open Cases' },
+    { value: 'closed', label: language === 'mr' ? 'बंद केस' : 'Closed Cases' }
+  ];
+
   // Add event listener for signature completion
   useEffect(() => {
     const handleSignatureCompleted = () => {
@@ -81,7 +90,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const config = token ? {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -141,7 +150,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
   const handleDownload = async (filePath, originalName) => {
     try {
       const response = await axios({
-        url: `http://localhost:5000/${filePath.replace(/\\/g, '/')}`,
+        url: `${apiUrl}/${filePath.replace(/\\/g, '/')}`,
         method: 'GET',
         responseType: 'blob',
       });
@@ -241,10 +250,10 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
       
       if (!confirmSend) return;
       
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       const response = await axios.post(
-        `http://localhost:5000/api/patras/${letter._id || letter.id}/send-to-sp`,
+        `${apiUrl}/api/patras/${letter._id || letter.id}/send-to-sp`,
         {
           forwardTo: 'sp',
           sendToData: {
@@ -297,14 +306,14 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
       
       if (!confirmSend) return;
       
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       console.log('BaseLetterComponent - Sending to Head with role:', role);
       console.log('BaseLetterComponent - Source table name:', getSourceTableName(role));
       
       // Update the letter status to "sent to head" so it appears in HODLetters table
       const response = await axios.put(
-        `http://localhost:5000/api/patras/${letter._id || letter.id}/send-to-hod`,
+        `${apiUrl}/api/patras/${letter._id || letter.id}/send-to-hod`,
         {
           letterStatus: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'sent to head',
           forwardTo: 'head',
@@ -376,10 +385,10 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
       
       if (!confirmDelete) return;
       
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       const response = await axios.delete(
-        `http://localhost:5000/api/letters/${coveringLetterId}`,
+        `${apiUrl}/api/letters/${coveringLetterId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -510,7 +519,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
       // Show loading state
       setUploadingCoveringLetter(true);
       
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const formData = new FormData();
       
       formData.append('coveringLetterFile', file);
@@ -522,7 +531,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
       formData.append('status', 'DRAFT');
       
       const response = await axios.post(
-        'http://localhost:5000/api/letters/upload',
+        `${apiUrl}/api/letters/upload`,
         formData,
         {
           headers: {
@@ -602,7 +611,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
         });
       } else if (letter.uploadedFile && letter.uploadedFile.fileName) {
         allFiles.push({
-          url: `http://localhost:5000/${letter.uploadedFile.fileName.replace(/\\/g, '/')}`,
+          url: `${apiUrl}/${letter.uploadedFile.fileName.replace(/\\/g, '/')}`,
           name: letter.uploadedFile.originalName || letter.uploadedFile.fileName.split('/').pop()
         });
       }
@@ -615,7 +624,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
         });
       } else if (letter.upload && letter.upload.fileName) {
         allFiles.push({
-          url: `http://localhost:5000/${letter.upload.fileName.replace(/\\/g, '/')}`,
+          url: `${apiUrl}/${letter.upload.fileName.replace(/\\/g, '/')}`,
           name: letter.upload.originalName || letter.upload.fileName.split('/').pop()
         });
       }
@@ -624,7 +633,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
       if (letter.letterFiles && letter.letterFiles.length > 0) {
         letter.letterFiles.forEach(file => {
           allFiles.push({
-            url: `http://localhost:5000/${file.filePath.replace(/\\/g, '/')}`,
+            url: `${apiUrl}/${file.filePath.replace(/\\/g, '/')}`,
             name: file.originalName || file.filePath.split('/').pop()
           });
         });
@@ -807,8 +816,19 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
         const matchesSignStatus = signStatusFilter === 'All' || 
           (signStatusFilter === 'pending' && (getSignStatus(letter) === 'pending' || getSignStatus(letter) === null)) ||
           (signStatusFilter === 'completed' && getSignStatus(letter) === 'completed');
+
+        // Case status filtering logic
+        const isCaseClosed = letter.inwardPatraClose === true || 
+                           (letter.letterStatus && 
+                            (letter.letterStatus.toLowerCase().includes('case close') ||
+                             letter.letterStatus.toLowerCase().includes('केस बंद') ||
+                             letter.letterStatus.toLowerCase().includes('closed')));
+        
+        const matchesCaseStatus = caseStatusFilter === 'All' ||
+          (caseStatusFilter === 'closed' && isCaseClosed) ||
+          (caseStatusFilter === 'open' && !isCaseClosed);
           
-        return matchesSearch && matchesStatus && matchesSignStatus;
+        return matchesSearch && matchesStatus && matchesSignStatus && matchesCaseStatus;
       })
     : [];
 
@@ -887,6 +907,18 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
             onChange={(e) => setSignStatusFilter(e.target.value)}
           >
             {signStatusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+            value={caseStatusFilter}
+            onChange={(e) => setCaseStatusFilter(e.target.value)}
+          >
+            {caseStatusOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -1127,6 +1159,73 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
                 </button>
               </div>
             )}
+
+            {/* View Reports Section */}
+            {(() => {
+              const hasReportFiles = selectedLetter.reportFiles && 
+                                     selectedLetter.reportFiles !== '[]' && 
+                                     selectedLetter.reportFiles !== 'null' && 
+                                     selectedLetter.reportFiles !== null;
+              
+              if (hasReportFiles) {
+                try {
+                  const reportFiles = JSON.parse(selectedLetter.reportFiles);
+                  return (
+                    <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                      <h3 className="text-lg font-semibold text-purple-800 mb-3">
+                        {language === 'mr' ? 'अपलोड केलेले रिपोर्ट्स' : 'Uploaded Reports'}
+                      </h3>
+                      <div className="space-y-3">
+                        {reportFiles.map((file, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-white rounded-lg border border-purple-200">
+                            <div className="flex items-center flex-1">
+                              <FiFileText className="h-5 w-5 text-purple-500 mr-3" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900">{file.originalName}</p>
+                                <p className="text-xs text-gray-500">
+                                  {file.size ? `${Math.round(file.size / 1024)} KB` : 'N/A'} • {file.mimetype || 'Unknown'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => window.open(file.s3Url, '_blank')}
+                                className="inline-flex items-center px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 transition-colors"
+                                title={language === 'mr' ? 'रिपोर्ट पहा' : 'View Report'}
+                              >
+                                <FiEye className="h-3 w-3 mr-1" />
+                                {language === 'mr' ? 'पहा' : 'View'}
+                              </button>
+                              <button
+                                onClick={() => window.open(file.s3Url, '_blank')}
+                                className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                                title={language === 'mr' ? 'रिपोर्ट डाउनलोड करा' : 'Download Report'}
+                              >
+                                <FiDownload className="h-3 w-3 mr-1" />
+                                {language === 'mr' ? 'डाउनलोड' : 'Download'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                } catch (error) {
+                  console.error('Error parsing report files:', error);
+                  return (
+                    <div className="mt-6 p-4 bg-red-50 rounded-lg border border-red-200">
+                      <h3 className="text-lg font-semibold text-red-800 mb-3">
+                        {language === 'mr' ? 'रिपोर्ट्स' : 'Reports'}
+                      </h3>
+                      <p className="text-red-600">
+                        {language === 'mr' ? 'रिपोर्ट फाइल्स पार्स करताना त्रुटी' : 'Error parsing report files'}
+                      </p>
+                    </div>
+                  );
+                }
+              }
+              return null;
+            })()}
             
             <div className="flex justify-center mt-6">
               <button

@@ -149,11 +149,18 @@ const DashboardLayout = ({ children, onLogout, userRole: propUserRole }) => {
       >
         <div className="p-4 relative h-full flex flex-col">
           <div className="flex items-center justify-center mb-8">
-            {isDesktopSidebarOpen ? (
-              <h1 className="text-xl font-bold text-white">{t.letterSystem}</h1>
-            ) : (
-              <h1 className="text-xl font-bold text-white">LS</h1>
-            )}
+            <div className="flex items-center space-x-4">
+              <img 
+                src="/web icon (1).png" 
+                alt="ई-पत्र Logo" 
+                className="w-12 h-12 rounded-xl shadow-lg border-2 border-white/20 hover:scale-105 transition-transform duration-200"
+              />
+              {isDesktopSidebarOpen ? (
+                <h1 className="text-xl font-bold text-white">{t.letterSystem}</h1>
+              ) : (
+                <h1 className="text-xl font-bold text-white">LS</h1>
+              )}
+            </div>
           </div>
     
           <nav className="flex-1">
@@ -213,7 +220,14 @@ const DashboardLayout = ({ children, onLogout, userRole: propUserRole }) => {
       >
         <div className="p-4 relative h-full flex flex-col">
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-xl font-bold">{t.letterSystem}</h1>
+            <div className="flex items-center space-x-4">
+              <img 
+                src="/web icon (1).png" 
+                alt="ई-पत्र Logo" 
+                className="w-12 h-12 rounded-xl shadow-lg border-2 border-white/20 hover:scale-105 transition-transform duration-200"
+              />
+              <h1 className="text-xl font-bold">{t.letterSystem}</h1>
+            </div>
             <button 
               onClick={() => setIsMobileSidebarOpen(false)}
               className="p-2 text-white hover:bg-blue-700 rounded-full transition-colors"

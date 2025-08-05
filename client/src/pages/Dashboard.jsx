@@ -3,6 +3,7 @@ import axios from 'axios';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area } from 'recharts';
 import { FiMail, FiFileText, FiClock, FiChevronUp, FiChevronDown, FiRefreshCw } from 'react-icons/fi';
 import { motion } from 'framer-motion';
+const apiUrl = import.meta.env.VITE_API_URL ;
 
 const StatCard = ({ title, value, change, icon, color }) => {
   const colorVariants = {
@@ -55,7 +56,7 @@ const Dashboard = () => {
   const fetchPatras = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const config = token ? {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -70,7 +71,7 @@ const Dashboard = () => {
       };
       
       // Add timestamp to prevent caching
-      const response = await axios.get('http://localhost:5000/api/patras', config);
+      const response = await axios.get(`${apiUrl}/api/patras`, config);
       
       console.log('API Response:', response.data); // Debug log
       
@@ -126,7 +127,7 @@ const Dashboard = () => {
       if (err.response?.status === 401) {
         setError('Authentication failed. Please login again.');
         // Optionally redirect to login
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         window.location.href = '/login';
         return;
       }

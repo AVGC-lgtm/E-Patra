@@ -8,7 +8,7 @@ require('dotenv').config();
 
 // Initialize Mistral client
 const mistralClient = new Mistral({
-    apiKey: process.env.MISTRAL_API_KEY || "B7X86kZ2MwX7Bfv3SsDn9FqAjSXKhOYW"
+    apiKey: process.env.MISTRAL_API_KEY 
 });
 
 // Configure S3

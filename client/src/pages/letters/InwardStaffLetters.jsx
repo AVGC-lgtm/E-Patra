@@ -4,6 +4,7 @@ import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink, FiFileText,
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
+const apiUrl = import.meta.env.VITE_API_URL ;
 
 const InwardStaffLetters = () => {
   const navigate = useNavigate();
@@ -234,7 +235,7 @@ const InwardStaffLetters = () => {
         });
       } else if (letter.uploadedFile && letter.uploadedFile.fileName) {
         allFiles.push({
-          url: `http://localhost:5000/${letter.uploadedFile.fileName.replace(/\\/g, '/')}`,
+          url: `${apiUrl}/${letter.uploadedFile.fileName.replace(/\\/g, '/')}`,
           name: letter.uploadedFile.originalName || letter.uploadedFile.fileName.split('/').pop()
         });
       }
@@ -247,7 +248,7 @@ const InwardStaffLetters = () => {
         });
       } else if (letter.upload && letter.upload.fileName) {
         allFiles.push({
-          url: `http://localhost:5000/${letter.upload.fileName.replace(/\\/g, '/')}`,
+          url: `${apiUrl}/${letter.upload.fileName.replace(/\\/g, '/')}`,
           name: letter.upload.originalName || letter.upload.fileName.split('/').pop()
         });
       }
@@ -256,7 +257,7 @@ const InwardStaffLetters = () => {
       if (letter.letterFiles && letter.letterFiles.length > 0) {
         letter.letterFiles.forEach(file => {
           allFiles.push({
-            url: `http://localhost:5000/${file.filePath.replace(/\\/g, '/')}`,
+            url: `${apiUrl}/${file.filePath.replace(/\\/g, '/')}`,
             name: file.originalName || file.filePath.split('/').pop()
           });
         });
@@ -380,7 +381,7 @@ const InwardStaffLetters = () => {
   // Function to send letter to HOD for approval
   const sendToHODForApproval = async (letterId) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       if (!token) {
         alert(language === 'mr' ? 
@@ -408,7 +409,7 @@ const InwardStaffLetters = () => {
 
       // Update letter status to "sent to head" and store recipient information
       const response = await axios.put(
-        `http://localhost:5000/api/patras/${letterId}/send-to-hod`,
+        `${apiUrl}/api/patras/${letterId}/send-to-hod`,
         {
           recipients: recipients,
           sendToData: sendToData,
@@ -514,14 +515,14 @@ const InwardStaffLetters = () => {
     if (letter.uploadedFile && letter.uploadedFile.fileUrl) {
       fileUrl = letter.uploadedFile.fileUrl;
     } else if (letter.uploadedFile && letter.uploadedFile.fileName) {
-      fileUrl = `http://localhost:5000/${letter.uploadedFile.fileName.replace(/\\/g, '/')}`;
+      fileUrl = `${apiUrl}/${letter.uploadedFile.fileName.replace(/\\/g, '/')}`;
     } else if (letter.upload && letter.upload.fileUrl) {
       fileUrl = letter.upload.fileUrl;
     } else if (letter.upload && letter.upload.fileName) {
-      fileUrl = `http://localhost:5000/${letter.upload.fileName.replace(/\\/g, '/')}`;
+      fileUrl = `${apiUrl}/${letter.upload.fileName.replace(/\\/g, '/')}`;
     } else if (letter.letterFiles && letter.letterFiles.length > 0) {
       const file = letter.letterFiles[0];
-      fileUrl = `http://localhost:5000/${file.filePath.replace(/\\/g, '/')}`;
+      fileUrl = `${apiUrl}/${file.filePath.replace(/\\/g, '/')}`;
     }
     
     if (fileUrl) {
@@ -551,10 +552,10 @@ const InwardStaffLetters = () => {
       
       if (!confirmDelete) return;
       
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       const response = await axios.delete(
-        `http://localhost:5000/api/letters/${coveringLetterId}`,
+        `${apiUrl}/api/letters/${coveringLetterId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -603,7 +604,7 @@ const InwardStaffLetters = () => {
   const handleGenerateCoveringLetter = async (letter) => {
     try {
       setGeneratingCoveringLetter(true);
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       const generateData = {
         patraId: letter._id || letter.id,
@@ -612,7 +613,7 @@ const InwardStaffLetters = () => {
       };
       
       const response = await axios.post(
-        'http://localhost:5000/api/letters/generate',
+        `${apiUrl}/api/letters/generate`,
         generateData,
         {
           headers: {
@@ -681,7 +682,7 @@ const InwardStaffLetters = () => {
       // Show loading state
       setUploadingCoveringLetter(true);
       
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const formData = new FormData();
       
       formData.append('coveringLetterFile', file);
@@ -693,7 +694,7 @@ const InwardStaffLetters = () => {
       formData.append('status', 'DRAFT');
       
       const response = await axios.post(
-        'http://localhost:5000/api/letters/upload',
+        `${apiUrl}/api/letters/upload`,
         formData,
         {
           headers: {
@@ -756,9 +757,9 @@ const InwardStaffLetters = () => {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
-      const response = await axios.get('http://localhost:5000/api/patras', {
+      const response = await axios.get(`${apiUrl}/api/patras`, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -818,8 +819,8 @@ const InwardStaffLetters = () => {
         alert(language === 'mr' ? 
           'आपली सत्र संपली आहे. कृपया पुन्हा लॉगिन करा.' : 
           'Your session has expired. Please login again.');
-        localStorage.removeItem('token');
-        localStorage.removeItem('userInfo');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('userInfo');
         navigate('/login');
         return;
       }
@@ -849,7 +850,7 @@ const InwardStaffLetters = () => {
   // Fetch data on component mount
   useEffect(() => {
     // Check if user is authenticated
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (!token) {
       alert(language === 'mr' ? 
         'कृपया प्रथम लॉगिन करा!' : 
@@ -1048,10 +1049,10 @@ const InwardStaffLetters = () => {
     setSendingReply(true);
     
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       
       const response = await axios.post(
-        'http://localhost:5000/api/imap/reply',
+        `${apiUrl}/api/imap/reply`,
         {
           emailId: selectedEmailForReply.id,
           toEmail: toEmail,
@@ -1561,10 +1562,10 @@ const organizeEmailsInThreadImproved = (emails) => {
                                 
                                 if (!confirmSend) return;
                                 
-                                const token = localStorage.getItem('token');
+                                const token = sessionStorage.getItem('token');
                                 
                                 const response = await axios.put(
-                                  `http://localhost:5000/api/patras/${letter._id || letter.id}/send-to-hod`,
+                                  `${apiUrl}/api/patras/${letter._id || letter.id}/send-to-hod`,
                                   {
                                     letterStatus: language === 'mr' ? 'प्रमुखांकडे पाठवले' : 'sent to head',
                                     forwardTo: 'head',
@@ -1627,8 +1628,8 @@ const organizeEmailsInThreadImproved = (emails) => {
                               console.log('🔍 Fetching emails for reference:', letter.referenceNumber);
                               
                               // Fetch all emails for this reference number to get complete conversation
-                              const token = localStorage.getItem('token');
-                              const response = await axios.get(`http://localhost:5000/api/imap/emails/reference/${letter.referenceNumber}`, {
+                              const token = sessionStorage.getItem('token');
+                              const response = await axios.get(`${apiUrl}/api/imap/emails/reference/${letter.referenceNumber}`, {
                                 headers: {
                                   'Content-Type': 'application/json',
                                   'Accept': 'application/json',

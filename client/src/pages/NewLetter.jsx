@@ -8,6 +8,7 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { format, parseISO } from "date-fns";
 import axios from 'axios';
+const apiUrl = import.meta.env.VITE_API_URL;
 
 const NewLetter = () => {
   const [mainFiles, setMainFiles] = useState([]);
@@ -20,26 +21,26 @@ const NewLetter = () => {
   
   // Get user information on component mount
   useEffect(() => {
-    const storedUserId = localStorage.getItem('userId');
-    const storedUserInfo = localStorage.getItem('userInfo');
+    const storedUserId = sessionStorage.getItem('userId');
+    const storedUserInfo = sessionStorage.getItem('userInfo');
     
     if (storedUserId) {
       setUserId(parseInt(storedUserId));
-      console.log('Found user ID:', storedUserId);
+      console.log('Found user ID from sessionStorage:', storedUserId);
     }
     
     if (storedUserInfo) {
       try {
         const parsedUserInfo = JSON.parse(storedUserInfo);
         setUserInfo(parsedUserInfo);
-        console.log('User info loaded:', parsedUserInfo);
+        console.log('User info loaded from sessionStorage:', parsedUserInfo);
       } catch (error) {
         console.error('Error parsing user info:', error);
       }
     }
     
     if (!storedUserId) {
-      console.warn('No user ID found. User might not be logged in.');
+      console.warn('No user ID found in sessionStorage. User might not be logged in.');
     }
   }, []);
 
@@ -48,11 +49,11 @@ const NewLetter = () => {
     try {
       console.log('Fetching file URL for ID:', fileId);
       
-      const response = await fetch(`http://localhost:5000/api/files/${fileId}`, {
+      const response = await fetch(`${apiUrl}/api/files/${fileId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         }
       });
       
@@ -64,7 +65,7 @@ const NewLetter = () => {
       console.log('File data received:', fileData);
       
       return {
-        url: fileData.url || `http://localhost:5000/${fileData.filePath.replace(/\\/g, '/')}`,
+        url: fileData.url || `${apiUrl}/${fileData.filePath.replace(/\\/g, '/')}`,
         originalName: fileData.originalName,
         filePath: fileData.filePath
       };
@@ -77,7 +78,7 @@ const NewLetter = () => {
 
   // Function to construct file URL directly
   const constructFileUrl = (fileId, fileName = null) => {
-    const baseUrl = 'http://localhost:5000';
+    const baseUrl = `${apiUrl}`;
     if (fileName) {
       return `${baseUrl}/uploads/${fileId}/${fileName}`;
     } else {
@@ -260,7 +261,7 @@ const NewLetter = () => {
     try {
       console.log('Sending file for text extraction:', file.name, file);
       
-      const response = await fetch('http://localhost:5000/api/files/upload', {
+      const response = await fetch(`${apiUrl}/api/files/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -460,7 +461,6 @@ const NewLetter = () => {
       'Collector Table': 'कलेक्टर टेबल',
       'Home Table': 'होम टेबल',
       'Shanik Table': 'शैक्षणिक टेबल',
-      'Admin Table': 'प्रशासक टेबल'
     };
     return marathiMap[englishLabel] || englishLabel;
   };
@@ -476,8 +476,8 @@ const NewLetter = () => {
   useEffect(() => {
     const fetchForwardToOptions = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get('http://localhost:5000/api/patras/forward-to-options', {
+        const token = sessionStorage.getItem('token');
+        const response = await axios.get(`${apiUrl}/api/patras/forward-to-options`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -979,11 +979,11 @@ const NewLetter = () => {
       console.log('Submitting with userId:', userId, 'and fileId:', fileIdToUse);
       console.log('JSON payload being submitted:', jsonPayload);
 
-      const response = await fetch('http://localhost:5000/api/patras', {
+      const response = await fetch(`${apiUrl}/api/patras`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         },
         body: JSON.stringify(jsonPayload)
       });

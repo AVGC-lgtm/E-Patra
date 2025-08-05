@@ -20,6 +20,7 @@ import {
   FiFolder,
   FiCheckCircle
 } from 'react-icons/fi';
+const apiUrl = import.meta.env.VITE_API_URL ;
 
 // Format file size helper function
 function formatFileSize(bytes) {
@@ -68,7 +69,7 @@ const TrackApplication = () => {
     
     try {
       // Use the specific route for getting patra by reference number
-      const response = await axios.get(`http://localhost:5000/api/patras/reference/${ref}`);
+      const response = await axios.get(`${apiUrl}/api/patras/reference/${ref}`);
       console.log('Full API response:', response.data);
       
       // Handle the API response structure
@@ -285,11 +286,11 @@ const TrackApplication = () => {
     try {
       console.log('Fetching file URL for ID:', fileId);
       
-      const response = await fetch(`http://localhost:5000/api/files/${fileId}`, {
+      const response = await fetch(`${apiUrl}/api/files/${fileId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
         }
       });
       
