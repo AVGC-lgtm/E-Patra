@@ -4,6 +4,7 @@ import { FiEye, FiDownload, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink,
 import axios from 'axios';
 import { useLanguage } from '../context/LanguageContext';
 import translations from '../translations/index';
+import { toast } from 'react-toastify';
 const apiUrl = import.meta.env.VITE_API_URL ;
 
 
@@ -101,7 +102,7 @@ const InboxLetter = () => {
       // await axios.post(`http://localhost:5000/api/letters/${selectedLetterForSend._id}/send`, sendToData);
       
       // Show success message
-      alert(language === 'mr' ? 'पत्र यशस्वीरित्या पाठवले गेले!' : 'Letter sent successfully!');
+      toast.success(language === 'mr' ? 'पत्र यशस्वीरित्या पाठवले गेले!' : 'Letter sent successfully!');
       
       // Close modal
       setSendModalOpen(false);
@@ -111,7 +112,7 @@ const InboxLetter = () => {
       handleRefresh();
     } catch (error) {
       console.error('Error sending letter:', error);
-      alert(language === 'mr' ? 'पत्र पाठविण्यात त्रुटी!' : 'Error sending letter!');
+      toast.error(language === 'mr' ? 'पत्र पाठविण्यात त्रुटी!' : 'Error sending letter!');
     }
   };
 

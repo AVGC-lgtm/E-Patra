@@ -154,21 +154,21 @@ const SimpleDashboardLayout = ({ children, onLogout, userRole: propUserRole }) =
   // Helper function to get app title based on role
   const getAppTitle = (role) => {
     if (role === 'inward_user') {
-      return language === 'mr' ? 'ई-पत्रा' : 'E-Patra';
+      return language === 'mr' ? 'ई-पत्र' : 'E-Patra';
     } else {
       // For all other roles, show a more generic title
       const roleTitles = {
-        'outward_user': language === 'mr' ? 'ई-पत्रा जावक' : 'E-Patra Outward',
-        'head': language === 'mr' ? 'ई-पत्रा प्रमुख' : 'E-Patra Head',
-        'sp': language === 'mr' ? 'ई-पत्रा एसपी' : 'E-Patra SP',
-        'collector': language === 'mr' ? 'ई-पत्रा कलेक्टर' : 'E-Patra Collector',
-        'dg_other': language === 'mr' ? 'ई-पत्रा डीजी' : 'E-Patra DG',
-        'home': language === 'mr' ? 'ई-पत्रा गृह' : 'E-Patra Home',
-        'ig_nashik_other': language === 'mr' ? 'ई-पत्रा आयजी' : 'E-Patra IG',
-        'shanik_local': language === 'mr' ? 'ई-पत्रा शैक्षणिक' : 'E-Patra Educational'
+        'outward_user': language === 'mr' ? 'ई-पत्र जावक' : 'E-Patra Outward',
+        'head': language === 'mr' ? 'ई-पत्र प्रमुख' : 'E-Patra Head',
+        'sp': language === 'mr' ? 'ई-पत्र एसपी' : 'E-Patra SP',
+        'collector': language === 'mr' ? 'ई-पत्र कलेक्टर' : 'E-Patra Collector',
+        'dg_other': language === 'mr' ? 'ई-पत्र डीजी' : 'E-Patra DG',
+        'home': language === 'mr' ? 'ई-पत्र गृह' : 'E-Patra Home',
+        'ig_nashik_other': language === 'mr' ? 'ई-पत्र आयजी' : 'E-Patra IG',
+        'shanik_local': language === 'mr' ? 'ई-पत्र शैक्षणिक' : 'E-Patra Educational'
       };
       
-      return roleTitles[role] || (language === 'mr' ? 'ई-पत्रा' : 'E-Patra');
+      return roleTitles[role] || (language === 'mr' ? 'ई-पत्र' : 'E-Patra');
     }
   };
 

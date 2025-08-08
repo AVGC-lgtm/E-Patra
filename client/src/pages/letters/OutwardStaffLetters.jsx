@@ -5,6 +5,7 @@ import translations from '../../translations';
 import { useState } from 'react';
 import { FiUpload, FiX, FiFile, FiTrash2, FiDownload } from 'react-icons/fi';
 import axios from 'axios';
+import { toast } from 'react-toastify';
 const apiUrl = import.meta.env.VITE_API_URL;
 // Helper function to get user role from token
 const getUserRole = () => {
@@ -91,11 +92,11 @@ const OutwardStaffLetters = () => {
 
     const validFiles = files.filter(file => {
       if (!allowedTypes.includes(file.type)) {
-        alert(`File ${file.name} is not allowed. Only PDF, Word documents, and images are accepted.`);
+        toast.error(`File ${file.name} is not allowed. Only PDF, Word documents, and images are accepted.`);
         return false;
       }
       if (file.size > 10 * 1024 * 1024) { // 10MB limit
-        alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+        toast.error(`File ${file.name} is too large. Maximum size is 10MB.`);
         return false;
       }
       return true;
@@ -112,7 +113,7 @@ const OutwardStaffLetters = () => {
   // Upload files
   const handleUpload = async () => {
     if (uploadFiles.length === 0) {
-      alert('Please select files to upload');
+      toast.error('Please select files to upload');
       return;
     }
 
@@ -147,7 +148,7 @@ const OutwardStaffLetters = () => {
       );
 
       if (response.data.success) {
-        alert('Report files uploaded successfully!');
+        toast.success('Report files uploaded successfully!');
         setUploadModalOpen(false);
         setUploadFiles([]);
         setSelectedLetterForUpload(null);
@@ -167,7 +168,7 @@ const OutwardStaffLetters = () => {
       console.error('Error headers:', error.response?.headers);
       
       const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message;
-      alert('Failed to upload files: ' + errorMessage);
+      toast.error('Failed to upload files: ' + errorMessage);
     } finally {
       setUploading(false);
     }
@@ -194,7 +195,7 @@ const OutwardStaffLetters = () => {
       );
 
       if (response.data.success) {
-        alert(language === 'mr' ? 'केस यशस्वीरित्या बंद झाले!' : 'Case closed successfully!');
+        toast.success(language === 'mr' ? 'केस यशस्वीरित्या बंद झाले!' : 'Case closed successfully!');
         // Refresh the page to show updated status
         window.location.reload();
       } else {
@@ -203,7 +204,7 @@ const OutwardStaffLetters = () => {
     } catch (error) {
       console.error('Close case error:', error);
       const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message;
-      alert((language === 'mr' ? 'केस बंद करताना त्रुटी: ' : 'Failed to close case: ') + errorMessage);
+      toast.error((language === 'mr' ? 'केस बंद करताना त्रुटी: ' : 'Failed to close case: ') + errorMessage);
     } finally {
       setClosingCase(false);
     }

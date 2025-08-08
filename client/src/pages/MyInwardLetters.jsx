@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { FiEye, FiDownload, FiSearch, FiRefreshCw, FiFileText } from 'react-icons/fi';
 import { useLanguage } from '../context/LanguageContext';
+import { toast } from 'react-toastify';
 const apiUrl = import.meta.env.VITE_API_URL ;
 
 const MyInwardLetters = () => {
@@ -135,11 +136,11 @@ const MyInwardLetters = () => {
       if (fileUrl) {
         window.open(fileUrl, '_blank');
       } else {
-        alert(language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available');
+        toast.error(language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available');
       }
     } catch (error) {
       console.error('Error previewing file:', error);
-      alert(language === 'mr' ? 'फाइल पहाण्यात त्रुटी!' : 'Error viewing file!');
+      toast.error(language === 'mr' ? 'फाइल पहाण्यात त्रुटी!' : 'Error viewing file!');
     }
   };
 
@@ -149,7 +150,7 @@ const MyInwardLetters = () => {
       const coveringLetter = letter.coveringLetter || letter.directCoveringLetter;
       
       if (!coveringLetter) {
-        alert(language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'Covering letter not available');
+        toast.error(language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'Covering letter not available');
         return;
       }
       
@@ -162,11 +163,11 @@ const MyInwardLetters = () => {
       if (url) {
         window.open(url, '_blank');
       } else {
-        alert(language === 'mr' ? 'कव्हरिंग लेटर फाइल उपलब्ध नाही' : 'Covering letter file not available');
+        toast.error(language === 'mr' ? 'कव्हरिंग लेटर फाइल उपलब्ध नाही' : 'Covering letter file not available');
       }
     } catch (error) {
       console.error('Error viewing covering letter:', error);
-      alert(language === 'mr' ? 'कव्हरिंग लेटर पहाण्यात त्रुटी!' : 'Error viewing covering letter!');
+      toast.error(language === 'mr' ? 'कव्हरिंग लेटर पहाण्यात त्रुटी!' : 'Error viewing covering letter!');
     }
   };
 

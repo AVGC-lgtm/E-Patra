@@ -243,17 +243,37 @@ const forgotPassword = async (req, res) => {
 };
 
 // Verify OTP
+// Enhanced Verify OTP function with better error handling
 const verifyOtp = async (req, res) => {
-  console.log('OTP Verification Request:', {
-    body: req.body,
-    headers: req.headers
-  });
+  console.log('=== OTP Verification Request ===');
+  console.log('Request Body:', JSON.stringify(req.body, null, 2));
+  console.log('Request Headers:', req.headers);
+  console.log('Request Method:', req.method);
 
   const { email, otp } = req.body;
   
-  if (!email || !otp) {
-    console.log('Missing email or OTP in request');
-    return res.status(400).json(authResponses.error('Email and OTP required'));
+  // Enhanced validation
+  if (!email) {
+    console.log('ERROR: Email is missing from request');
+    return res.status(400).json(authResponses.error('Email is required'));
+  }
+  
+  if (!otp) {
+    console.log('ERROR: OTP is missing from request');
+    return res.status(400).json(authResponses.error('OTP is required'));
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    console.log('ERROR: Invalid email format:', email);
+    return res.status(400).json(authResponses.error('Invalid email format'));
+  }
+
+  // Validate OTP format (should be 6 digits)
+  if (!/^\d{6}$/.test(otp)) {
+    console.log('ERROR: Invalid OTP format. Expected 6 digits, received:', otp);
+    return res.status(400).json(authResponses.error('OTP must be 6 digits'));
   }
 
   try {
@@ -261,48 +281,90 @@ const verifyOtp = async (req, res) => {
     const user = await User.findOne({ where: { email } });
     
     if (!user) {
-      console.log('User not found');
+      console.log('ERROR: User not found for email:', email);
       return res.status(400).json(authResponses.error('User not found'));
     }
 
-    console.log('User found. Checking OTP...', {
+    console.log('User found:', {
+      id: user.id,
+      email: user.email,
       hasOtpHash: !!user.otpHash,
       otpExpiration: user.otpExpiration,
-      currentTime: new Date(),
-      isOtpExpired: user.otpExpiration && new Date() > user.otpExpiration
+      currentTime: new Date()
     });
 
-    const now = new Date();
-    const isOtpExpired = user.otpExpiration && now > user.otpExpiration;
-    
-    if (isOtpExpired) {
-      console.log('OTP has expired');
-      return res.status(400).json(authResponses.error('OTP has expired'));
+    // Check if OTP exists
+    if (!user.otpHash) {
+      console.log('ERROR: No OTP found for this user. Please request a new OTP.');
+      return res.status(400).json(authResponses.error('No OTP found. Please request a new OTP.'));
     }
 
-    if (!user.otpHash) {
-      console.log('No OTP found for this user');
-      return res.status(400).json(authResponses.error('No OTP found'));
+    // Check OTP expiration
+    const now = new Date();
+    if (!user.otpExpiration) {
+      console.log('ERROR: OTP expiration time not set');
+      return res.status(400).json(authResponses.error('Invalid OTP session. Please request a new OTP.'));
     }
+
+    const isOtpExpired = now > user.otpExpiration;
+    if (isOtpExpired) {
+      console.log('ERROR: OTP has expired', {
+        currentTime: now,
+        expirationTime: user.otpExpiration,
+        timeDifference: now - user.otpExpiration
+      });
+      
+      // Clear expired OTP
+      await user.update({
+        otpHash: null,
+        otpExpiration: null
+      });
+      
+      return res.status(400).json(authResponses.error('OTP has expired. Please request a new OTP.'));
+    }
+
+    // Verify OTP
+    console.log('Comparing OTP:', {
+      providedOtp: otp,
+      storedHashExists: !!user.otpHash
+    });
 
     const isOtpValid = await bcrypt.compare(otp, user.otpHash);
     console.log('OTP comparison result:', isOtpValid);
 
     if (!isOtpValid) {
-      console.log('Invalid OTP provided');
-      return res.status(400).json(authResponses.error('Invalid OTP'));
+      console.log('ERROR: Invalid OTP provided');
+      return res.status(400).json(authResponses.error('Invalid OTP. Please check and try again.'));
     }
 
-    // If we get here, OTP is valid
-    console.log('OTP verified successfully');
-    user.otpHash = null;
-    user.otpExpiration = null;
-    await user.save();
+    // Success - clear OTP fields
+    console.log('SUCCESS: OTP verified successfully');
+    await user.update({
+      otpHash: null,
+      otpExpiration: null
+    });
 
     return res.json(authResponses.otpVerified());
+    
   } catch (error) {
-    console.error('Verify OTP error:', error);
-    return res.status(500).json(authResponses.error('Server error: ' + error.message));
+    console.error('=== VERIFY OTP ERROR ===');
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
+    // Database connection error
+    if (error.name === 'SequelizeConnectionError') {
+      return res.status(500).json(authResponses.error('Database connection error'));
+    }
+    
+    // Validation error
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json(authResponses.error('Data validation error'));
+    }
+    
+    return res.status(500).json(authResponses.error('Server error occurred while verifying OTP'));
   }
 };
 

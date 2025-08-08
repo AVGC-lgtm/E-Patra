@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LanguageProvider } from './context/LanguageContext';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { getAuthToken, setAuthToken, clearAuthTokens, isSessionActive } from './utils/auth';
 import Login from "./components/Login/Login";
 import ForgotPassword from "./components/Login/ForgotPassword";
@@ -29,7 +30,7 @@ const apiUrl = import.meta.env.VITE_API_URL;
 const normalizeRole = (role) => {
   if (!role) return 'user';
   
-  const roleStr = role.toString().toLowerCase().trim();
+  const roleStr = role.toString().toLowerCase().trim();  
   
   // Handle different variations of role names
   const roleMap = {
@@ -45,7 +46,7 @@ const normalizeRole = (role) => {
     'police_station': 'outside_police_station',
     'admin': 'admin',
     // New roles from your system
-    'collector': 'collector',
+    'dm': 'dm',
     'dg_other': 'dg_other',
     'home': 'home',
     'ig_nashik_other': 'ig_nashik_other',
@@ -61,7 +62,7 @@ const AppContent = () => {
   const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState('user');
-  const [isLoading, setIsLoading] = useState(true);
+  // Removed global loading state - individual components handle their own loading
 
   // Check for existing token on initial load with improved session management
   useEffect(() => {
@@ -70,7 +71,6 @@ const AppContent = () => {
       if (!isSessionActive()) {
         // If it's a new session, clear any existing tokens to force fresh login
         clearAuthTokens();
-        setIsLoading(false);
         return;
       }
 
@@ -118,7 +118,6 @@ const AppContent = () => {
           setUserRole('user');
         }
       }
-      setIsLoading(false);
     };
 
     checkAuth();
@@ -138,7 +137,7 @@ const AppContent = () => {
       setUserRole(normalizedRole);
     } catch (error) {
       console.error('Error processing login:', error);
-      alert('Error processing your login. Please try again.');
+      toast.error('Error processing your login. Please try again.');
     }
   };
 
@@ -151,47 +150,17 @@ const AppContent = () => {
     navigate('/login');
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
+  // Remove global loading screen - let individual components handle their own loading states
 
   // Get the appropriate layout based on user role
   const getLayout = (children) => {
     // All users use the same SimpleDashboardLayout design
-    if ([
-      'inward_user', 'outward_user', 'sp', 'outside_police_station',
-      'collector', 'dg_other', 'home', 'ig_nashik_other', 'shanik_local'
-    ].includes(userRole)) {
-      return (
-        <SimpleDashboardLayout 
-          onLogout={handleLogout}
-        >
-          {children}
-        </SimpleDashboardLayout>
-      );
-    }
-    
-    // Head users get a special layout or use SimpleDashboardLayout
-    if (userRole === 'head') {
-      return (
-        <SimpleDashboardLayout 
-          onLogout={handleLogout}
-        >
-          {children}
-        </SimpleDashboardLayout>
-      );
-    }
-    
     return (
-      <DashboardLayout 
+      <SimpleDashboardLayout 
         onLogout={handleLogout}
       >
         {children}
-      </DashboardLayout>
+      </SimpleDashboardLayout>
     );
   };
 
@@ -254,13 +223,11 @@ const AppContent = () => {
       return <Navigate to={redirectPath} replace />;
     }
     
-    return getLayout(children);
+    return children;
   };
 
-  // Route guard component to validate access on every navigation
+  // Route guard component to validate access on every navigation (without loading screen)
   const RouteGuard = ({ children }) => {
-    const [isValidating, setIsValidating] = useState(true);
-    
     useEffect(() => {
       const validateAccess = async () => {
         const token = getAuthToken();
@@ -268,7 +235,6 @@ const AppContent = () => {
         if (!token) {
           setIsLoggedIn(false);
           setUserRole('user');
-          setIsValidating(false);
           return;
         }
         
@@ -304,21 +270,12 @@ const AppContent = () => {
           setIsLoggedIn(false);
           setUserRole('user');
         }
-        
-        setIsValidating(false);
       };
       
       validateAccess();
     }, [window.location.pathname]); // Re-validate on route change
     
-    if (isValidating) {
-      return (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-      );
-    }
-    
+    // No loading screen - show children immediately while validation happens in background
     return children;
   };
 
@@ -361,7 +318,9 @@ const AppContent = () => {
           path="/inward-dashboard" 
           element={
             <ProtectedRoute roles={['inward_user']}>
-              <Outlet />
+              <SimpleDashboardLayout onLogout={handleLogout}>
+                <Outlet />
+              </SimpleDashboardLayout>
             </ProtectedRoute>
           }
         >
@@ -375,10 +334,12 @@ const AppContent = () => {
           path="/outward-dashboard" 
           element={
             <ProtectedRoute roles={[
-              'outward_user', 'sp', 'collector', 'dg_other', 
+              'outward_user', 'sp', 'dm', 'dg_other', 
               'home', 'ig_nashik_other', 'shanik_local', 'outside_police_station'
             ]}>
-              <Outlet />
+              <SimpleDashboardLayout onLogout={handleLogout}>
+                <Outlet />
+              </SimpleDashboardLayout>
             </ProtectedRoute>
           }
         >
@@ -394,7 +355,9 @@ const AppContent = () => {
           path="/head-dashboard" 
           element={
             <ProtectedRoute roles={['head']}>
-              <Outlet />
+              <SimpleDashboardLayout onLogout={handleLogout}>
+                <Outlet />
+              </SimpleDashboardLayout>
             </ProtectedRoute>
           }
         >

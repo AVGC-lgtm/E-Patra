@@ -24,22 +24,171 @@ const ForgotPassword = () => {
   // Handle OTP input change
   const handleOtpChange = (index, value) => {
     // Only allow single digit numbers or empty string
-    if (value !== '' && !/^\d?$/.test(value)) return;
+    if (value !== '' && !/^\d$/.test(value)) return;
     
     // Update the OTP array with the new value
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
     
+    // Clear error when user is typing - but use a callback to ensure it's based on latest state
+    setError('');
+    
     // Move to next input if a digit was entered
     if (value !== '' && index < 5) {
       otpInputs.current[index + 1]?.focus();
     }
     
-    // Auto-submit when all digits are entered
-    const isComplete = newOtp.every(digit => digit && digit.length === 1);
-    if (isComplete && index === 5) {
-      handleOtpSubmit();
+    // Auto-submit when all digits are entered (but not if currently loading)
+    const otpString = newOtp.join('');
+    if (otpString.length === 6 && /^\d{6}$/.test(otpString) && !isLoading) {
+      // Use the newOtp directly for auto-submit to avoid state timing issues
+      setTimeout(() => {
+        const currentOtpString = newOtp.join('');
+        if (currentOtpString.length === 6 && /^\d{6}$/.test(currentOtpString)) {
+          handleOtpSubmitWithCode(currentOtpString);
+        }
+      }, 150);
+    }
+  };
+
+  // Helper function to submit with a specific OTP code
+  const handleOtpSubmitWithCode = async (otpCode = null) => {
+    const finalOtpCode = otpCode || otp.join('').trim();
+    
+    // Debug log
+    console.log('OTP Submission:', { 
+      finalOtpCode, 
+      length: finalOtpCode.length,
+      isValid: /^\d{6}$/.test(finalOtpCode)
+    });
+    
+    // Check if we have exactly 6 digits
+    if (finalOtpCode.length !== 6 || !/^\d{6}$/.test(finalOtpCode)) {
+      const errorMessage = 'Please enter all 6 digits of the OTP';
+      setError(errorMessage);
+      toast.error(errorMessage, {
+        position: 'top-right',
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+      return;
+    }
+
+    // Clear any existing errors before proceeding
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const emailToSend = email.trim().toLowerCase();
+
+      const requestBody = { 
+        email: emailToSend,
+        otp: finalOtpCode
+      };
+
+      console.log('Sending OTP verification request:', {
+        url: `${apiUrl}/api/auth/verify-otp`,
+        method: 'POST',
+        body: requestBody,
+        apiUrl: apiUrl
+      });
+
+      const response = await fetch(`${apiUrl}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      console.log('Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
+      const responseText = await response.text();
+      console.log('Raw response text:', responseText);
+
+      let data = {};
+
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
+        console.error('Response text was:', responseText);
+        throw new Error('Invalid response from server');
+      }
+
+      if (!response.ok) {
+        let errorMessage;
+        
+        // Handle specific error cases
+        if (response.status === 400) {
+          // 400 Bad Request typically means wrong OTP
+          errorMessage = data.message || 'Wrong OTP. Please enter valid OTP';
+        } else if (response.status === 404) {
+          errorMessage = 'OTP not found or expired. Please request a new OTP';
+        } else if (response.status === 429) {
+          errorMessage = 'Too many attempts. Please try again later';
+        } else {
+          errorMessage = data.message || `Server error: ${response.status} ${response.statusText}`;
+        }
+        
+        console.error('OTP verification failed:', errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      console.log('OTP verification successful:', data);
+
+      // If OTP verification is successful, proceed to the next step
+      setStep(3); // Move to password reset step
+      toast.success('OTP verified successfully!', {
+        position: 'top-right',
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+
+      // Handle network error
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        setError('Network error - please check if the server is running');
+        toast.error('Network error - please check your connection', {
+          position: 'top-right',
+          autoClose: 5000,
+        });
+      } else {
+        // For wrong OTP or other API errors, show the specific message
+        let errorMessage = error.message;
+        
+        // If no specific message, provide a default for wrong OTP
+        if (!errorMessage || errorMessage.includes('Server error')) {
+          errorMessage = 'Wrong OTP. Please enter valid OTP';
+        }
+        
+        setError(errorMessage);
+        toast.error(errorMessage, {
+          position: 'top-right',
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -50,15 +199,27 @@ const ForgotPassword = () => {
     if (/^\d{6}$/.test(paste)) {
       const pasteOtp = paste.split('');
       setOtp(pasteOtp);
-      // Focus on the last input
+      // Clear any existing error
+      setError('');
+      // Focus on the last input and auto-submit after a short delay
       otpInputs.current[5]?.focus();
+      setTimeout(() => {
+        handleOtpSubmitWithCode(paste);
+      }, 100);
     }
   };
 
   // Handle backspace in OTP fields
   const handleOtpKeyDown = (index, e) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      otpInputs.current[index - 1]?.focus();
+    if (e.key === 'Backspace') {
+      // Clear error when user is editing
+      if (error) {
+        setError('');
+      }
+      
+      if (!otp[index] && index > 0) {
+        otpInputs.current[index - 1]?.focus();
+      }
     }
   };
 
@@ -78,7 +239,7 @@ const ForgotPassword = () => {
     setError('');
     
     try {
-      const apiUrl = import.meta.env.VITE_API_URL ;
+      const apiUrl = import.meta.env.VITE_API_URL;
       const response = await fetch(`${apiUrl}/api/auth/forgot-password`, {
         method: 'POST',
         headers: {
@@ -101,8 +262,28 @@ const ForgotPassword = () => {
         setStep(2); // Move to OTP step
         startResendTimer();
       } else {
-        setError(data.message || 'Failed to send OTP');
-        toast.error(data.message || 'Failed to send OTP', {
+        // Handle specific error cases for email submission
+        let errorMessage;
+        
+        if (response.status === 404) {
+          // User not found/registered
+          errorMessage = data.message || 'This account does not exist.';
+        } else if (response.status === 400) {
+          // Bad request - invalid email format or other validation error
+          errorMessage = data.message || 'Invalid email address. Please check and try again.';
+        } else if (response.status === 429) {
+          // Too many requests
+          errorMessage = data.message || 'Too many requests. Please try again later.';
+        } else if (response.status >= 500) {
+          // Server error
+          errorMessage = 'Server is currently unavailable. Please try again later.';
+        } else {
+          // Generic fallback
+          errorMessage = data.message || 'Failed to send OTP. Please try again.';
+        }
+        
+        setError(errorMessage);
+        toast.error(errorMessage, {
           position: 'top-right',
           autoClose: 5000,
           hideProgressBar: false,
@@ -113,8 +294,18 @@ const ForgotPassword = () => {
       }
     } catch (error) {
       console.error('Error sending OTP:', error);
-      setError('An error occurred. Please try again.');
-      toast.error('An error occurred. Please try again.', {
+      
+      // Handle network errors and other exceptions
+      let errorMessage;
+      
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        errorMessage = 'Network error. Please check your internet connection and try again.';
+      } else {
+        errorMessage = 'An unexpected error occurred. Please try again.';
+      }
+      
+      setError(errorMessage);
+      toast.error(errorMessage, {
         position: 'top-right',
         autoClose: 5000,
         hideProgressBar: false,
@@ -127,663 +318,470 @@ const ForgotPassword = () => {
     }
   };
 
-  // Handle OTP submission
   const handleOtpSubmit = async () => {
-    // Validate all OTP digits are filled
-    const isComplete = otp.length === 6 && otp.every(digit => 
-      digit && digit.length === 1
-    );
-    
-    if (!isComplete) {
-      setError('Please enter all 6 digits of the OTP');
-      return;
-    }
-    
-    // Validate OTP length first
-    if (otp.length !== 6 || otp.some(digit => !digit || digit.trim() === '')) {
-      setError('Please enter all 6 digits of the OTP');
-      toast.error('Please enter all 6 digits of the OTP', {
-        position: 'top-right',
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-    
-    try {
-      const otpCode = otp.join('');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      const emailToSend = email.trim().toLowerCase();
-      
-      const requestBody = { 
-        email: emailToSend,
-        otp: otpCode
-      };
-      
-      console.log('Sending OTP verification request:', {
-        url: `${apiUrl}/api/auth/verify-otp`,
-        method: 'POST',
-        body: requestBody
-      });
-      
-      const response = await fetch(`${apiUrl}/api/auth/verify-otp`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(requestBody),
-      });
-
-      const responseText = await response.text();
-      let data = {};
-      
-      try {
-        data = responseText ? JSON.parse(responseText) : {};
-      } catch (error) {
-        console.error('Error parsing response:', error);
-        throw new Error('Invalid response from server');
-      }
-
-      if (!response.ok) {
-        const errorMessage = data.message || 'Failed to verify OTP';
-        console.error('OTP verification failed:', errorMessage);
-        throw new Error(errorMessage);
-      }
-      
-      // If we get here, OTP was verified successfully
-      setStep(3); // Move to password reset step
-      toast.success('OTP verified successfully!', {
-        position: 'top-right',
-        autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
-    } catch (error) {
-      console.error('Error verifying OTP:', error);
-      setError('An error occurred. Please try again.');
-      toast.error('An error occurred. Please try again.', {
-        position: 'top-right',
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    return handleOtpSubmitWithCode();
   };
 
   // Handle password reset
   const handlePasswordSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!newPassword || !confirmPassword) {
-      setError('Please fill in all fields');
-      return;
-    }
-    
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-    
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters long');
-      return;
-    }
-    
-    setIsLoading(true);
-    setError('');
-    
-    try {
-      const otpCode = otp.join('');
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      const response = await fetch(`${apiUrl}/api/auth/reset-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          email,
-          otp: otpCode,
-          newPassword,
-          confirmPassword
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        toast.success('Password has been reset successfully', {
-          position: 'top-right',
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        });
-        setStep(4); // Success step
-      } else {
-        setError(data.message || 'Failed to reset password');
-        toast.error(data.message || 'Failed to reset password', {
-          position: 'top-right',
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        });
+        setError('Please fill in all fields');
+        return;
       }
-    } catch (error) {
-      console.error('Error resetting password:', error);
-      setError('An error occurred. Please try again.');
-      toast.error('An error occurred. Please try again.', {
-        position: 'top-right',
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Resend OTP functionality
-  const handleResendOtp = async () => {
-    if (isResending || resendTimer > 0) return;
-    
-    setIsResending(true);
-    
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      const response = await fetch(`${apiUrl}/api/auth/forgot-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        toast.success('New OTP has been sent to your email', {
-          position: 'top-right',
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        });
-        setResendTimer(30);
-        startResendTimer();
-      } else {
-        toast.error(data.message || 'Failed to resend OTP', {
-          position: 'top-right',
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        });
+      
+      if (newPassword !== confirmPassword) {
+        setError('Passwords do not match');
+        return;
       }
-    } catch (error) {
-      console.error('Error resending OTP:', error);
-      toast.error('An error occurred. Please try again.', {
-        position: 'top-right',
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
-    } finally {
-      setIsResending(false);
-    }
-  };
+      
+      if (newPassword.length < 8) {
+        setError('Password must be at least 8 characters long');
+        return;
+      }
+      
+      setIsLoading(true);
+      setError('');
+      
+      try {
+        const otpCode = otp.join('');
+        const apiUrl = import.meta.env.VITE_API_URL ;
+        const response = await fetch(`${apiUrl}/api/auth/reset-password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            email,
+            otp: otpCode,
+            newPassword,
+            confirmPassword
+          }),
+        });
 
-  // Start resend timer
-  const startResendTimer = () => {
-    const timer = setInterval(() => {
-      setResendTimer(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
+        const data = await response.json();
+
+        if (response.ok) {
+          toast.success('Password has been reset successfully', {
+            position: 'top-right',
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+          });
+          setStep(4); // Success step
+        } else {
+          setError(data.message || 'Failed to reset password');
+          toast.error(data.message || 'Failed to reset password', {
+            position: 'top-right',
+            autoClose: 5000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+          });
         }
-        return prev - 1;
-      });
-    }, 1000);
+      } catch (error) {
+        console.error('Error resetting password:', error);
+        setError('An error occurred. Please try again.');
+        toast.error('An error occurred. Please try again.', {
+          position: 'top-right',
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    return () => clearInterval(timer);
-  };
+    // Resend OTP functionality
+    const handleResendOtp = async () => {
+      if (isResending || resendTimer > 0) return;
+      
+      setIsResending(true);
+      
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL;
+        const response = await fetch(`${apiUrl}/api/auth/forgot-password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email }),
+        });
 
-  const handleBackToLogin = () => {
-    navigate('/login');
-  };
-  
-  // Auto-focus first OTP input when step changes to 2
-  useEffect(() => {
-    if (step === 2) {
-      otpInputs.current[0]?.focus();
-    }
-  }, [step]);
+        const data = await response.json();
 
-  const renderStepContent = () => {
-    switch (step) {
-      case 1: // Email Step
-        return (
-          <form onSubmit={handleEmailSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-700">
-                Email Address
-              </label>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
-                  </svg>
+        if (response.ok) {
+          toast.success('New OTP has been sent to your email', {
+            position: 'top-right',
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+          });
+          setResendTimer(30);
+          startResendTimer();
+        } else {
+          toast.error(data.message || 'Failed to resend OTP', {
+            position: 'top-right',
+            autoClose: 5000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+          });
+        }
+      } catch (error) {
+        console.error('Error resending OTP:', error);
+        toast.error('An error occurred. Please try again.', {
+          position: 'top-right',
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      } finally {
+        setIsResending(false);
+      }
+    };
+
+    // Start resend timer
+    const startResendTimer = () => {
+      const timer = setInterval(() => {
+        setResendTimer(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    };
+
+    const handleBackToLogin = () => {
+      navigate('/login');
+    };
+    
+    // Auto-focus first OTP input when step changes to 2
+    useEffect(() => {
+      if (step === 2) {
+        otpInputs.current[0]?.focus();
+      }
+    }, [step]);
+
+    const renderStepContent = () => {
+      switch (step) {
+        case 1: // Email Step
+          return (
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  Email address
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    id="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="you@example.com"
+                    required
+                  />
                 </div>
-                <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium hover:border-blue-300 hover:shadow-md"
-                  placeholder="Enter your email"
-                  required
-                />
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`w-full relative overflow-hidden ${
-                isLoading 
-                  ? 'bg-gradient-to-r from-blue-400 to-purple-400 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:-translate-y-0.5'
-              } text-white font-bold py-4 px-4 rounded-xl shadow-lg hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/50 focus:ring-offset-2 transition-all duration-300 group`}
-            >
-              {/* Button shine effect */}
-              <div className="absolute inset-0 -top-[2px] bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
-              
-              <span className="relative z-10">
-                {isLoading ? (
-                  <span className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Sending...
+              <div>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                >
+                  {isLoading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Sending...
+                    </>
+                  ) : 'Send OTP'}
+                </button>
+              </div>
+            </form>
+          );
+
+        case 2: // OTP Step
+          return (
+            <div className="space-y-6">
+              <div className="text-center">
+                <p className="text-gray-600 mb-2">We've sent a 6-digit code to</p>
+                <p className="font-medium">{email}</p>
+                <button 
+                  type="button" 
+                  onClick={() => setStep(1)}
+                  className="text-blue-600 text-sm mt-2 hover:underline"
+                >
+                  Change email
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between space-x-2">
+                  {[0, 1, 2, 3, 4, 5].map((index) => (
+                    <input
+                      key={index}
+                      ref={(el) => (otpInputs.current[index] = el)}
+                      type="text"
+                      maxLength={1}
+                      value={otp[index]}
+                      onChange={(e) => handleOtpChange(index, e.target.value)}
+                      onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                      onPaste={index === 0 ? handleOtpPaste : undefined}
+                      className="w-12 h-12 text-center text-xl border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      autoFocus={index === 0}
+                    />
+                  ))}
+                </div>
+
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">
+                    {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : 'Didn\'t receive the code?'}
                   </span>
-                ) : (
-                  'Send OTP'
-                )}
-              </span>
-            </button>
-          </form>
-        );
-
-      case 2: // OTP Step
-        return (
-          <div className="space-y-6">
-            <div className="text-center space-y-3">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-2">
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={resendTimer > 0 || isResending}
+                    className={`text-blue-600 font-medium ${(resendTimer > 0 || isResending) ? 'opacity-50 cursor-not-allowed' : 'hover:underline'}`}
+                  >
+                    {isResending ? 'Sending...' : 'Resend OTP'}
+                  </button>
+                </div>
               </div>
-              <p className="text-gray-600">We've sent a 6-digit code to</p>
-              <p className="font-semibold text-gray-900">{email}</p>
-              <button 
-                type="button" 
-                onClick={() => setStep(1)}
-                className="text-sm bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:from-blue-700 hover:to-purple-700 font-semibold transition-all duration-200"
+
+              <button
+                type="button"
+                onClick={handleOtpSubmit}
+                disabled={(() => {
+                  const otpString = otp.join('');
+                  return otpString.length !== 6 || !/^\d{6}$/.test(otpString) || isLoading;
+                })()}
+                className={`w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${(() => {
+                  const otpString = otp.join('');
+                  return (otpString.length !== 6 || !/^\d{6}$/.test(otpString) || isLoading) ? 'opacity-70 cursor-not-allowed' : '';
+                })()}`}
               >
-                Change email
+                {isLoading ? 'Verifying...' : 'Verify OTP'}
               </button>
             </div>
+          );
 
-            <div className="space-y-4">
-              <div className="flex justify-between space-x-2">
-                {[0, 1, 2, 3, 4, 5].map((index) => (
+        case 3: // New Password Step
+          return (
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                  New Password
+                </label>
+                <div className="relative">
                   <input
-                    key={index}
-                    ref={(el) => (otpInputs.current[index] = el)}
-                    type="text"
-                    maxLength={1}
-                    value={otp[index]}
-                    onChange={(e) => handleOtpChange(index, e.target.value)}
-                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                    onPaste={index === 0 ? handleOtpPaste : undefined}
-                    className="w-12 h-12 md:w-14 md:h-14 text-center text-xl font-bold border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 hover:border-blue-300"
-                    autoFocus={index === 0}
+                    type={showPassword ? "text" : "password"}
+                    id="newPassword"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter new password"
+                    required
                   />
-                ))}
-              </div>
-
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500">
-                  {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : 'Didn\'t receive the code?'}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleResendOtp}
-                  disabled={resendTimer > 0 || isResending}
-                  className={`font-medium ${(resendTimer > 0 || isResending) ? 'text-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:from-blue-700 hover:to-purple-700'}`}
-                >
-                  {isResending ? 'Sending...' : 'Resend OTP'}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleOtpSubmit}
-              disabled={otp.length !== 6 || otp.some(digit => digit === '' || digit === null || digit === undefined) || isLoading}
-              className={`w-full relative overflow-hidden ${
-                (otp.length !== 6 || otp.some(digit => digit === '' || digit === null || digit === undefined) || isLoading)
-                  ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:-translate-y-0.5'
-              } text-white font-bold py-4 px-4 rounded-xl shadow-lg hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/50 focus:ring-offset-2 transition-all duration-300 group`}
-            >
-              <div className="absolute inset-0 -top-[2px] bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
-              <span className="relative z-10">{isLoading ? 'Verifying...' : 'Verify OTP'}</span>
-            </button>
-          </div>
-        );
-
-      case 3: // New Password Step
-        return (
-          <form onSubmit={handlePasswordSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <label htmlFor="newPassword" className="block text-sm font-semibold text-gray-700">
-                New Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-500"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
                 </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  id="newPassword"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full pl-11 pr-12 py-3.5 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium hover:border-blue-300 hover:shadow-md"
-                  placeholder="Enter new password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-500 hover:text-gray-700 transition-colors duration-200"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
+                <p className="mt-1 text-xs text-gray-500">
+                  Must be at least 8 characters long
+                </p>
               </div>
-              <p className="text-xs text-gray-500 pl-1">
-                Must be at least 8 characters long
-              </p>
-            </div>
 
-            <div className="space-y-2">
-              <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700">
-                Confirm New Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                  Confirm New Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    id="confirmPassword"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Confirm new password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-500"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
                 </div>
-                <input
-                  type={showConfirmPassword ? "text" : "password"}
-                  id="confirmPassword"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full pl-11 pr-12 py-3.5 bg-gray-50 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white outline-none transition-all duration-300 text-gray-700 font-medium hover:border-blue-300 hover:shadow-md"
-                  placeholder="Confirm new password"
-                  required
-                />
+              </div>
+
+              <div>
                 <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-500 hover:text-gray-700 transition-colors duration-200"
+                  type="submit"
+                  disabled={isLoading || !newPassword || !confirmPassword}
+                  className={`w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${(isLoading || !newPassword || !confirmPassword) ? 'opacity-70 cursor-not-allowed' : ''}`}
                 >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
+                  {isLoading ? 'Resetting...' : 'Reset Password'}
                 </button>
               </div>
-            </div>
+            </form>
+          );
 
-            <button
-              type="submit"
-              disabled={isLoading || !newPassword || !confirmPassword}
-              className={`w-full relative overflow-hidden ${
-                (isLoading || !newPassword || !confirmPassword)
-                  ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:-translate-y-0.5'
-              } text-white font-bold py-4 px-4 rounded-xl shadow-lg hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/50 focus:ring-offset-2 transition-all duration-300 group`}
-            >
-              <div className="absolute inset-0 -top-[2px] bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
-              <span className="relative z-10">{isLoading ? 'Resetting...' : 'Reset Password'}</span>
-            </button>
-          </form>
-        );
-
-      case 4: // Success Step
-        return (
-          <div className="text-center py-8 space-y-6">
-            <div className="relative inline-flex">
-              <div className="absolute inset-0 bg-green-400 rounded-full blur-xl opacity-30 animate-pulse"></div>
-              <div className="relative w-20 h-20 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg">
-                <Check className="h-10 w-10 text-white" />
+        case 4: // Success Step
+          return (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Check className="h-8 w-8 text-green-500" />
               </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Password Reset Successful!</h3>
+              <p className="text-gray-600 mb-6">Your password has been updated successfully.</p>
+              <button
+                onClick={handleBackToLogin}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Back to Login
+              </button>
             </div>
-            <div className="space-y-2">
-              <h3 className="text-2xl font-bold text-gray-900">Password Reset Successful!</h3>
-              <p className="text-gray-600">Your password has been updated successfully.</p>
-            </div>
-            <button
-              onClick={handleBackToLogin}
-              className="w-full relative overflow-hidden bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-4 px-4 rounded-xl shadow-lg hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/50 focus:ring-offset-2 transition-all duration-300 transform hover:-translate-y-0.5 group"
-            >
-              <div className="absolute inset-0 -top-[2px] bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
-              <span className="relative z-10">Back to Login</span>
-            </button>
+          );
+
+        default:
+          return null;
+      }
+    };
+
+    const getStepTitle = () => {
+      switch (step) {
+        case 1: return 'Forgot Password';
+        case 2: return 'Verify OTP';
+        case 3: return 'Reset Password';
+        case 4: return 'Password Reset';
+        default: return 'Forgot Password';
+      }
+    };
+
+    const getStepDescription = () => {
+      switch (step) {
+        case 1: return 'Enter your email address and we\'ll send you a verification code.';
+        case 2: return 'Enter the 6-digit code sent to your email.';
+        case 3: return 'Create a new password for your account.';
+        case 4: return 'Your password has been successfully reset!';
+        default: return '';
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100">
+        {/* Header - Enhanced design */}
+        <header className="w-full bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 text-white shadow-2xl relative overflow-hidden">
+          {/* Background pattern */}
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute inset-0" style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            }}></div>
           </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  const getStepTitle = () => {
-    switch (step) {
-      case 1: return 'Forgot Password';
-      case 2: return 'Verify OTP';
-      case 3: return 'Reset Password';
-      case 4: return 'Password Reset';
-      default: return 'Forgot Password';
-    }
-  };
-
-  const getStepDescription = () => {
-    switch (step) {
-      case 1: return 'Enter your email address and we\'ll send you a verification code.';
-      case 2: return 'Enter the 6-digit code sent to your email.';
-      case 3: return 'Create a new password for your account.';
-      case 4: return 'Your password has been successfully reset!';
-      default: return '';
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header - Premium Enhanced design */}
-      <header className="w-full bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 text-white shadow-2xl relative overflow-hidden">
-        {/* Animated background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0 animate-pulse" style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-          }}></div>
-        </div>
-        
-        {/* Animated gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 via-transparent to-blue-600/20 animate-gradient-x"></div>
-        
-        <div className="relative z-10 px-4 py-5 md:px-8 md:py-7">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="flex items-center space-x-4 md:space-x-6">
-              {/* Premium logo container with animations */}
-              <div className="relative group">
-                {/* Glow effect */}
-                <div className="absolute -inset-1 bg-gradient-to-r from-blue-400 to-purple-400 rounded-2xl blur-lg opacity-0 group-hover:opacity-75 transition duration-1000 group-hover:duration-200 animate-pulse"></div>
-                
-                {/* Logo container */}
-                <div className="relative bg-white rounded-2xl p-3 shadow-2xl transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
-                  {/* Inner glow */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl opacity-50"></div>
-                  
+          
+          <div className="relative z-10 px-4 py-4 md:px-8 md:py-6">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                {/* Enhanced logo container */}
+                <div className="bg-white rounded-xl p-2 shadow-lg transform hover:scale-105 transition-transform duration-200">
                   <img 
                     src="/web icon (1).png" 
                     alt="ई-पत्र Logo" 
-                    className="w-14 h-14 md:w-16 md:h-16 object-contain relative z-10 filter drop-shadow-md"
+                    className="w-12 h-12 md:w-14 md:h-14 object-contain"
                   />
-                  
-                  {/* Decorative corner accents */}
-                  <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-blue-500 rounded-tl-lg"></div>
-                  <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-blue-500 rounded-tr-lg"></div>
-                  <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-blue-500 rounded-bl-lg"></div>
-                  <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-blue-500 rounded-br-lg"></div>
+                </div>
+                <div>
+                  <h1 className="text-2xl md:text-3xl font-bold text-white tracking-wide">ई-पत्र</h1>
                 </div>
               </div>
-              
-              {/* Enhanced title section */}
-              <div className="relative">
-                {/* Title with gradient and animation */}
-                <h1 className="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-blue-200 to-white animate-text-shimmer tracking-wider">
-                  ई-पत्र
-                </h1>
-                
-                {/* Animated subtitle */}
-                <div className="flex items-center space-x-2 mt-1">
-                  <div className="h-px w-6 bg-gradient-to-r from-transparent to-blue-300 animate-expand"></div>
-                  <p className="text-blue-200 text-sm md:text-base font-medium tracking-wide animate-fade-in">
-                    Ultimate Automation System
-                  </p>
-                  <div className="h-px w-6 bg-gradient-to-l from-transparent to-blue-300 animate-expand"></div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Right side with badge effect */}
-            <div className="text-right relative">
-              <div className="absolute -inset-2 bg-blue-400/20 blur-xl rounded-full animate-pulse"></div>
-              <div className="relative">
-                <p className="text-blue-100 text-sm md:text-lg font-bold tracking-wide">Maharashtra Police</p>
-                <p className="text-blue-200 text-xs md:text-sm font-medium">Application Department</p>
+              <div className="text-right">
+                <p className="text-blue-100 text-sm md:text-base font-semibold">Maharashtra Police</p>
+                <p className="text-blue-200 text-xs md:text-sm">Application Department</p>
               </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
-        {/* Animated background orbs */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-300 rounded-full opacity-10 animate-pulse"></div>
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-300 rounded-full opacity-10 animate-pulse animation-delay-1000"></div>
-        </div>
-        
-        <div className="w-full max-w-md transform hover:scale-[1.01] transition-transform duration-300 relative z-10">
-          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl p-8 md:p-10 border border-blue-100/50 relative overflow-hidden">
-            {/* Gradient border effect */}
-            <div className="absolute inset-0 rounded-2xl p-[1px] bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 opacity-0 hover:opacity-20 transition-opacity duration-500"></div>
-            
-            <div className="relative z-10">
+        {/* Main Content */}
+        <main className="flex-1 flex items-center justify-center p-4 overflow-hidden">
+          <div className="w-full max-w-md transform hover:scale-[1.01] transition-transform duration-300">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10 border border-blue-100 backdrop-blur-sm bg-opacity-95">
               {step !== 4 && (
                 <button 
                   onClick={step === 1 ? handleBackToLogin : () => setStep(step - 1)}
-                  className="flex items-center text-gray-600 hover:text-gray-800 mb-6 group transition-colors duration-200"
+                  className="flex items-center text-gray-600 hover:text-gray-800 mb-6 transition-colors duration-200"
                 >
-                  <ArrowLeft className="h-5 w-5 mr-1 transform group-hover:-translate-x-1 transition-transform duration-200" />
-                  <span className="font-medium">Back</span>
+                  <ArrowLeft className="h-5 w-5 mr-1" />
+                  Back
                 </button>
               )}
               
-              <div className="text-center mb-8 relative">
-                {/* Decorative elements */}
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 w-20 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent rounded-full"></div>
-                
-                <h2 className="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 mb-3 animate-text-shimmer">
-                  {getStepTitle()}
-                </h2>
-                <p className="text-gray-600 text-base font-medium">
+              <div className="text-center mb-6">
+                <h2 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-900">{getStepTitle()}</h2>
+                <p className="text-gray-600 mt-2">
                   {getStepDescription()}
                 </p>
               </div>
 
               {error && (
-                <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center animate-fade-in">
-                  <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center">
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="text-sm">{error}</span>
+                  {error}
                 </div>
               )}
 
               {renderStepContent()}
             </div>
           </div>
-        </div>
-      </main>
+        </main>
 
-      {/* Footer - Premium Enhanced design */}
-      <footer className="w-full bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 text-white shadow-2xl relative overflow-hidden">
-        {/* Animated background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0" style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E")`,
-          }}></div>
-        </div>
-        
-        <div className="relative z-10 px-4 py-6 md:px-8 md:py-8">
-          <div className="max-w-7xl mx-auto text-center">
-            <div className="flex items-center justify-center space-x-4 mb-2">
-              <div className="h-px w-20 bg-gradient-to-r from-transparent to-blue-400"></div>
-              <p className="text-base md:text-lg text-blue-100 font-bold tracking-wide">© 2025 E-Patra</p>
-              <div className="h-px w-20 bg-gradient-to-l from-transparent to-blue-400"></div>
+        {/* Footer - Enhanced design */}
+        <footer className="w-full bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 text-white shadow-2xl">
+          <div className="px-4 py-6 md:px-8 md:py-8">
+            <div className="max-w-7xl mx-auto text-center">
+              <p className="text-base md:text-lg text-blue-100 font-medium">© 2025 E-Patra. All rights reserved.</p>
+              <p className="text-sm md:text-base text-blue-200 mt-2">Maharashtra Police Application Department</p>
             </div>
-            <p className="text-sm md:text-base text-blue-200 font-medium">All rights reserved • Maharashtra Police Application Department</p>
           </div>
-        </div>
-      </footer>
-    </div>
-  );
-};
+        </footer>
+      </div>
+    );
+  };
 
 export default ForgotPassword;

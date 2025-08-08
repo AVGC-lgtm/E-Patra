@@ -281,7 +281,8 @@ const getAllPatras = async (req, res) => {
         'ig_nashik_other': 'ig_nashik_other', 
         'ig': 'ig_nashik_other',  // Add variation for 'ig'
         'sp': 'sp',
-        'collector': 'collector',
+        'dm': 'dm',
+        'collector': 'dm',  // Map collector to dm for backward compatibility
         'home': 'home',
         'shanik_local': 'shanik_local',
         'shanik': 'shanik_local',  // Add variation for 'shanik'
@@ -341,7 +342,8 @@ const getAllPatras = async (req, res) => {
                   'sp': 'SP Table',
                   'dg_other': 'DG Table',
                   'ig_nashik_other': 'IG Table',
-                  'collector': 'Collector Table',
+                  'dm': 'DM Table',
+                  'collector': 'DM Table',  // Map collector to DM Table for backward compatibility
                   'home': 'Home Table',
                   'shanik_local': 'Shanik Table',
                   'inward_user': 'Inward Table',
@@ -997,7 +999,8 @@ const sendToHOD = async (req, res) => {
     if (!sourceTable && req.user && req.user.roleName) {
       const roleToTableMap = {
         'sp': 'SP Table',
-        'collector': 'Collector Table',
+        'dm': 'DM Table',
+        'collector': 'DM Table',  // Map collector to DM Table for backward compatibility
         'home': 'Home Table',
         'ig_nashik_other': 'IG Table',
         'shanik_local': 'Shanik Table',

@@ -493,7 +493,7 @@ const NewLetter = () => {
           { value: 'dg', label: 'DG Table' },
           { value: 'ig', label: 'IG Table' },
           { value: 'sp', label: 'SP Table' },
-          { value: 'collector', label: 'Collector Table' },
+          { value: 'dm', label: 'DM Table' },
           { value: 'home', label: 'Home Table' },
           { value: 'shanik', label: 'Local Table' }
         ]);

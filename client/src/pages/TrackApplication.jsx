@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useLanguage } from '../context/LanguageContext';
 import translations from '../translations';
+import { toast } from 'react-toastify';
 import { 
   FiUpload, 
   FiPaperclip, 
@@ -335,11 +336,11 @@ const TrackApplication = () => {
       if (fileUrl) {
         window.open(fileUrl, '_blank');
       } else {
-        alert(language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available');
+        toast.error(language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available');
       }
     } catch (error) {
       console.error('Error previewing file:', error);
-      alert(language === 'mr' ? 'फाइल पहाण्यात त्रुटी!' : 'Error viewing file!');
+      toast.error(language === 'mr' ? 'फाइल पहाण्यात त्रुटी!' : 'Error viewing file!');
     }
   };
 
@@ -594,7 +595,7 @@ const TrackApplication = () => {
                         onClick={() => {
                           // Create a modal or alert to show the letter content
                           const content = application.coveringLetter.letterContent;
-                          alert(language === 'mr' ? 
+                          toast.error(language === 'mr' ? 
                             'कव्हरिंग लेटर सामग्री:\n\n' + content :
                             'Covering Letter Content:\n\n' + content
                           );

@@ -122,8 +122,10 @@ const InwardDashboard = () => {
       const tableTranslations = {
         'sp': language === 'mr' ? 'एसपी टेबल' : 'SP Table',
         'sp table': language === 'mr' ? 'एसपी टेबल' : 'SP Table',
-        'collector': language === 'mr' ? 'कलेक्टर टेबल' : 'Collector Table',
-        'collector table': language === 'mr' ? 'कलेक्टर टेबल' : 'Collector Table',
+        'dm': language === 'mr' ? 'डीएम टेबल' : 'DM Table',
+        'dm table': language === 'mr' ? 'डीएम टेबल' : 'DM Table',
+        'collector': language === 'mr' ? 'डीएम टेबल' : 'DM Table',  // Map collector to DM for backward compatibility
+        'collector table': language === 'mr' ? 'डीएम टेबल' : 'DM Table',
         'home': language === 'mr' ? 'होम टेबल' : 'Home Table',
         'home table': language === 'mr' ? 'होम टेबल' : 'Home Table',
         'ig': language === 'mr' ? 'आयजी टेबल' : 'IG Table',
@@ -137,13 +139,16 @@ const InwardDashboard = () => {
         'dg_other': language === 'mr' ? 'डीजी टेबल' : 'DG Table',
         'head': language === 'mr' ? 'हेड टेबल' : 'Head Table',
         'head table': language === 'mr' ? 'हेड टेबल' : 'Head Table',
-        'other': language === 'mr' ? 'इतर टेबल' : 'Other Table',
-        'other table': language === 'mr' ? 'इतर टेबल' : 'Other Table',
-        'unknown': language === 'mr' ? 'अज्ञात टेबल' : 'Unknown Table',
-        'unknown table': language === 'mr' ? 'अज्ञात टेबल' : 'Unknown Table'
+        'inward': language === 'mr' ? 'इनवर्ड टेबल' : 'Inward Table',
+        'inward table': language === 'mr' ? 'इनवर्ड टेबल' : 'Inward Table',
+        'inward_user': language === 'mr' ? 'इनवर्ड टेबल' : 'Inward Table',
+        'local': language === 'mr' ? 'लोकल टेबल' : 'Local Table',
+        'local table': language === 'mr' ? 'लोकल टेबल' : 'Local Table',
+        'shanik_local': language === 'mr' ? 'लोकल टेबल' : 'Local Table'
       };
       
-      return tableTranslations[lowerName] || (language === 'mr' ? 'इतर टेबल' : 'Other Table');
+      // Never return "Other Table" - always map to a specific table
+      return tableTranslations[lowerName] || (language === 'mr' ? 'इनवर्ड टेबल' : 'Inward Table');
     };
     
     // Check if there's a sentTo field with recipient information
@@ -159,7 +164,8 @@ const InwardDashboard = () => {
         if (sentToData.sendToData) {
           const sendToDataObj = sentToData.sendToData;
           if (sendToDataObj.sp) return normalizeTableName('sp');
-          if (sendToDataObj.collector) return normalizeTableName('collector');
+          if (sendToDataObj.dm) return normalizeTableName('dm');
+          if (sendToDataObj.collector) return normalizeTableName('dm');  // Map collector to dm
           if (sendToDataObj.home) return normalizeTableName('home');
           if (sendToDataObj.ig) return normalizeTableName('ig');
           if (sendToDataObj.shanik) return normalizeTableName('shanik');
@@ -175,7 +181,90 @@ const InwardDashboard = () => {
       return normalizeTableName(letter.forwardTo);
     }
     
-    return normalizeTableName(null);
+    // Try to determine from letterStatus
+    if (letter.letterStatus) {
+      const status = letter.letterStatus.toLowerCase();
+      if (status.includes('sp') || status.includes('एसपी')) {
+        return normalizeTableName('sp');
+      }
+      if (status.includes('dm') || status.includes('collector') || status.includes('डीएम') || status.includes('कलेक्टर')) {
+        return normalizeTableName('dm');
+      }
+      if (status.includes('ig') || status.includes('आयजी')) {
+        return normalizeTableName('ig');
+      }
+      if (status.includes('dg') || status.includes('डीजी')) {
+        return normalizeTableName('dg');
+      }
+      if (status.includes('home') || status.includes('होम')) {
+        return normalizeTableName('home');
+      }
+    }
+    
+    // Try to determine from user role if this is user's own letter
+    const token = sessionStorage.getItem('token');
+    if (token) {
+      try {
+        const tokenData = JSON.parse(atob(token.split('.')[1]));
+        const userRole = tokenData.roleName;
+        
+        // If this is user's own submitted letter, categorize by their role
+        if (letter.userId === tokenData.id || letter.User?.id === tokenData.id) {
+          return normalizeTableName(userRole);
+        }
+      } catch (e) {
+        console.log('Error parsing token for table categorization:', e);
+      }
+    }
+    
+    // Last resort: try to categorize by office name
+    if (letter.officeSendingLetter) {
+      const office = letter.officeSendingLetter.toLowerCase();
+      if (office.includes('sp') || office.includes('superintendent')) {
+        return normalizeTableName('sp');
+      }
+      if (office.includes('collector') || office.includes('dm') || office.includes('district magistrate')) {
+        return normalizeTableName('dm');
+      }
+      if (office.includes('ig') || office.includes('inspector general')) {
+        return normalizeTableName('ig');
+      }
+      if (office.includes('dg') || office.includes('director general')) {
+        return normalizeTableName('dg');
+      }
+      if (office.includes('home') || office.includes('गृह')) {
+        return normalizeTableName('home');
+      }
+      if (office.includes('local') || office.includes('shanik') || office.includes('लोकल')) {
+        return normalizeTableName('local');
+      }
+    }
+    
+    // Check subject for keywords
+    if (letter.subject) {
+      const subject = letter.subject.toLowerCase();
+      if (subject.includes('sp') || subject.includes('police') || subject.includes('पोलीस')) {
+        return normalizeTableName('sp');
+      }
+      if (subject.includes('collector') || subject.includes('dm') || subject.includes('revenue') || subject.includes('कलेक्टर')) {
+        return normalizeTableName('dm');
+      }
+      if (subject.includes('ig') || subject.includes('inspector general')) {
+        return normalizeTableName('ig');
+      }
+      if (subject.includes('dg') || subject.includes('director general')) {
+        return normalizeTableName('dg');
+      }
+      if (subject.includes('home') || subject.includes('गृह')) {
+        return normalizeTableName('home');
+      }
+      if (subject.includes('local') || subject.includes('shanik') || subject.includes('लोकल')) {
+        return normalizeTableName('local');
+      }
+    }
+    
+    // Default: All unclassified letters go to Inward Table (where they start)
+    return normalizeTableName('inward');
   };
 
   // Calculate monthly data for bar chart
@@ -430,7 +519,7 @@ const InwardDashboard = () => {
               </div>
             </div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              {language === 'mr' ? 'माझे डॅशबोर्ड' : 'My Dashboard'}
+              ई-पत्र
             </h1>
           </div>
           <p className="text-gray-500 mt-2 text-sm sm:text-base">

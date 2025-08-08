@@ -4,6 +4,7 @@ import { FiEye, FiRefreshCw, FiSearch, FiFileText, FiEdit, FiMail, FiX, FiRotate
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
+import { toast } from 'react-toastify';
 
 const HODLetters = () => {
 
@@ -260,11 +261,11 @@ const HODLetters = () => {
       if (fileUrl) {
         window.open(fileUrl, '_blank');
       } else {
-        alert(language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available');
+        toast.error(language === 'mr' ? 'फाइल उपलब्ध नाही' : 'File not available');
       }
     } catch (error) {
       console.error('Error previewing file:', error);
-      alert(language === 'mr' ? 'फाइल पहाण्यात त्रुटी!' : 'Error viewing file!');
+      toast.error(language === 'mr' ? 'फाइल पहाण्यात त्रुटी!' : 'Error viewing file!');
     }
   };
 
@@ -295,7 +296,7 @@ const HODLetters = () => {
     if (url) {
       window.open(url, '_blank');
     } else {
-      alert(language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'Covering letter not available');
+      toast.error(language === 'mr' ? 'कव्हरिंग लेटर उपलब्ध नाही' : 'Covering letter not available');
     }
   };
 
@@ -363,7 +364,7 @@ const HODLetters = () => {
       setSignaturesModalOpen(true);
     } catch (error) {
       console.error('Error attaching signature:', error);
-      alert(language === 'mr' ? 'स्वाक्षरी जोडण्यात त्रुटी!' : 'Error attaching signature!');
+      toast.error(language === 'mr' ? 'स्वाक्षरी जोडण्यात त्रुटी!' : 'Error attaching signature!');
     }
   };
 
@@ -398,7 +399,7 @@ const HODLetters = () => {
       const token = sessionStorage.getItem('token');
       
       if (!token) {
-        alert(language === 'mr' ? 
+        toast.error(language === 'mr' ? 
           'कृपया पुन्हा लॉगिन करा!' : 
           'Please login again!');
         navigate('/login');
@@ -433,7 +434,7 @@ const HODLetters = () => {
           `पत्र यशस्वीरित्या ${sourceTableName} मध्ये परत पाठवले गेले!\n\nसंदर्भ क्रमांक: ${letter.referenceNumber}` : 
           `Letter successfully resent to ${sourceTableName}!\n\nReference No: ${letter.referenceNumber}`;
         
-        alert(successMessage);
+        toast.success(successMessage);
         
         // Refresh letters to remove it from HOD list
         handleRefresh();
@@ -445,7 +446,7 @@ const HODLetters = () => {
                           error.response?.data?.message || 
                           'Failed to resend letter';
       
-      alert(language === 'mr' ? 
+      toast.error(language === 'mr' ? 
         `पत्र परत पाठवण्यात त्रुटी: ${errorMessage}` : 
         `Error resending letter: ${errorMessage}`);
     } finally {
@@ -526,7 +527,7 @@ const HODLetters = () => {
       // Handle authentication errors
       if (err.response?.status === 401 || err.response?.data?.error === 'User not found') {
         console.error('Authentication error:', err);
-        alert(language === 'mr' ? 
+        toast.error(language === 'mr' ? 
           'आपली सत्र संपली आहे. कृपया पुन्हा लॉगिन करा.' : 
           'Your session has expired. Please login again.');
         sessionStorage.removeItem('token');
@@ -549,7 +550,7 @@ const HODLetters = () => {
     // Check if user is authenticated
     const token = sessionStorage.getItem('token');
     if (!token) {
-      alert(language === 'mr' ? 
+      toast.error(language === 'mr' ? 
         'कृपया प्रथम लॉगिन करा!' : 
         'Please login first!');
       navigate('/login');
@@ -673,7 +674,8 @@ const HODLetters = () => {
           const sendToDataObj = sentToData.sendToData;
           console.log('sendToData object:', sendToDataObj);
           if (sendToDataObj.sp) return language === 'mr' ? 'एसपी टेबल' : 'SP Table';
-          if (sendToDataObj.collector) return language === 'mr' ? 'कलेक्टर टेबल' : 'Collector Table';
+          if (sendToDataObj.dm) return language === 'mr' ? 'डीएम टेबल' : 'DM Table';
+          if (sendToDataObj.collector) return language === 'mr' ? 'डीएम टेबल' : 'DM Table';  // Map collector to DM
           if (sendToDataObj.home) return language === 'mr' ? 'होम टेबल' : 'Home Table';
           if (sendToDataObj.ig) return language === 'mr' ? 'आयजी टेबल' : 'IG Table';
           if (sendToDataObj.shanik) return language === 'mr' ? 'शाणिक टेबल' : 'Shanik Table';
@@ -690,8 +692,10 @@ const HODLetters = () => {
       switch (forwardTo) {
         case 'sp':
           return language === 'mr' ? 'एसपी टेबल' : 'SP Table';
+        case 'dm':
+          return language === 'mr' ? 'डीएम टेबल' : 'DM Table';
         case 'collector':
-          return language === 'mr' ? 'कलेक्टर टेबल' : 'Collector Table';
+          return language === 'mr' ? 'डीएम टेबल' : 'DM Table';  // Map collector to DM
         case 'home':
           return language === 'mr' ? 'होम टेबल' : 'Home Table';
         case 'ig':
@@ -747,7 +751,7 @@ const HODLetters = () => {
           console.log('Found sourceTable in sentToData for revert:', sourceTable);
           // Map table names back to identifiers
           if (sourceTable.includes('SP')) return 'sp';
-          if (sourceTable.includes('Collector')) return 'collector';
+          if (sourceTable.includes('DM') || sourceTable.includes('Collector')) return 'dm';
           if (sourceTable.includes('Home')) return 'home';
           if (sourceTable.includes('IG')) return 'ig_nashik_other';
           if (sourceTable.includes('Shanik')) return 'shanik_local';
@@ -761,7 +765,8 @@ const HODLetters = () => {
           const sendToDataObj = sentToData.sendToData;
           console.log('sendToData object for revert:', sendToDataObj);
           if (sendToDataObj.sp) return 'sp';
-          if (sendToDataObj.collector) return 'collector';
+          if (sendToDataObj.dm) return 'dm';
+          if (sendToDataObj.collector) return 'dm';  // Map collector to dm
           if (sendToDataObj.home) return 'home';
           if (sendToDataObj.ig) return 'ig_nashik_other';
           if (sendToDataObj.shanik) return 'shanik_local';
@@ -778,7 +783,8 @@ const HODLetters = () => {
       console.log('Using forwardTo for revert:', forwardTo);
       switch (forwardTo) {
         case 'sp': return 'sp';
-        case 'collector': return 'collector';
+        case 'dm': return 'dm';
+        case 'collector': return 'dm';  // Map collector to dm
         case 'home': return 'home';
         case 'ig':
         case 'ig_nashik':
@@ -932,9 +938,22 @@ const HODLetters = () => {
       // Set loading state for this specific letter
       setSigningLetters(prev => new Set(prev).add(letterId));
 
+      // Get the covering letter ID from the selected letter
+      const coveringLetterId = selectedLetterForCovering.coveringLetter?.id || 
+                              selectedLetterForCovering.coveringLetter?._id ||
+                              selectedLetterForCovering.directCoveringLetter?.id ||
+                              selectedLetterForCovering.directCoveringLetter?._id;
+
+      if (!coveringLetterId) {
+        alert(language === 'mr' ? 'कव्हरिंग लेटर आयडी सापडला नाही' : 'Covering letter ID not found');
+        return;
+      }
+
+      console.log('Using covering letter ID:', coveringLetterId);
+
       // Call the new Head signature API
       const response = await axios.post(
-        `${apiUrl}/api/head/upload-signature/${selectedLetterForCovering.id}`,
+        `${apiUrl}/api/head/upload-signature/${coveringLetterId}`,
         {
           userId: userId,
           signaturePosition: 'top-right', // Default position
@@ -971,16 +990,16 @@ const HODLetters = () => {
       // Handle specific error cases
       if (error.response?.data?.error) {
         if (error.response.data.error.includes('No signature found')) {
-          alert(language === 'mr' ? 
+          toast.error(language === 'mr' ? 
             'तुमच्याकडे कोणतीही स्वाक्षरी अपलोड केलेली नाही. कृपया प्रथम स्वाक्षरी अपलोड करा.' : 
             'You have no signature uploaded. Please upload a signature first.');
         } else {
-          alert(language === 'mr' ? 
+          toast.error(language === 'mr' ? 
             `स्वाक्षरी जोडण्यात त्रुटी: ${error.response.data.error}` : 
             `Error attaching signature: ${error.response.data.error}`);
         }
       } else {
-        alert(language === 'mr' ? 'स्वाक्षरी जोडण्यात त्रुटी!' : 'Error attaching signature!');
+        toast.error(language === 'mr' ? 'स्वाक्षरी जोडण्यात त्रुटी!' : 'Error attaching signature!');
       }
     } finally {
       // Clear loading state for this letter

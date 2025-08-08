@@ -66,7 +66,8 @@ const HeadDashboard = () => {
       const forwardTo = letter.forwardTo.toLowerCase();
       switch (forwardTo) {
         case 'sp': return language === 'mr' ? 'एसपी टेबल' : 'SP Table';
-        case 'collector': return language === 'mr' ? 'कलेक्टर टेबल' : 'Collector Table';
+        case 'dm': return language === 'mr' ? 'डीएम टेबल' : 'DM Table';
+        case 'collector': return language === 'mr' ? 'डीएम टेबल' : 'DM Table';  // Map collector to DM
         case 'home': return language === 'mr' ? 'होम टेबल' : 'Home Table';
         case 'ig': case 'ig_nashik': return language === 'mr' ? 'आयजी टेबल' : 'IG Table';
         case 'shanik': case 'shanik_local': return language === 'mr' ? 'शाणिक टेबल' : 'Shanik Table';

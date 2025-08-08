@@ -4,6 +4,7 @@ import { FiEye, FiRefreshCw, FiSearch, FiCheck, FiX, FiExternalLink, FiFileText,
 import axios from 'axios';
 import { useLanguage } from '../../context/LanguageContext';
 import translations from '../../translations';
+import { toast } from 'react-toastify';
 const apiUrl = import.meta.env.VITE_API_URL ;
 
 const InwardStaffLetters = () => {
@@ -265,7 +266,7 @@ const InwardStaffLetters = () => {
 
       if (allFiles.length === 0) {
         console.error('No files found in letter:', letter);
-        alert(language === 'mr' ? 'फाईल सापडली नाही!' : 'File not found!');
+        toast.error(language === 'mr' ? 'फाईल सापडली नाही!' : 'File not found!');
         return;
       }
 
@@ -294,7 +295,7 @@ const InwardStaffLetters = () => {
       
     } catch (error) {
       console.error('Error downloading file:', error);
-      alert(language === 'mr' ? 'फाईल डाउनलोड करताना त्रुटी!' : 'Error downloading file!');
+      toast.error(language === 'mr' ? 'फाईल डाउनलोड करताना त्रुटी!' : 'Error downloading file!');
     }
   };
 
@@ -384,7 +385,7 @@ const InwardStaffLetters = () => {
       const token = sessionStorage.getItem('token');
       
       if (!token) {
-        alert(language === 'mr' ? 
+        toast.error(language === 'mr' ? 
           'कृपया पुन्हा लॉगिन करा!' : 
           'Please login again!');
         navigate('/login');
@@ -428,7 +429,7 @@ const InwardStaffLetters = () => {
           `पत्र HOD मंजुरीसाठी पाठवले गेले!\n\nप्राप्तकर्ते:\n${recipients.join(', ')}` : 
           `Letter sent to HOD for approval!\n\nRecipients:\n${recipients.join(', ')}`;
         
-        alert(successMessage);
+        toast.success(successMessage);
         
         // Close modal
         setSendModalOpen(false);
@@ -446,11 +447,11 @@ const InwardStaffLetters = () => {
                             error.response.data?.message || 
                             'Failed to send to HOD';
         
-        alert(language === 'mr' ? 
+        toast.error(language === 'mr' ? 
           `HOD ला पाठवण्यात त्रुटी: ${errorMessage}` : 
           `Error sending to HOD: ${errorMessage}`);
       } else {
-        alert(language === 'mr' ? 
+        toast.error(language === 'mr' ? 
           'नेटवर्क त्रुटी! कृपया पुन्हा प्रयत्न करा.' : 
           'Network error! Please try again.');
       }
@@ -482,7 +483,7 @@ const InwardStaffLetters = () => {
                           (sendToData.policeStation && sendToData.selectedPoliceStations.length > 0);
       
       if (!hasRecipient) {
-        alert(language === 'mr' ? 
+        toast.error(language === 'mr' ? 
           'कृपया किमान एक प्राप्तकर्ता निवडा!' : 
           'Please select at least one recipient!');
         return;
@@ -496,12 +497,12 @@ const InwardStaffLetters = () => {
       await sendToHODForApproval(letterId);
       
       // If we reach here, no valid recipients were selected
-      alert(language === 'mr' ? 
+      toast.error(language === 'mr' ? 
         'कृपया वैध प्राप्तकर्ता निवडा!' : 
         'Please select valid recipients!');
     } catch (error) {
       console.error('Error in handleSendSubmit:', error);
-      alert(language === 'mr' ? 
+      toast.error(language === 'mr' ? 
         'त्रुटी आली! कृपया पुन्हा प्रयत्न करा.' : 
         'An error occurred! Please try again.');
     }
@@ -528,7 +529,7 @@ const InwardStaffLetters = () => {
     if (fileUrl) {
       window.open(fileUrl, '_blank');
     } else {
-      alert(language === 'mr' ? 'फाईल सापडली नाही!' : 'File not found!');
+      toast.error(language === 'mr' ? 'फाईल सापडली नाही!' : 'File not found!');
     }
   };
 
@@ -538,7 +539,7 @@ const InwardStaffLetters = () => {
   const handleDeleteCoveringLetter = async (coveringLetterId) => {
     try {
       if (!coveringLetterId) {
-        alert(language === 'mr' 
+        toast.error(language === 'mr' 
           ? 'कव्हरिंग लेटर ID सापडला नाही!' 
           : 'Covering letter ID not found!');
         return;
@@ -564,7 +565,7 @@ const InwardStaffLetters = () => {
       );
       
       if (response.status === 200 && response.data.success) {
-        alert(language === 'mr' 
+        toast.error(language === 'mr' 
           ? 'कव्हरिंग लेटर यशस्वीरित्या हटवले गेले!' 
           : 'Covering letter deleted successfully!');
         
@@ -589,11 +590,11 @@ const InwardStaffLetters = () => {
       
       if (error.response) {
         const errorMessage = error.response.data?.message || error.response.data?.error || 'Server error';
-        alert(language === 'mr' 
+        toast.error(language === 'mr' 
           ? `कव्हरिंग लेटर हटवताना त्रुटी: ${errorMessage}` 
           : `Error deleting covering letter: ${errorMessage}`);
       } else {
-        alert(language === 'mr' 
+        toast.error(language === 'mr' 
           ? 'कव्हरिंग लेटर हटवताना त्रुटी!' 
           : 'Error deleting covering letter!');
       }
@@ -624,7 +625,7 @@ const InwardStaffLetters = () => {
       );
       
       if (response.status === 201) {
-        alert(language === 'mr' 
+        toast.error(language === 'mr' 
           ? 'कव्हरिंग लेटर यशस्वीरित्या तयार केले गेले!' 
           : 'Covering letter generated successfully!');
         
@@ -646,7 +647,7 @@ const InwardStaffLetters = () => {
     } catch (error) {
       console.error('Error generating covering letter:', error);
       const errorMessage = error.response?.data?.details || error.response?.data?.error || error.message;
-      alert(language === 'mr' 
+      toast.error(language === 'mr' 
         ? `कव्हरिंग लेटर तयार करताना त्रुटी: ${errorMessage}` 
         : `Error generating covering letter: ${errorMessage}`);
     } finally {
@@ -658,14 +659,14 @@ const InwardStaffLetters = () => {
   const handleUploadCoveringLetter = async (letter, file) => {
     try {
       if (!file) {
-        alert(language === 'mr' ? 'कृपया फाईल निवडा!' : 'Please select a file!');
+        toast.error(language === 'mr' ? 'कृपया फाईल निवडा!' : 'Please select a file!');
         return;
       }
       
       // Validate file type
       const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
       if (!allowedTypes.includes(file.type)) {
-        alert(language === 'mr' 
+        toast.error(language === 'mr' 
           ? 'कृपया फक्त PDF किंवा Word फाईल निवडा!' 
           : 'Please select only PDF or Word files!');
         return;
@@ -673,7 +674,7 @@ const InwardStaffLetters = () => {
       
       // Validate file size (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
-        alert(language === 'mr' 
+        toast.error(language === 'mr' 
           ? 'फाईल साइझ 10MB पेक्षा कमी असावा!' 
           : 'File size should be less than 10MB!');
         return;
@@ -709,7 +710,7 @@ const InwardStaffLetters = () => {
       );
       
       if (response.status === 201 && response.data.success) {
-        alert(language === 'mr' 
+        toast.error(language === 'mr' 
           ? 'कव्हरिंग लेटर यशस्वीरित्या S3 वर अपलोड केले गेले!' 
           : 'Covering letter uploaded successfully to S3!');
         
@@ -739,11 +740,11 @@ const InwardStaffLetters = () => {
       
       // Show more specific error message if it's about existing covering letter
       if (errorMessage.includes('already exists')) {
-        alert(language === 'mr' 
+        toast.error(language === 'mr' 
           ? 'कव्हरिंग लेटर आधीच उपलब्ध आहे. कृपया आधी ते हटवा.' 
           : 'Covering letter already exists. Please delete it first.');
       } else {
-        alert(language === 'mr' 
+        toast.error(language === 'mr' 
           ? `कव्हरिंग लेटर अपलोड करताना त्रुटी: ${errorMessage}` 
           : `Error uploading covering letter: ${errorMessage}`);
       }
@@ -816,7 +817,7 @@ const InwardStaffLetters = () => {
       // Handle authentication errors
       if (err.response?.status === 401 || err.response?.data?.error === 'User not found') {
         console.error('Authentication error:', err);
-        alert(language === 'mr' ? 
+        toast.error(language === 'mr' ? 
           'आपली सत्र संपली आहे. कृपया पुन्हा लॉगिन करा.' : 
           'Your session has expired. Please login again.');
         sessionStorage.removeItem('token');
@@ -852,7 +853,7 @@ const InwardStaffLetters = () => {
     // Check if user is authenticated
     const token = sessionStorage.getItem('token');
     if (!token) {
-      alert(language === 'mr' ? 
+      toast.error(language === 'mr' ? 
         'कृपया प्रथम लॉगिन करा!' : 
         'Please login first!');
       navigate('/login');
@@ -929,7 +930,7 @@ const InwardStaffLetters = () => {
                 letter.coveringLetter?.htmlUrl;
     
     if (!url) {
-      alert(language === 'mr' ? 'कव्हरिंग लेटर URL उपलब्ध नाही!' : 'Covering letter URL not available!');
+      toast.error(language === 'mr' ? 'कव्हरिंग लेटर URL उपलब्ध नाही!' : 'Covering letter URL not available!');
       return;
     }
     window.open(url, '_blank');
@@ -1036,13 +1037,13 @@ const InwardStaffLetters = () => {
     e.preventDefault();
     
     if (!selectedEmailForReply) {
-      alert(language === 'mr' ? 'ईमेल निवडले नाही' : 'No email selected');
+      toast.error(language === 'mr' ? 'ईमेल निवडले नाही' : 'No email selected');
       return;
     }
 
     const toEmail = extractEmailAddress(selectedEmailForReply.from);
     if (!toEmail) {
-      alert(language === 'mr' ? 'प्राप्तकर्त्याची ईमेल सापडली नाही' : 'Recipient email not found');
+      toast.error(language === 'mr' ? 'प्राप्तकर्त्याची ईमेल सापडली नाही' : 'Recipient email not found');
       return;
     }
 
@@ -1069,7 +1070,7 @@ const InwardStaffLetters = () => {
       );
 
       if (response.data.success) {
-        alert(language === 'mr' ? 
+        toast.error(language === 'mr' ? 
           'ईमेल यशस्वीरित्या पाठवले गेले!' : 
           'Email sent successfully!');
         
@@ -1086,7 +1087,7 @@ const InwardStaffLetters = () => {
       }
     } catch (error) {
       console.error('Error sending reply:', error);
-      alert(language === 'mr' ? 
+      toast.error(language === 'mr' ? 
         `ईमेल पाठवण्यात त्रुटी: ${error.message}` : 
         `Error sending email: ${error.message}`);
     } finally {
@@ -1587,7 +1588,7 @@ const organizeEmailsInThreadImproved = (emails) => {
                                 );
                                 
                                 if (response.status === 200) {
-                                  alert(language === 'mr' 
+                                  toast.error(language === 'mr' 
                                     ? 'पत्र यशस्वीरित्या प्रमुख ला पाठवले गेले! हे पत्र आता या टेबलमधून काढून टाकले गेले आहे आणि HOD मंजुरी टेबलमध्ये दिसेल.' 
                                     : 'Letter sent to Head successfully! This letter has been removed from this table and will now appear in the HOD approval table.');
                                   
@@ -1604,11 +1605,11 @@ const organizeEmailsInThreadImproved = (emails) => {
                                 
                                 if (error.response) {
                                   const errorMessage = error.response.data?.error || error.response.data?.message || 'Server error';
-                                  alert(language === 'mr' 
+                                  toast.error(language === 'mr' 
                                     ? `प्रमुख ला पाठवण्यात त्रुटी: ${errorMessage}` 
                                     : `Error sending to Head: ${errorMessage}`);
                                 } else {
-                                  alert(language === 'mr' 
+                                  toast.error(language === 'mr' 
                                     ? 'नेटवर्क त्रुटी! कृपया पुन्हा प्रयत्न करा.' 
                                     : 'Network error! Please try again.');
                                 }
@@ -1664,7 +1665,7 @@ const organizeEmailsInThreadImproved = (emails) => {
                             } catch (error) {
                               console.error('❌ Error fetching emails:', error);
                               console.error('❌ Error response:', error.response?.data);
-                              alert(language === 'mr' ? 'ईमेल लोड करण्यात त्रुटी' : 'Error loading emails');
+                              toast.error(language === 'mr' ? 'ईमेल लोड करण्यात त्रुटी' : 'Error loading emails');
                             }
                           }}
                           className={`relative inline-flex items-center px-3 py-1.5 bg-yellow-600 text-white text-xs font-medium rounded hover:bg-yellow-700 transition-colors shadow-sm`}
