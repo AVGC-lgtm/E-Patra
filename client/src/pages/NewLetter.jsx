@@ -425,7 +425,7 @@ const NewLetter = () => {
         ...formUpdates
       }));
       
-      toast.success('Form fields updated from extracted data');
+      toast.success('Form fields updated from the extracted data');
       return;
       
     } catch (error) {
