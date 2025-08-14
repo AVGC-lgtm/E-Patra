@@ -18,7 +18,7 @@ const OutwardDashboardLayout = ({ children, onLogout }) => {
 
   const navItems = [
     { path: '/outward-dashboard', icon: '📊', label: language === 'mr' ? 'डॅशबोर्ड' : 'Dashboard', key: 'dashboard' },
-    { path: '/outward-dashboard/outward-letters', icon: '📤', label: language === 'mr' ? 'जावक पत्रे' : 'Outward Letters', key: 'outward-letters' },
+    { path: '/outward-dashboard/outward-letters', icon: '📤', label: language === 'mr' ? 'जावक अर्ज' : 'Outward Letters', key: 'outward-letters' },
     { path: '/outward-dashboard/track-application', icon: '🔍', label: language === 'mr' ? 'अर्ज ट्रॅक करा' : 'Track Application', key: 'track-application' }
   ];
 

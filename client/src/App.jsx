@@ -60,6 +60,7 @@ const normalizeRole = (role) => {
 
 const AppContent = () => {
   const navigate = useNavigate();
+  const [isAuthChecked, setIsAuthChecked] = useState(false); // Track if auth check is complete
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState('user');
   // Removed global loading state - individual components handle their own loading
@@ -71,6 +72,7 @@ const AppContent = () => {
       if (!isSessionActive()) {
         // If it's a new session, clear any existing tokens to force fresh login
         clearAuthTokens();
+        setIsAuthChecked(true);
         return;
       }
 
@@ -118,6 +120,9 @@ const AppContent = () => {
           setUserRole('user');
         }
       }
+      
+      // Mark auth check as complete
+      setIsAuthChecked(true);
     };
 
     checkAuth();
@@ -278,6 +283,11 @@ const AppContent = () => {
     // No loading screen - show children immediately while validation happens in background
     return children;
   };
+
+  // Don't render routes until auth check is complete to prevent login page flash
+  if (!isAuthChecked) {
+    return null; // Return nothing during auth check (no loader, just blank)
+  }
 
   return (
     <div className="min-h-screen">

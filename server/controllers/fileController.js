@@ -85,7 +85,7 @@ const LETTER_CLASSIFICATION_MAPPING = {
         letterTypes: {
             "your_government_reference": "आपले सरकार संदर्भ",
             "mla_reference": "आमदार संदर्भ",
-            "district_sp_reference": "जि पो अधिक्षक संदर्भ",
+            "district_sp_reference": "जि पो अधीक्षक संदर्भ",
             "mp_reference": "खासदार संदर्भ",
             "district_collector_reference": "जिल्हाधिकारी संदर्भ",
             "payment_reference": "देयके संदर्भ",

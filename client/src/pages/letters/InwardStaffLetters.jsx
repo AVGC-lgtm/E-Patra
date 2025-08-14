@@ -57,8 +57,8 @@ const InwardStaffLetters = () => {
 
   // Date filter options
   const dateOptions = [
-    { value: 'all', label: language === 'mr' ? 'सर्व पत्रे' : 'All Letters' },
-    { value: 'today', label: language === 'mr' ? 'आजची पत्रे' : "Today's Letters" }
+    { value: 'all', label: language === 'mr' ? 'सर्व अर्ज' : 'All Letters' },
+    { value: 'today', label: language === 'mr' ? 'आजचे अर्ज' : "Today's Letters" }
   ];
 
   // Helper function to get letter status
@@ -1335,11 +1335,11 @@ const organizeEmailsInThreadImproved = (emails) => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {language === 'mr' ? 'नवीन आवक पत्रे' : 'New Inward Letters'}
+            {language === 'mr' ? 'नवीन आवक अर्ज' : 'New Inward Letters'}
           </h1>
           <p className="text-gray-500">
             {language === 'mr' 
-              ? 'नवीन पत्रे पहा आणि HOD ला पाठवा' 
+              ? 'नवीन अर्ज पहा आणि HOD ला पाठवा' 
               : 'View new letters and send to HOD'}
           </p>
         </div>
@@ -1709,11 +1709,11 @@ const organizeEmailsInThreadImproved = (emails) => {
           <div className="text-center py-12">
             <FiFileText className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">
-              {language === 'mr' ? 'पत्रे सापडली नाहीत' : 'No letters found'}
+              {language === 'mr' ? 'अर्ज सापडली नाहीत' : 'No letters found'}
             </h3>
             <p className="mt-1 text-sm text-gray-500">
               {language === 'mr' 
-                ? 'निवडलेल्या फिल्टरसाठी कोणतीही पत्रे आढळली नाहीत.' 
+                ? 'निवडलेल्या फिल्टरसाठी कोणतीही अर्ज आढळली नाहीत.' 
                 : 'No letters found for the selected filters.'}
             </p>
           </div>

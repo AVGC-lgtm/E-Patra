@@ -370,7 +370,7 @@ const HeadDashboard = () => {
             <div className="absolute inset-8 bg-white rounded-full flex items-center justify-center shadow-inner">
               <div className="text-center">
                 <span className="text-4xl font-bold text-gray-800 block">{total}</span>
-                <span className="text-sm text-gray-500 mt-1">{language === 'mr' ? 'एकूण पत्रे' : 'Total Letters'}</span>
+                <span className="text-sm text-gray-500 mt-1">{language === 'mr' ? 'एकूण अर्ज' : 'Total Letters'}</span>
               </div>
             </div>
           </div>
@@ -411,7 +411,7 @@ const HeadDashboard = () => {
                           <div>
                             <div className="text-sm font-medium text-gray-900">{item.name}</div>
                             <div className="text-xs text-gray-500">
-                              {language === 'mr' ? 'बाह्य पत्रे' : 'Outward Letters'}
+                              {language === 'mr' ? 'जावक अर्ज' : 'Outward Letters'}
                             </div>
                           </div>
                         </div>
@@ -447,7 +447,7 @@ const HeadDashboard = () => {
                 {language === 'mr' ? 'एकूण तक्ते:' : 'Total Tables:'} <span className="font-medium">{data.length}</span>
               </span>
               <span className="text-gray-600">
-                {language === 'mr' ? 'एकूण पत्रे:' : 'Total Letters:'} <span className="font-medium">{data.reduce((sum, item) => sum + item.value, 0)}</span>
+                {language === 'mr' ? 'एकूण अर्ज:' : 'Total Letters:'} <span className="font-medium">{data.reduce((sum, item) => sum + item.value, 0)}</span>
               </span>
             </div>
           </div>
@@ -535,7 +535,7 @@ const HeadDashboard = () => {
               {monthlyData.reduce((sum, item) => sum + item.count, 0)}
             </div>
             <div className="text-base text-gray-500">
-              {language === 'mr' ? 'एकूण पत्रे' : 'Total Letters'}
+              {language === 'mr' ? 'एकूण अर्ज' : 'Total Letters'}
             </div>
           </div>
         </div>
@@ -630,7 +630,7 @@ const HeadDashboard = () => {
                 {monthlyData.reduce((sum, item) => sum + item.count, 0)}
               </div>
               <div className="text-sm text-gray-600">
-                {language === 'mr' ? 'एकूण पत्रे' : 'Total Letters'}
+                {language === 'mr' ? 'एकूण अर्ज' : 'Total Letters'}
               </div>
             </div>
             <div className="bg-green-50 rounded-lg p-4">
@@ -676,7 +676,7 @@ const HeadDashboard = () => {
           </div>
           <p className="text-gray-600">
             {language === 'mr' 
-              ? 'प्रमुख टेबलला पाठवलेली पत्रे' 
+              ? 'प्रमुख टेबलला पाठवलेली अर्ज' 
               : 'Letters sent to Head table'}
           </p>
           <div className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mt-2">
@@ -709,14 +709,14 @@ const HeadDashboard = () => {
       {/* Stats Cards - Matching SP dashboard design with gradients */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <StatCard
-          title={language === 'mr' ? 'आजची पत्रे' : 'Today\'s Letters'}
+          title={language === 'mr' ? 'आजची अर्ज' : 'Today\'s Letters'}
           value={todayCount}
           subtitle="Today"
           icon={<FiClock className="w-6 h-6 text-white" />}
           color="bg-gradient-to-br from-purple-400 to-purple-600"
         />
         <StatCard
-          title={language === 'mr' ? 'एकूण पत्रे' : 'Total Letters'}
+          title={language === 'mr' ? 'एकूण अर्ज' : 'Total Letters'}
           value={headRelevantLetters.length}
           subtitle={`${headRelevantLetters.length} total`}
           icon={<FiFileText className="w-6 h-6 text-white" />}
@@ -758,7 +758,7 @@ const HeadDashboard = () => {
         {/* Right Section: Recent Letters */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            {language === 'mr' ? 'अलीकडील पत्रे' : 'Recent Letters'}
+            {language === 'mr' ? 'अलीकडील अर्ज' : 'Recent Letters'}
           </h2>
           
           {headRelevantLetters.length > 0 ? (
@@ -796,7 +796,7 @@ const HeadDashboard = () => {
               <FiFileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
               <p className="text-gray-500">
                 {language === 'mr' 
-                  ? 'कोणतीही पत्रे आढळली नाहीत' 
+                  ? 'कोणतीही अर्ज आढळली नाहीत' 
                   : 'No letters found'}
               </p>
             </div>

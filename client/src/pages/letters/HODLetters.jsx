@@ -62,7 +62,7 @@ const HODLetters = () => {
     letterType: { en: 'Letter Type', mr: 'पत्र प्रकार' },
     letterDate: { en: 'Letter Date', mr: 'पत्राची तारीख' },
     subject: { en: 'Subject', mr: 'विषय' },
-    outwardLetterNumber: { en: 'Outward Letter Number', mr: 'बाह्य पत्र क्रमांक' },
+    outwardLetterNumber: { en: 'Outward Letter Number', mr: 'जावक पत्र क्रमांक' },
     numberOfCopies: { en: 'Number of Copies', mr: 'प्रतींची संख्या' },
     letterStatus: { en: 'Status', mr: 'स्थिती' },
     NA: { en: 'NA', mr: 'NA' },
@@ -431,7 +431,7 @@ const HODLetters = () => {
 
       if (response.status === 200) {
         const successMessage = language === 'mr' ? 
-          `पत्र यशस्वीरित्या ${sourceTableName} मध्ये परत पाठवले गेले!\n\nसंदर्भ क्रमांक: ${letter.referenceNumber}` : 
+          `अर्ज यशस्वीरित्या ${sourceTableName} मध्ये परत पाठवले गेले!\n\nसंदर्भ क्रमांक: ${letter.referenceNumber}` : 
           `Letter successfully resent to ${sourceTableName}!\n\nReference No: ${letter.referenceNumber}`;
         
         toast.success(successMessage);
@@ -447,7 +447,7 @@ const HODLetters = () => {
                           'Failed to resend letter';
       
       toast.error(language === 'mr' ? 
-        `पत्र परत पाठवण्यात त्रुटी: ${errorMessage}` : 
+        `अर्ज परत पाठवण्यात त्रुटी: ${errorMessage}` : 
         `Error resending letter: ${errorMessage}`);
     } finally {
       // Clear loading state for this letter
@@ -915,7 +915,7 @@ const HODLetters = () => {
 
     try {
       if (!selectedLetterForCovering) {
-        alert(language === 'mr' ? 'पत्र निवडले नाही' : 'No letter selected');
+        alert(language === 'mr' ? 'अर्ज निवडले नाही' : 'No letter selected');
         return;
       }
 
@@ -1028,11 +1028,11 @@ const HODLetters = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {language === 'mr' ? 'HOD मंजुरीसाठी पत्रे' : 'Letters for HOD Approval'}
+            {language === 'mr' ? 'HOD मंजुरीसाठी अर्ज' : 'Letters for HOD Approval'}
           </h1>
           <p className="text-gray-500">
             {language === 'mr' 
-              ? 'मंजुरी किंवा नाकारण्यासाठी पत्रे पहा' 
+              ? 'मंजुरी किंवा नाकारण्यासाठी अर्ज पहा' 
               : 'View letters for approval or rejection'}
           </p>
         </div>
@@ -1119,7 +1119,7 @@ const HODLetters = () => {
                       {language === 'mr' ? 'स्थिती' : 'Status'}
                     </th>
                     <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
-                      {language === 'mr' ? 'बाह्य संदर्भ क्रमांक' : 'Outward Reference No'}
+                      {language === 'mr' ? 'जावक संदर्भ क्रमांक' : 'Outward Reference No'}
                     </th>
                     <th scope="col" className="px-8 py-4 text-left text-sm font-semibold text-white uppercase tracking-wider whitespace-nowrap">
                       {language === 'mr' ? 'मूळ टेबल' : 'From Table'}
@@ -1172,7 +1172,7 @@ const HODLetters = () => {
                                 ? 'bg-gray-400 text-white cursor-not-allowed'
                                 : 'bg-orange-600 text-white hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500'
                             }`}
-                            title={language === 'mr' ? 'पत्र परत मूळ टेबलमध्ये पाठवा' : 'Resend letter back to original table'}
+                            title={language === 'mr' ? 'अर्ज परत मूळ टेबलमध्ये पाठवा' : 'Resend letter back to original table'}
                           >
                             {resendingLetters.has(letter.id || letter._id) ? (
                               <>
@@ -1260,11 +1260,11 @@ const HODLetters = () => {
           <div className="text-center py-12">
             <FiFileText className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">
-              {language === 'mr' ? 'पत्रे सापडली नाहीत' : 'No letters found'}
+              {language === 'mr' ? 'अर्ज सापडली नाहीत' : 'No letters found'}
             </h3>
             <p className="mt-1 text-sm text-gray-500">
               {language === 'mr' 
-                ? 'HOD मंजुरीसाठी कोणतीही पत्रे आढळली नाहीत.' 
+                ? 'HOD मंजुरीसाठी कोणतीही अर्ज आढळली नाहीत.' 
                 : 'No letters found for HOD approval.'}
             </p>
           </div>
@@ -1282,7 +1282,7 @@ const HODLetters = () => {
               <FiX className="h-6 w-6" />
             </button>
             <h2 className="text-2xl font-extrabold mb-8 text-blue-700 text-center tracking-wide drop-shadow">
-              {language === 'mr' ? 'पत्र तपशील' : 'Letter Details'}
+              {language === 'mr' ? 'अर्ज तपशील' : 'Letter Details'}
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Dynamically render all fields with safe rendering, excluding technical fields */}

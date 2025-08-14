@@ -1,5 +1,5 @@
 // services/s3Service.js - COMPLETE FIXED VERSION
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command, CopyObjectCommand, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 const { PDFDocument, rgb } = require('pdf-lib');
 const puppeteer = require('puppeteer');
 const { Document, Packer, Paragraph, TextRun, Header, ImageRun, AlignmentType, HeadingLevel, Table, TableRow, TableCell } = require('docx');
@@ -36,7 +36,7 @@ const s3Client = new S3Client({
 
 class S3Service {
   
-  // Convert image to base64
+  // ✅ CONVERT IMAGE TO BASE64
   getImageBase64(imagePath) {
     try {
       const fullPath = path.join(__dirname, '..', imagePath);
@@ -52,7 +52,7 @@ class S3Service {
     }
   }
 
-  // Get image buffer for Word documents
+  // ✅ GET IMAGE BUFFER FOR WORD DOCUMENTS
   getImageBuffer(imagePath) {
     try {
       const fullPath = path.join(__dirname, '..', imagePath);
@@ -67,31 +67,33 @@ class S3Service {
     }
   }
 
-  // Determine वर्ग classification based on letterType (returns only वर्ग)
+  // ✅ DETERMINE वर्ग CLASSIFICATION BASED ON LETTER TYPE
   determineVargClassification(letterType) {
     switch(letterType) {
       case 'NA':
         return 'ब वर्ग';
       case 'FORWARD':
         return 'क वर्ग';
+      case 'GOVERNMENT':
+        return 'अ वर्ग';
+      case 'POLICE_COMMISSIONER':
+        return 'अ वर्ग';
+      case 'LOCAL':
+        return 'क वर्ग';
+      case 'ACKNOWLEDGMENT':
+        return 'अ वर्ग';
       default:
         return 'अ वर्ग';
     }
   }
 
-  // Determine वर्ग classification for letterhead (includes अर्ज)
+  // ✅ DETERMINE वर्ग CLASSIFICATION FOR LETTERHEAD (INCLUDES अर्ज)
   determineVargClassificationForHeader(letterType) {
-    switch(letterType) {
-      case 'NA':
-        return 'ब वर्ग अर्ज';
-      case 'FORWARD':
-        return 'क वर्ग अर्ज';
-      default:
-        return 'अ वर्ग अर्ज';
-    }
+    const varg = this.determineVargClassification(letterType);
+    return `${varg} अर्ज`;
   }
 
-  // Determine right header text based on letterType
+  // ✅ DETERMINE RIGHT HEADER TEXT BASED ON LETTER TYPE
   determineRightHeaderText(letterType) {
     switch(letterType) {
       case 'NA':
@@ -99,23 +101,25 @@ class S3Service {
       case 'FORWARD':
         return 'कक्ष ३(४) मा. जिल्हाधिकारी/सैनिक';
       case 'GOVERNMENT':
-        return 'कक्ष३ (२) मा. गह/शासन/पालकमंत्री';
+        return 'कक्ष३ (२) मा. गृह/शासन/पालकमंत्री';
       case 'POLICE_COMMISSIONER':
         return 'कक्ष ३(१) मा. पोमनि अजे.';
       case 'LOCAL':
         return 'कक्ष ३(५) स्थानिक अर्ज';
+      case 'ACKNOWLEDGMENT':
+        return 'कक्ष ३(१) मा. पोमसं अर्ज';
       default:
         return 'कक्ष ३(१) मा. पोमसं अर्ज';
     }
   }
 
-  // Extract complainant name (simplified to avoid errors)
+  // ✅ EXTRACT COMPLAINANT NAME (SIMPLIFIED)
   extractComplainantName(letterData) {
     // Return default to avoid complex extraction errors
     return 'अर्जदाराचे नाव';
   }
 
-  // Convert application type to Marathi
+  // ✅ CONVERT APPLICATION TYPE TO MARATHI
   convertApplicationTypeToMarathi(letterType) {
     switch(letterType) {
       case 'NAR':
@@ -126,12 +130,18 @@ class S3Service {
         return 'पुढे पाठवणे';
       case 'ACKNOWLEDGMENT':
         return 'पोच पावती';
+      case 'GOVERNMENT':
+        return 'शासकीय';
+      case 'POLICE_COMMISSIONER':
+        return 'पोलीस आयुक्त';
+      case 'LOCAL':
+        return 'स्थानिक';
       default:
         return letterType || 'NAR';
     }
   }
 
-  // Generate subject line based on वर्ग classification only
+  // ✅ GENERATE SUBJECT LINE BASED ON वर्ग CLASSIFICATION
   generateSubjectLine(letterType, complainantName = null, letterData = null) {
     const vargClassification = this.determineVargClassification(letterType);
     
@@ -143,12 +153,18 @@ class S3Service {
         return `${vargClassification} तक्रारी अर्जाबाबत (NA)`;
       case 'FORWARD':
         return `${vargClassification} तक्रारी अर्जाबाबत (NAR)`;
+      case 'GOVERNMENT':
+        return `${vargClassification} तक्रारी अर्जाबाबत (NAR)`;
+      case 'POLICE_COMMISSIONER':
+        return `${vargClassification} तक्रारी अर्जाबाबत (NAR)`;
+      case 'LOCAL':
+        return `${vargClassification} तक्रारी अर्जाबाबत (NAR)`;
       default:
         return `${vargClassification} तक्रारी अर्जाबाबत (NAR)`;
     }
   }
 
-  // ✅ FIXED: Generate table data with clean letter number
+  // ✅ GENERATE TABLE DATA WITH CLEAN LETTER NUMBER
   generateTableDataFixed(letterData, complainantName, cleanLetterNumber) {
     const currentYear = new Date().getFullYear();
     const marathiAppType = this.convertApplicationTypeToMarathi(letterData.letterType);
@@ -175,7 +191,7 @@ class S3Service {
     ];
   }
 
-  // Original table data method (for backward compatibility)
+  // ✅ ORIGINAL TABLE DATA METHOD (FOR BACKWARD COMPATIBILITY)
   generateTableData(letterData, complainantName) {
     const currentYear = new Date().getFullYear();
     const marathiAppType = this.convertApplicationTypeToMarathi(letterData.letterType);
@@ -202,7 +218,7 @@ class S3Service {
     ];
   }
 
-  // ✅ COMPLETE FIXED WORD DOCUMENT GENERATION - Matches PDF Format
+  // ✅ COMPLETE WORD DOCUMENT GENERATION - MATCHES PDF FORMAT
   async generateWordDocument(letterContent, letterData, signatureBase64 = null, signerName = null) {
     try {
       console.log('📝 Generating Word document matching PDF format...');
@@ -232,7 +248,7 @@ class S3Service {
         }
       }
 
-      // ✅ FIXED: Clean letter number format (remove extra /2025/2025)
+      // ✅ CLEAN LETTER NUMBER FORMAT
       const cleanLetterNumber = letterData.letterNumber ? 
         letterData.letterNumber.replace(/\/\d{4}\/\d{4}$/, '') : // Remove /YYYY/YYYY pattern
         `CL/${letterData.patraId || 'TEMP'}`;
@@ -252,7 +268,7 @@ class S3Service {
             },
           },
           children: [
-            // ✅ LETTERHEAD - Simplified table structure like PDF
+            // ✅ LETTERHEAD - TABLE STRUCTURE LIKE PDF
             new Table({
               width: { size: 100, type: 'pct' },
               borders: {
@@ -297,7 +313,7 @@ class S3Service {
                         new Paragraph({
                           children: [
                             new TextRun({
-                              text: "पोलीस अधिक्षक कार्यालय, अहिल्यानगर",
+                              text: "पोलीस अधीक्षक कार्यालय, अहिल्यानगर",
                               bold: true,
                               size: 24,
                             }),
@@ -374,13 +390,13 @@ class S3Service {
               ],
             }),
             
-            // ✅ SPACING - Match PDF
+            // ✅ SPACING - MATCH PDF
             new Paragraph({ 
               text: "",
               spacing: { after: 200 }
             }),
             
-            // ✅ REFERENCE SECTION - With clean letter number
+            // ✅ REFERENCE SECTION
             new Paragraph({
               children: [
                 new TextRun({
@@ -391,7 +407,7 @@ class S3Service {
               spacing: { after: 150 },
             }),
             
-            // ✅ SUBJECT LINE - Match PDF format  
+            // ✅ SUBJECT LINE
             new Paragraph({
               children: [
                 new TextRun({
@@ -404,11 +420,11 @@ class S3Service {
               spacing: { after: 150 },
             }),
             
-            // ✅ REFERENCE NUMBER LINE - Match PDF
+            // ✅ REFERENCE NUMBER LINE
             new Paragraph({
               children: [
                 new TextRun({
-                  text: "उ.नि.पो.अ./पो.नि/स.पो.नि./ ___________________________",
+                  text: "उ.वि.पो.अ./पो.नि/स.पो.नि./ ___________________________",
                   size: 20,
                 }),
               ],
@@ -416,7 +432,7 @@ class S3Service {
               spacing: { after: 200 },
             }),
             
-            // ✅ LETTER CONTENT - Match PDF format
+            // ✅ LETTER CONTENT
             ...letterContent.split('\n').filter(line => line.trim()).map(line => 
               new Paragraph({
                 children: [
@@ -436,7 +452,7 @@ class S3Service {
               spacing: { after: 200 }
             }),
             
-            // ✅ DATA TABLE - Match PDF format with clean letter number
+            // ✅ DATA TABLE
             new Table({
               width: { size: 100, type: 'pct' },
               borders: {
@@ -536,7 +552,7 @@ class S3Service {
                   ],
                 }),
                 
-                // ✅ Data rows with clean letter number and empty name column
+                // ✅ Data rows with clean letter number
                 ...this.generateTableDataFixed(letterData, complainantName, cleanLetterNumber).map(rowData => 
                   new TableRow({
                     children: [
@@ -628,11 +644,11 @@ class S3Service {
               spacing: { after: 300 }
             }),
             
-            // ✅ CLOSING CONTENT - Match PDF format
+            // ✅ CLOSING CONTENT
             new Paragraph({
               children: [
                 new TextRun({
-                  text: "मा.पोलीस अधिक्षक सो,",
+                  text: "मा.पोलीस अधीक्षक सो,",
                   bold: true,
                   size: 20,
                 }),
@@ -650,14 +666,14 @@ class S3Service {
               spacing: { after: 200 },
             }),
             
-            // ✅ SIGNATURE SECTION - Exactly like PDF
+            // ✅ SIGNATURE SECTION
             ...(signatureBuffer ? [
               new Paragraph({
                 children: [
                   new ImageRun({
                     data: signatureBuffer,
                     transformation: {
-                      width: 100,  // Slightly smaller to match PDF
+                      width: 100,  
                       height: 40,  
                     },
                   }),
@@ -672,7 +688,7 @@ class S3Service {
               }),
             ]),
             
-            // ✅ OFFICER TEXT - Match PDF exactly (NO DATE)
+            // ✅ OFFICER TEXT
             new Paragraph({
               children: [
                 new TextRun({
@@ -687,20 +703,19 @@ class S3Service {
             new Paragraph({
               children: [
                 new TextRun({
-                  text: "पोलीस अधिक्षक कार्यालय, अहिल्यानगर",
+                  text: "पोलीस अधीक्षक कार्यालय, अहिल्यानगर",
                   bold: true,
                   size: 20,
                 }),
               ],
               alignment: AlignmentType.RIGHT,
             }),
-            // ✅ NO DATE LINE - matches PDF exactly
           ],
         }],
       });
 
       const buffer = await Packer.toBuffer(doc);
-      console.log('✅ Word document generated to match PDF format');
+      console.log('✅ Word document generated successfully');
       return buffer;
 
     } catch (error) {
@@ -709,12 +724,12 @@ class S3Service {
     }
   }
 
-  // ✅ Simplify generateWordDocumentWithSignature - just call the main method
+  // ✅ GENERATE WORD DOCUMENT WITH SIGNATURE
   async generateWordDocumentWithSignature(letterContent, letterData, signatureBase64, signerName) {
     return this.generateWordDocument(letterContent, letterData, signatureBase64, signerName);
   }
 
-  // Generate HTML with flexible signature positioning (ABOVE or BELOW officer text)
+  // ✅ GENERATE HTML WITH SIGNATURE POSITIONING
   generateSignableHTML(letterContent, letterData, signatureBase64 = null, signerName = null, signaturePosition = 'above') {
     const htmlContent = this.generateCoveringLetterHTML(letterContent, letterData);
     
@@ -734,10 +749,10 @@ class S3Service {
       `;
       
       // Insert signature after officer designation
-      const officerPattern = /<p><strong>पोलीस अधिक्षक कार्यालय, अहिल्यानगर<\/strong><\/p>/;
+      const officerPattern = /<p><strong>पोलीस अधीक्षक कार्यालय, अहिल्यानगर<\/strong><\/p>/;
       if (officerPattern.test(htmlContent)) {
         return htmlContent.replace(officerPattern, 
-          `<p><strong>पोलीस अधिक्षक कार्यालय, अहिल्यानगर</strong></p>${belowSignatureSection}`
+          `<p><strong>पोलीस अधीक्षक कार्यालय, अहिल्यानगर</strong></p>${belowSignatureSection}`
         );
       }
     } else {
@@ -760,7 +775,7 @@ class S3Service {
     return htmlContent;
   }
 
-  // Generate editable HTML template with simplified signature upload
+  // ✅ GENERATE EDITABLE HTML TEMPLATE
   generateEditableHTML(letterContent, letterData) {
     const today = new Date();
     const formattedDate = `${today.getDate().toString().padStart(2, '0')} / ${(today.getMonth() + 1).toString().padStart(2, '0')} / ${today.getFullYear()}`;
@@ -1078,7 +1093,7 @@ class S3Service {
                         ${leftLogo ? `<img src="${leftLogo}" alt="Left Logo" class="logo-img">` : '<div style="width: 60px; height: 60px; border: 2px solid #000; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold;">महाराष्ट्र<br>पोलीस</div>'}
                     </td>
                     <td>
-                        <div class="office-title">पोलीस अधिक्षक कार्यालय, अहिल्यानगर</div>
+                        <div class="office-title">पोलीस अधीक्षक कार्यालय, अहिल्यानगर</div>
                         <div class="office-subtitle">(अर्ज शाखा)</div>
                         <div class="office-address">${vargClassification} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${rightHeaderText}</div>
                     </td>
@@ -1102,7 +1117,7 @@ class S3Service {
             
             <!-- Reference Number -->
             <div class="reference-number">
-                उ.नि.पो.अ./पो.नि/स.पो.नि./ ___________________________
+                उ.वि.पो.अ./पो.नि/स.पो.नि./ ___________________________
             </div>
             
             <!-- Editable Content Section -->
@@ -1134,13 +1149,12 @@ class S3Service {
             
             <!-- Closing Content -->
             <div class="content-section">
-                <p><strong>मा.पोलीस अधिक्षक सो,</strong></p>
+                <p><strong>मा.पोलीस अधीक्षक सो,</strong></p>
                 <p class="indent"><strong>आदेश अनुसरणे</strong></p>
             </div>
             
-            <!-- Simple Signature Section -->
+            <!-- Signature Section -->
             <div class="signature-section">
-                <!-- Simple signature upload controls -->
                 <div class="signature-controls">
                     <input type="file" id="signatureUpload" accept="image/*" style="display: none;">
                     <button type="button" onclick="document.getElementById('signatureUpload').click()" class="upload-btn">
@@ -1151,7 +1165,6 @@ class S3Service {
                     </button>
                 </div>
                 
-                <!-- Simple signature display ABOVE officer text -->
                 <div id="digital-signature-area">
                     <div id="signatureDisplayArea" style="margin-bottom: 10px;">
                         <img id="uploadedSignature">
@@ -1159,17 +1172,15 @@ class S3Service {
                 </div>
                 
                 <p><strong>अर्ज शाखा प्रभारी अधिकारी</strong></p>
-                <p><strong>पोलीस अधिक्षक कार्यालय, अहिल्यानगर</strong></p>
+                <p><strong>पोलीस अधीक्षक कार्यालय, अहिल्यानगर</strong></p>
             </div>
         </div>
     </div>
     
     <script>
-        // Global variables
         const LETTER_ID = '${letterData.patraId}';
         const API_BASE_URL = '/api/covering-letters';
         
-        // Show success message
         function showSuccess(message) {
             const successDiv = document.getElementById('successMessage');
             successDiv.textContent = message;
@@ -1177,7 +1188,6 @@ class S3Service {
             setTimeout(() => successDiv.style.display = 'none', 5000);
         }
         
-        // Show error message
         function showError(message) {
             const errorDiv = document.getElementById('errorMessage');
             errorDiv.textContent = message;
@@ -1185,7 +1195,6 @@ class S3Service {
             setTimeout(() => errorDiv.style.display = 'none', 5000);
         }
         
-        // Show/hide loading
         function showLoading() {
             document.getElementById('loadingIndicator').classList.add('active');
         }
@@ -1194,12 +1203,10 @@ class S3Service {
             document.getElementById('loadingIndicator').classList.remove('active');
         }
         
-        // Save letter content
         function saveLetter() {
             showSuccess('पत्राचा मजकूर सेव्ह झाला!');
         }
         
-        // Get simple signature data
         function getSignatureData() {
             const img = document.getElementById('uploadedSignature');
             const displayArea = document.getElementById('signatureDisplayArea');
@@ -1215,7 +1222,6 @@ class S3Service {
             return { hasSignature: false };
         }
         
-        // Update letter and generate PDF
         async function updateAndGenerate() {
             const content = document.getElementById('letterContent').value.trim();
             
@@ -1275,7 +1281,6 @@ class S3Service {
             }
         }
         
-        // Handle signature upload
         function handleSignatureUpload(event) {
             const file = event.target.files[0];
             if (file) {
@@ -1295,7 +1300,6 @@ class S3Service {
             }
         }
         
-        // Clear signature
         function clearSignature() {
             const img = document.getElementById('uploadedSignature');
             const displayArea = document.getElementById('signatureDisplayArea');
@@ -1304,7 +1308,6 @@ class S3Service {
             document.getElementById('signatureUpload').value = '';
         }
         
-        // Add event listeners
         document.addEventListener('DOMContentLoaded', function() {
             const fileInput = document.getElementById('signatureUpload');
             if (fileInput) {
@@ -1317,7 +1320,7 @@ class S3Service {
     `;
   }
   
-  // Generate simplified HTML template 
+  // ✅ GENERATE SIMPLE HTML TEMPLATE 
   generateCoveringLetterHTML(letterContent, letterData) {
     const today = new Date();
     const formattedDate = `${today.getDate().toString().padStart(2, '0')} / ${(today.getMonth() + 1).toString().padStart(2, '0')} / ${today.getFullYear()}`;
@@ -1487,7 +1490,7 @@ class S3Service {
                     ${leftLogo ? `<img src="${leftLogo}" alt="Left Logo" class="logo-img">` : '<div style="width: 60px; height: 60px; border: 2px solid #000; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold;">महाराष्ट्र<br>पोलीस</div>'}
                 </td>
                 <td>
-                    <div class="office-title">पोलीस अधिक्षक कार्यालय, अहिल्यानगर</div>
+                    <div class="office-title">पोलीस अधीक्षक कार्यालय, अहिल्यानगर</div>
                     <div class="office-subtitle">(अर्ज शाखा)</div>
                     <div class="office-address">${vargClassification} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${rightHeaderText}</div>
                 </td>
@@ -1511,7 +1514,7 @@ class S3Service {
         
         <!-- Reference Number -->
         <div class="reference-number">
-            उ.नि.पो.अ./पो.नि/स.पो.नि./ ___________________________
+            उ.वि.पो.अ./पो.नि/स.पो.नि./ ___________________________
         </div>
         
         <!-- Content Section -->
@@ -1543,18 +1546,17 @@ class S3Service {
         
         <!-- Closing Content -->
         <div class="content-section">
-            <p><strong>मा.पोलीस अधिक्षक सो,</strong></p>
+            <p><strong>मा.पोलीस अधीक्षक सो,</strong></p>
             <p style="margin-left: 20px;"><strong>आदेश अनुसरणे</strong></p>
         </div>
         
-        <!-- Simple Signature Section -->
+        <!-- Signature Section -->
         <div class="signature-section">
-            <!-- Signature ABOVE officer text -->
             <div id="digital-signature-area">
-                <!-- Simple signature will be inserted here ABOVE officer designation -->
+                <!-- Signature will be inserted here -->
             </div>
             <p><strong>अर्ज शाखा प्रभारी अधिकारी</strong></p>
-            <p><strong>पोलीस अधिक्षक कार्यालय, अहिल्यानगर</strong></p>
+            <p><strong>पोलीस अधीक्षक कार्यालय, अहिल्यानगर</strong></p>
         </div>
         
     </div>
@@ -1563,7 +1565,7 @@ class S3Service {
     `;
   }
   
-  // Enhanced method to generate covering letter with Word document support
+  // ✅ GENERATE AND UPLOAD SIGNED COVERING LETTER
   async generateAndUploadSignedCoveringLetter(letterContent, letterData, signatureBase64 = null, signerName = null) {
     try {
       console.log('📄 Generating covering letter with Word document and signature support...', {
@@ -1572,7 +1574,7 @@ class S3Service {
         letterNumber: letterData.letterNumber
       });
 
-      // Generate HTML with simple signature if provided
+      // Generate HTML with signature if provided
       const htmlContent = this.generateSignableHTML(letterContent, letterData, signatureBase64, signerName);
       
       // Generate PDF using Puppeteer
@@ -1677,7 +1679,7 @@ class S3Service {
     }
   }
   
-  // Generate PDF and upload to S3 with Word document support
+  // ✅ GENERATE PDF AND UPLOAD TO S3 WITH WORD DOCUMENT SUPPORT
   async generateAndUploadCoveringLetter(letterContent, letterData) {
     try {
       console.log('📄 Generating covering letter with Word document support...', {
@@ -1795,7 +1797,7 @@ class S3Service {
     }
   }
   
-  // Upload file to S3 with better error handling
+  // ✅ UPLOAD FILE TO S3 WITH BETTER ERROR HANDLING
   async uploadToS3(fileBuffer, fileName, contentType) {
     try {
       console.log('☁️ Uploading to S3:', { fileName, contentType, size: fileBuffer.length });
@@ -1834,7 +1836,7 @@ class S3Service {
     }
   }
 
-  // Download file from S3
+  // ✅ DOWNLOAD FILE FROM S3
   async downloadFileFromS3(key) {
     try {
       console.log('☁️ Downloading from S3, key:', key);
@@ -1868,7 +1870,7 @@ class S3Service {
     }
   }
 
-  // Delete file from S3
+  // ✅ DELETE FILE FROM S3
   async deleteFromS3(fileName) {
     try {
       const deleteParams = {
@@ -1886,6 +1888,261 @@ class S3Service {
       console.error('❌ Error deleting from S3:', error);
       throw new Error(`S3 delete failed: ${error.message}`);
     }
+  }
+
+  // ✅ GET FILE EXTENSION FROM MIME TYPE
+  getFileExtensionFromMimeType(mimeType) {
+    const mimeMap = {
+      'application/pdf': 'pdf',
+      'text/html': 'html',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'application/msword': 'doc',
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/gif': 'gif'
+    };
+    return mimeMap[mimeType] || 'bin';
+  }
+
+  // ✅ GENERATE SECURE FILENAME
+  generateSecureFileName(originalName, letterData) {
+    const cleanName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const timestamp = Date.now();
+    const patraId = letterData.patraId || 'TEMP';
+    return `${patraId}-${timestamp}-${cleanName}`;
+  }
+
+  // ✅ CHECK IF FILE EXISTS IN S3
+  async fileExistsInS3(fileName) {
+    try {
+      const command = new GetObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: `covering-letters/${fileName}`,
+      });
+      
+      await s3Client.send(command);
+      return true;
+    } catch (error) {
+      if (error.name === 'NoSuchKey') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  // ✅ GET S3 FILE METADATA
+  async getS3FileMetadata(fileName) {
+    try {
+      const command = new GetObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: `covering-letters/${fileName}`,
+      });
+      
+      const response = await s3Client.send(command);
+      
+      return {
+        contentType: response.ContentType,
+        contentLength: response.ContentLength,
+        lastModified: response.LastModified,
+        etag: response.ETag
+      };
+    } catch (error) {
+      console.error('❌ Error getting S3 file metadata:', error);
+      throw new Error(`Failed to get file metadata: ${error.message}`);
+    }
+  }
+
+  // ✅ LIST FILES IN S3 BUCKET
+  async listCoveringLetters(prefix = '', maxKeys = 100) {
+    try {
+      const command = new ListObjectsV2Command({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Prefix: `covering-letters/${prefix}`,
+        MaxKeys: maxKeys
+      });
+      
+      const response = await s3Client.send(command);
+      
+      return response.Contents?.map(object => ({
+        key: object.Key,
+        size: object.Size,
+        lastModified: object.LastModified,
+        url: `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${object.Key}`
+      })) || [];
+      
+    } catch (error) {
+      console.error('❌ Error listing covering letters:', error);
+      throw new Error(`Failed to list files: ${error.message}`);
+    }
+  }
+
+  // ✅ BATCH DELETE FILES FROM S3
+  async batchDeleteFromS3(fileNames) {
+    try {
+      const objects = fileNames.map(fileName => ({ Key: fileName }));
+      
+      const command = new DeleteObjectsCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Delete: {
+          Objects: objects,
+          Quiet: false
+        }
+      });
+      
+      const response = await s3Client.send(command);
+      
+      console.log(`🗑️ Batch deleted ${response.Deleted?.length || 0} files from S3`);
+      
+      if (response.Errors?.length > 0) {
+        console.warn('⚠️ Some files failed to delete:', response.Errors);
+      }
+      
+      return {
+        deleted: response.Deleted || [],
+        errors: response.Errors || []
+      };
+      
+    } catch (error) {
+      console.error('❌ Error batch deleting from S3:', error);
+      throw new Error(`Batch delete failed: ${error.message}`);
+    }
+  }
+
+  // ✅ COPY FILE WITHIN S3
+  async copyFileInS3(sourceKey, destinationKey) {
+    try {
+      const command = new CopyObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        CopySource: `${process.env.AWS_BUCKET_NAME}/${sourceKey}`,
+        Key: destinationKey
+      });
+      
+      await s3Client.send(command);
+      
+      const newUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${destinationKey}`;
+      
+      console.log(`📋 File copied in S3: ${sourceKey} -> ${destinationKey}`);
+      return newUrl;
+      
+    } catch (error) {
+      console.error('❌ Error copying file in S3:', error);
+      throw new Error(`Failed to copy file: ${error.message}`);
+    }
+  }
+
+  // ✅ GENERATE PRESIGNED URL FOR SECURE ACCESS
+  async generatePresignedUrl(fileName, expiresIn = 3600) {
+    try {
+      const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+      
+      const command = new GetObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: `covering-letters/${fileName}`,
+      });
+      
+      const signedUrl = await getSignedUrl(s3Client, command, { expiresIn });
+      
+      console.log(`🔗 Generated presigned URL for: ${fileName}`);
+      return signedUrl;
+      
+    } catch (error) {
+      console.error('❌ Error generating presigned URL:', error);
+      throw new Error(`Failed to generate presigned URL: ${error.message}`);
+    }
+  }
+
+  // ✅ CLEANUP OLD FILES (DELETE FILES OLDER THAN SPECIFIED DAYS)
+  async cleanupOldFiles(olderThanDays = 30) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+      
+      const files = await this.listCoveringLetters();
+      const oldFiles = files.filter(file => file.lastModified < cutoffDate);
+      
+      if (oldFiles.length === 0) {
+        console.log('✅ No old files to cleanup');
+        return { deletedCount: 0, errors: [] };
+      }
+      
+      const fileNames = oldFiles.map(file => file.key);
+      const result = await this.batchDeleteFromS3(fileNames);
+      
+      console.log(`🧹 Cleanup completed: ${result.deleted.length} files deleted`);
+      return {
+        deletedCount: result.deleted.length,
+        errors: result.errors
+      };
+      
+    } catch (error) {
+      console.error('❌ Error during cleanup:', error);
+      throw new Error(`Cleanup failed: ${error.message}`);
+    }
+  }
+
+  // ✅ GET STORAGE USAGE STATISTICS
+  async getStorageStats() {
+    try {
+      const files = await this.listCoveringLetters('', 1000); // Get up to 1000 files
+      
+      const stats = {
+        totalFiles: files.length,
+        totalSize: files.reduce((sum, file) => sum + (file.size || 0), 0),
+        filesByType: {},
+        oldestFile: null,
+        newestFile: null
+      };
+      
+      files.forEach(file => {
+        // Count by file extension
+        const extension = file.key.split('.').pop()?.toLowerCase() || 'unknown';
+        stats.filesByType[extension] = (stats.filesByType[extension] || 0) + 1;
+        
+        // Find oldest and newest files
+        if (!stats.oldestFile || file.lastModified < stats.oldestFile.lastModified) {
+          stats.oldestFile = file;
+        }
+        if (!stats.newestFile || file.lastModified > stats.newestFile.lastModified) {
+          stats.newestFile = file;
+        }
+      });
+      
+      // Convert bytes to readable format
+      stats.totalSizeFormatted = this.formatBytes(stats.totalSize);
+      
+      console.log('📊 Storage statistics generated');
+      return stats;
+      
+    } catch (error) {
+      console.error('❌ Error getting storage stats:', error);
+      throw new Error(`Failed to get storage stats: ${error.message}`);
+    }
+  }
+
+  // ✅ FORMAT BYTES TO HUMAN READABLE
+  formatBytes(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  }
+
+  // ✅ VALIDATE ENVIRONMENT CONFIGURATION
+  validateConfig() {
+    const required = ['AWS_BUCKET_NAME', 'AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];
+    const missing = required.filter(key => !process.env[key]);
+    
+    if (missing.length > 0) {
+      throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+    
+    console.log('✅ S3 configuration validated');
+    return true;
   }
 }
 

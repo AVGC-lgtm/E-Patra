@@ -112,20 +112,20 @@ const SimpleDashboardLayout = ({ children, onLogout, userRole: propUserRole }) =
       return [
         { path: '/inward-dashboard', icon: '📊', label: language === 'mr' ? 'डॅशबोर्ड' : 'Dashboard', key: 'dashboard' },
         { path: '/inward-dashboard/inward-letter', icon: '✉️', label: language === 'mr' ? 'आवक पत्र' : 'Inward Letter', key: 'inward-letter' },
-        { path: '/inward-dashboard/my-letters', icon: '📋', label: language === 'mr' ? 'माझी पत्रे' : 'My Letters', key: 'my-letters' }
+        { path: '/inward-dashboard/my-letters', icon: '📋', label: language === 'mr' ? 'एकूण  अर्ज' : 'My Letters', key: 'my-letters' }
       ];
     } else if (userRole === 'head') {
       // Head users get their own navigation without Track Application
       return [
         { path: '/head-dashboard', icon: '📊', label: language === 'mr' ? 'डॅशबोर्ड' : 'Dashboard', key: 'dashboard' },
-        { path: '/head-dashboard/letters', icon: '📤', label: language === 'mr' ? 'पत्रे' : 'Letters', key: 'letters' },
+        { path: '/head-dashboard/letters', icon: '📤', label: language === 'mr' ? 'अर्ज' : 'Letters', key: 'letters' },
         { path: '/head-dashboard/upload-sign', icon: '✍️', label: language === 'mr' ? 'स्वाक्षरी अपलोड' : 'Upload Signature', key: 'upload-sign' }
       ];
     } else {
       // All other roles use outward-style navigation
       return [
         { path: '/outward-dashboard', icon: '📊', label: language === 'mr' ? 'डॅशबोर्ड' : 'Dashboard', key: 'dashboard' },
-        { path: '/outward-dashboard/outward-letters', icon: '📤', label: language === 'mr' ? 'पत्रे' : 'Letters', key: 'outward-letters' },
+        { path: '/outward-dashboard/outward-letters', icon: '📤', label: language === 'mr' ? 'जावक अर्ज' : 'Letters', key: 'outward-letters' },
         { path: '/outward-dashboard/track-application', icon: '🔍', label: language === 'mr' ? 'अर्ज ट्रॅक करा' : 'Track Application', key: 'track-application' }
       ];
     }
@@ -158,17 +158,17 @@ const SimpleDashboardLayout = ({ children, onLogout, userRole: propUserRole }) =
     } else {
       // For all other roles, show a more generic title
       const roleTitles = {
-        'outward_user': language === 'mr' ? 'ई-पत्र जावक' : 'E-Patra Outward',
-        'head': language === 'mr' ? 'ई-पत्र प्रमुख' : 'E-Patra Head',
-        'sp': language === 'mr' ? 'ई-पत्र एसपी' : 'E-Patra SP',
-        'collector': language === 'mr' ? 'ई-पत्र कलेक्टर' : 'E-Patra Collector',
-        'dg_other': language === 'mr' ? 'ई-पत्र डीजी' : 'E-Patra DG',
-        'home': language === 'mr' ? 'ई-पत्र गृह' : 'E-Patra Home',
-        'ig_nashik_other': language === 'mr' ? 'ई-पत्र आयजी' : 'E-Patra IG',
-        'shanik_local': language === 'mr' ? 'ई-पत्र शैक्षणिक' : 'E-Patra Educational'
+        'outward_user': language === 'mr' ? 'ई-अर्ज जावक' : 'E-Patra Outward',
+        'head': language === 'mr' ? 'ई-अर्ज प्रमुख' : 'E-Patra Head',
+        'sp': language === 'mr' ? 'ई-अर्ज एसपी' : 'E-Patra SP',
+        'collector': language === 'mr' ? 'ई-अर्ज कलेक्टर' : 'E-Patra Collector',
+        'dg_other': language === 'mr' ? 'ई-अर्ज डीजी' : 'E-Patra DG',
+        'home': language === 'mr' ? 'ई-अर्ज गृह' : 'E-Patra Home',
+        'ig_nashik_other': language === 'mr' ? 'ई-अर्ज आयजी' : 'E-Patra IG',
+        'shanik_local': language === 'mr' ? 'ई-अर्ज शैक्षणिक' : 'E-Patra Educational'
       };
       
-      return roleTitles[role] || (language === 'mr' ? 'ई-पत्र' : 'E-Patra');
+      return roleTitles[role] || (language === 'mr' ? 'ई-अर्ज' : 'E-Patra');
     }
   };
 

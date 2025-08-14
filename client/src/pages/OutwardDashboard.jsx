@@ -107,7 +107,7 @@ const OutwardDashboard = () => {
       setError(null);
     } catch (err) {
       console.error('Error fetching letters:', err);
-      setError(language === 'mr' ? 'पत्रे लोड करण्यात अयशस्वी' : 'Failed to load letters');
+      setError(language === 'mr' ? 'अर्ज लोड करण्यात अयशस्वी' : 'Failed to load letters');
       setLetters([]);
     } finally {
       setLoading(false);
@@ -121,7 +121,7 @@ const OutwardDashboard = () => {
   // Calculate statistics with change indicators
   const stats = [
     {
-      title: language === 'mr' ? 'आजची पत्रे' : "Today's Letters",
+      title: language === 'mr' ? 'आजची अर्ज' : "Today's Letters",
       value: letters.filter(letter => {
         const today = new Date();
         const letterDate = new Date(letter.createdAt);
@@ -132,14 +132,14 @@ const OutwardDashboard = () => {
       color: 'indigo'
     },
     {
-      title: language === 'mr' ? 'एकूण पत्रे' : 'Total Letters',
+      title: language === 'mr' ? 'एकूण अर्ज' : 'Total Letters',
       value: letters.length,
       change: `${letters.length} total`,
       icon: <FiFileText />,
       color: 'green'
     },
     {
-      title: language === 'mr' ? 'प्रमुखांकडे पाठवणे' : 'Sending to Head',
+      title: language === 'mr' ? 'प्रमुखांकडे पाठवलेले' : 'Sending to Head',
       value: letters.filter(letter => 
         letter.letterStatus && (
           letter.letterStatus.toLowerCase().includes('sent to head') ||
@@ -152,7 +152,7 @@ const OutwardDashboard = () => {
       color: 'blue'
     },
     {
-      title: language === 'mr' ? 'स्वाक्षरी कागदपत्रे' : 'Signed Documents',
+      title: language === 'mr' ? 'स्वाक्षरी पूर्ण झालेले ' : 'Signed Documents',
       value: letters.filter(letter => 
         letter.coveringLetter && letter.coveringLetter.isSigned === true
       ).length,
@@ -273,7 +273,7 @@ const OutwardDashboard = () => {
         </div>
         <p className="text-gray-500 mt-1">
           {userInfo?.table ? 
-            (language === 'mr' ? `${userInfo.table} टेबलला पाठवलेली पत्रे` : `Letters forwarded to ${userInfo.table} table`) :
+            (language === 'mr' ? `${userInfo.table} टेबलला पाठवलेली अर्ज` : `Letters forwarded to ${userInfo.table} table`) :
             (language === 'mr' ? 'जावक पत्रांचे व्यवस्थापन आणि ट्रैकिंग' : 'Manage and track your outward letters')
           }
         </p>
@@ -342,13 +342,13 @@ const OutwardDashboard = () => {
                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                   }}
                   labelStyle={{ color: '#374151' }}
-                  formatter={(value) => [value, language === 'mr' ? 'पत्रे' : 'Letters']}
+                  formatter={(value) => [value, language === 'mr' ? 'अर्ज' : 'Letters']}
                 />
                 <Bar 
                   dataKey="count" 
                   fill="#3B82F6"
                   radius={[4, 4, 0, 0]}
-                  name={language === 'mr' ? 'पत्रे' : 'Letters'}
+                  name={language === 'mr' ? 'अर्ज' : 'Letters'}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -370,7 +370,7 @@ const OutwardDashboard = () => {
           className="bg-white rounded-xl shadow-lg p-6 border border-gray-100"
         >
           <h3 className="text-lg font-semibold text-gray-800 mb-4">
-            {language === 'mr' ? 'अलीकडील पत्रे' : 'Recent Letters'}
+            {language === 'mr' ? 'अलीकडील अर्ज' : 'Recent Letters'}
           </h3>
           {recentLetters.length > 0 ? (
             <div className="space-y-4">
@@ -417,7 +417,7 @@ const OutwardDashboard = () => {
               <div className="text-center">
                 <FiFileText className="h-8 w-8 mx-auto mb-2" />
                 <p className="text-sm">
-                  {language === 'mr' ? 'अलीकडील पत्रे नाहीत' : 'No recent letters'}
+                  {language === 'mr' ? 'अलीकडील अर्ज नाहीत' : 'No recent letters'}
                 </p>
               </div>
             </div>
@@ -425,33 +425,6 @@ const OutwardDashboard = () => {
         </motion.div>
       </div>
 
-      {/* Quick Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.4 }}
-        className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 mt-8 border border-blue-100"
-      >
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          {language === 'mr' ? 'द्रुत क्रियाकलाप' : 'Quick Actions'}
-        </h3>
-        <div className="flex justify-center space-x-4">
-          <a
-            href="/outward-dashboard/outward-letters"
-            className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md"
-          >
-            <FiFileText className="mr-2 h-5 w-5" />
-            {language === 'mr' ? 'जावक पत्रे पहा' : 'View Outward Letters'}
-          </a>
-          <a
-            href="/outward-dashboard/track-application"
-            className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
-          >
-            <FiEye className="mr-2 h-5 w-5" />
-            {language === 'mr' ? 'अर्ज ट्रॅक करा' : 'Track Application'}
-          </a>
-        </div>
-      </motion.div>
     </div>
   );
 };

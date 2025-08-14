@@ -413,7 +413,7 @@ const MyInwardLetters = () => {
             </h3>
             <p className="mt-1 text-sm text-gray-500">
               {language === 'mr' ? 
-                'तुम्ही अजून कोणतीही पत्रे सबमिट केलेली नाहीत.' : 
+                'तुम्ही अजून कोणतीही अर्ज सबमिट केलेली नाहीत.' : 
                 'You haven\'t submitted any letters yet.'}
             </p>
           </div>

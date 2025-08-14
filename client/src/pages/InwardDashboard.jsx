@@ -103,7 +103,7 @@ const InwardDashboard = () => {
       setError(null);
     } catch (err) {
       console.error('Error fetching letters:', err);
-      setError(language === 'mr' ? 'पत्रे लोड करण्यात अयशस्वी. कृपया पुन्हा प्रयत्न करा.' : 'Failed to load letters. Please try again.');
+      setError(language === 'mr' ? 'अर्ज लोड करण्यात अयशस्वी. कृपया पुन्हा प्रयत्न करा.' : 'Failed to load letters. Please try again.');
       setMyLetters([]);
     } finally {
       setIsLoading(false);
@@ -402,21 +402,21 @@ const InwardDashboard = () => {
     // Update stats with proper change indicators
     setStats([
       {
-        title: language === 'mr' ? "आजचे पत्र" : "Today's Letters",
+        title: language === 'mr' ? "आजचे अर्ज" : "Today's Letters",
         value: todayCount.toString(),
         change: "100%",
         icon: <FiMail />,
         color: "indigo",
       },
       {
-        title: language === 'mr' ? "एकूण पत्रे" : "Total Letters",
+        title: language === 'mr' ? "एकूण अर्ज" : "Total Letters",
         value: lettersData.length.toString(),
         change: "100%",
         icon: <FiFileText />,
         color: "green",
       },
       {
-        title: language === 'mr' ? "दैनिक सरासरी पत्रे" : "Average Letters by Day",
+        title: language === 'mr' ? "दैनिक सरासरी अर्ज " : "Average Letters by Day",
         value: averagePerDay.toString(),
         change: averagePerDay > 0 ? `${averagePerDay}/day` : "No data",
         icon: <FiTrendingUp />,
@@ -511,7 +511,7 @@ const InwardDashboard = () => {
             <div className="relative">
               <img 
                 src="/web icon (1).png" 
-                alt="ई-पत्र Logo" 
+                alt="ई-अर्ज Logo" 
                 className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl shadow-xl border-4 border-blue-100 hover:scale-110 transition-all duration-300 hover:shadow-2xl"
               />
               <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
@@ -519,11 +519,11 @@ const InwardDashboard = () => {
               </div>
             </div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              ई-पत्र
+              ई-अर्ज
             </h1>
           </div>
           <p className="text-gray-500 mt-2 text-sm sm:text-base">
-            {language === 'mr' ? 'तुमच्या पत्रांचे विहंगावलोकन' : 'Overview of your letters and submissions'}
+            {language === 'mr' ? 'तुमच्या अर्जांचे विश्लेषण' : 'Overview of your letters and submissions'}
           </p>
         </motion.div>
         
@@ -663,17 +663,14 @@ const InwardDashboard = () => {
                   <tfoot>
                     <tr className="bg-gray-50 border-t-2 border-gray-200">
                       <td className="py-3 px-4 font-semibold text-gray-800">
-                        {language === 'mr' ? 'एकूण पत्रे:' : 'Total Letters:'}
+                        {language === 'mr' ? 'एकूण अर्ज:' : 'Total Letters:'}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span className="inline-flex items-center justify-center w-8 h-8 bg-green-100 text-green-800 rounded-full text-sm font-bold">
                           {pieData.reduce((sum, item) => sum + item.value, 0)}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right font-semibold text-gray-800">
-                        {language === 'mr' ? 'एकूण पत्रे: ' : 'Total Letters: '}
-                        {pieData.reduce((sum, item) => sum + item.value, 0)}
-                      </td>
+                    
                     </tr>
                   </tfoot>
                 )}
@@ -691,7 +688,7 @@ const InwardDashboard = () => {
           >
             <div className="flex items-center justify-between mb-4 sm:mb-6">
               <h3 className="text-base sm:text-lg font-semibold text-gray-800">
-                {language === 'mr' ? 'मासिक पत्र संख्या' : 'Monthly Letter Count'}
+                {language === 'mr' ? 'मासिक अर्ज संख्या' : 'Monthly Letter Count'}
               </h3>
             </div>
             
@@ -765,7 +762,7 @@ const InwardDashboard = () => {
                     {monthlyData.reduce((sum, item) => sum + item.count, 0)}
                   </div>
                   <div className="text-gray-600">
-                    {language === 'mr' ? 'एकूण पत्रे' : 'Total Letters'}
+                    {language === 'mr' ? 'एकूण अर्ज' : 'Total Letters'}
                   </div>
                 </div>
                 <div className="text-center">
@@ -806,7 +803,7 @@ const InwardDashboard = () => {
           >
             <div className="flex items-center justify-between mb-4 sm:mb-6">
               <h3 className="text-base sm:text-lg font-semibold text-gray-800">
-                {language === 'mr' ? 'अलीकडील क्रियाकलाप' : 'Recent Activity'}
+                {language === 'mr' ? 'अलीकडील अर्ज' : 'Recent Activity'}
               </h3>
             </div>
           <div className="space-y-4">
@@ -846,44 +843,14 @@ const InwardDashboard = () => {
                   {language === 'mr' ? 'कोणतीही क्रियाकलाप नाही' : 'No Recent Activity'}
                 </h3>
                 <p className="text-gray-500">
-                  {language === 'mr' ? 'तुमचे पहिले पत्र सबमिट करा' : 'Submit your first letter to see activity here'}
+                  {language === 'mr' ? 'तुमचे पहिले अर्ज सबमिट करा' : 'Submit your first letter to see activity here'}
                 </p>
               </div>
             )}
           </div>
         </motion.div>
       </div>
-
-              {/* Quick Actions */}
-        <motion.div 
-          className="bg-white p-4 sm:p-6 lg:p-8 rounded-xl sm:rounded-2xl shadow-sm border border-gray-100"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.5 }}
-        >
-          <div className="text-center">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-4 sm:mb-6">
-              {language === 'mr' ? 'द्रुत क्रियाकलाप' : 'Quick Actions'}
-            </h3>
-            <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
-              <a
-                href="/inward-dashboard/inward-letter"
-                className="inline-flex items-center justify-center px-4 sm:px-6 py-3 bg-blue-600 text-white text-sm sm:text-base font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md"
-              >
-                <FiFileText className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-                {language === 'mr' ? 'नवीन पत्र सबमिट करा' : 'Submit New Letter'}
-              </a>
-              <a
-                href="/inward-dashboard/my-letters"
-                className="inline-flex items-center justify-center px-4 sm:px-6 py-3 bg-indigo-600 text-white text-sm sm:text-base font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
-              >
-                <FiClock className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-                {language === 'mr' ? 'माझी पत्रे पहा' : 'View My Letters'}
-              </a>
-            </div>
-          </div>
-        </motion.div>
-      </div>
+      </div> 
     </div>
   );
 };
