@@ -333,7 +333,7 @@ const getAllPatras = async (req, res) => {
                   { letterStatus: 'sent to head' },
                   { letterStatus: 'प्रमुखांकडे पाठवले' },
                   { letterStatus: 'case close' },  // Include closed cases
-                  { letterStatus: 'केस' }      // Include closed cases in Marathi
+                  { letterStatus: 'फाईल केलेले' }      // Include closed cases in Marathi
                 ]
               },
               // Only include letters that were originally from this user's table
@@ -543,7 +543,7 @@ const getHeadLetters = async (req, res) => {
         { letterStatus: 'sent to head' },
         { letterStatus: 'प्रमुखांकडे पाठवले' },
         { letterStatus: 'case close' },     // Include closed cases
-        { letterStatus: 'केस बंद' },         // Include closed cases in Marathi
+        { letterStatus: 'फाईल केलेले' },         // Include closed cases in Marathi
         { forwardTo: 'head' }
       ]
     };

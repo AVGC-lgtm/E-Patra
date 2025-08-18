@@ -263,6 +263,9 @@ const NewLetter = () => {
       
       const response = await fetch(`${apiUrl}/api/files/upload`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
+        },
         body: formData,
       });
       

@@ -676,7 +676,7 @@ const HeadDashboard = () => {
           </div>
           <p className="text-gray-600">
             {language === 'mr' 
-              ? 'प्रमुख टेबलला पाठवलेले अर्ज' 
+              ? 'प्रमुख टेबलला सबमिट अर्ज' 
               : 'Letters sent to Head table'}
           </p>
           <div className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mt-2">

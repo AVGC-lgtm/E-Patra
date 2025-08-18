@@ -229,7 +229,7 @@ const OutwardStaffLetters = () => {
         if (letter.inwardPatraClose || letter.letterStatus === 'case close') {
           return (
             <span className="inline-flex items-center px-3 py-1.5 bg-gray-600 text-white text-xs font-medium rounded">
-              <span className="ml-1">{language === 'mr' ? 'केस बंद' : 'Case Closed'}</span>
+              <span className="ml-1">{language === 'mr' ? 'फाईल केलेले' : 'Case Closed'}</span>
             </span>
           );
         }

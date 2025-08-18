@@ -46,8 +46,8 @@ const InboxLetter = () => {
 
   // Date filter options
   const dateOptions = [
-    { value: 'all', label: language === 'mr' ? 'सर्व पत्रे' : 'All Letters' },
-    { value: 'today', label: language === 'mr' ? 'आजची पत्रे' : "Today's Letters" }
+    { value: 'all', label: language === 'mr' ? 'सर्व अर्ज' : 'All Letters' },
+    { value: 'today', label: language === 'mr' ? 'आजचे अर्ज' : "Today's Letters" }
   ];
 
   // Department options
@@ -124,7 +124,9 @@ const InboxLetter = () => {
       const response = await axios.get(`${apiUrl}/api/outward-letters`, {
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
+
         },
         timeout: 10000 // 10 second timeout
       });

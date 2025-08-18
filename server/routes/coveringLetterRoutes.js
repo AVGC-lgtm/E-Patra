@@ -12,13 +12,13 @@ const coveringLetterController = new CoveringLetterController();
 // ===== COVERING LETTER MANAGEMENT ROUTES =====
 
 // GET all covering letters with pagination and filtering
-router.get('/', coveringLetterController.getAllCoveringLetters.bind(coveringLetterController));
+router.get('/', authenticateToken, coveringLetterController.getAllCoveringLetters.bind(coveringLetterController));
 
 // GET covering letter by ID
-router.get('/:id', coveringLetterController.getCoveringLetterById.bind(coveringLetterController));
+router.get('/:id', authenticateToken, coveringLetterController.getCoveringLetterById.bind(coveringLetterController));
 
 // GET covering letter by Patra ID
-router.get('/patra/:patraId', coveringLetterController.getCoveringLetterByPatraId.bind(coveringLetterController));
+router.get('/patra/:patraId', authenticateToken, coveringLetterController.getCoveringLetterByPatraId.bind(coveringLetterController));
 
 // ✅ NEW: GET covering letter for editing (returns editable HTML template)
 router.get('/:id/edit', authenticateToken, coveringLetterController.getCoveringLetterForEdit.bind(coveringLetterController));
@@ -46,16 +46,16 @@ router.post('/:id/generate-word', authenticateToken, coveringLetterController.ge
 // ===== DOWNLOAD ROUTES =====
 
 // GET download PDF
-router.get('/download/:id', coveringLetterController.downloadCoveringLetter.bind(coveringLetterController));
+router.get('/download/:id', authenticateToken, coveringLetterController.downloadCoveringLetter.bind(coveringLetterController));
 
 // ✅ NEW: GET download Word document
-router.get('/download/:id/word', coveringLetterController.downloadCoveringLetterWord.bind(coveringLetterController));
+router.get('/download/:id/word', authenticateToken, coveringLetterController.downloadCoveringLetterWord.bind(coveringLetterController));
 
 // GET view HTML version
-router.get('/view/:id', coveringLetterController.viewCoveringLetterHTML.bind(coveringLetterController));
+router.get('/view/:id', authenticateToken, coveringLetterController.viewCoveringLetterHTML.bind(coveringLetterController));
 
 // ✅ ENHANCED: GET preview URLs (returns all available format URLs including Word)
-router.get('/preview/:id', coveringLetterController.previewCoveringLetter.bind(coveringLetterController));
+router.get('/preview/:id', authenticateToken, coveringLetterController.previewCoveringLetter.bind(coveringLetterController));
 
 
 

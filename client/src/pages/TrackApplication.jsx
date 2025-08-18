@@ -70,7 +70,11 @@ const TrackApplication = () => {
     
     try {
       // Use the specific route for getting patra by reference number
-      const response = await axios.get(`${apiUrl}/api/patras/reference/${ref}`);
+      const response = await axios.get(`${apiUrl}/api/patras/reference/${ref}`, {
+        headers: {
+          'Authorization': `Bearer ${sessionStorage.getItem('token')}`
+        }
+      });
       console.log('Full API response:', response.data);
       
       // Handle the API response structure

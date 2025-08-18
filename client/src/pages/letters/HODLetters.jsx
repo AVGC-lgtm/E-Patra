@@ -41,7 +41,7 @@ const HODLetters = () => {
     { value: 'pending', label: language === 'mr' ? 'प्रलंबित' : 'Pending' },
     { value: 'approved', label: language === 'mr' ? 'मंजूर' : 'Approved' },
     { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' },
-    { value: 'case close', label: language === 'mr' ? 'फाईल केलेले' : 'Case Closed' }
+    { value: 'case close', label: language === 'mr' ? 'फाईल केलेले ' : 'Case Closed' }
   ];
 
   // Sign Status filter options
@@ -601,7 +601,7 @@ const HODLetters = () => {
       'प्रलंबित',            // ✅ Marathi for "pending"
       'मंजूर',               // ✅ Marathi for "approved"
       'नाकारले',             // ✅ Marathi for "rejected"
-      'केस बंद'              // ✅ Marathi for "case close"
+      'फाईल केलेले'              // ✅ Marathi for "case close"
     ];
     
     const hasAllowedStatus = allowedStatuses.some(s => 
@@ -629,7 +629,7 @@ const HODLetters = () => {
       (statusFilter === 'pending' && (statusLower === 'pending' || letterStatus === 'प्रलंबित')) ||
       (statusFilter === 'approved' && (statusLower === 'approved' || letterStatus === 'मंजूर')) ||
       (statusFilter === 'rejected' && (statusLower === 'rejected' || letterStatus === 'नाकारले')) ||
-      (statusFilter === 'case close' && (statusLower === 'case close' || letterStatus === 'केस बंद'));
+      (statusFilter === 'case close' && (statusLower === 'case close' || letterStatus === 'फाईल केलेले'));
 
     // Sign status filtering
     const signStatus = getSignStatus(letter);
@@ -864,12 +864,12 @@ const HODLetters = () => {
       'case close': {
         bg: 'bg-gray-100',
         text: 'text-gray-800',
-        label: language === 'mr' ? 'केस बंद' : 'Case Closed'
+        label: language === 'mr' ? 'फाईल केलेले' : 'Case Closed'
       },
-      'केस बंद': {
+      'फाईल केलेले': {
         bg: 'bg-gray-100',
         text: 'text-gray-800',
-        label: language === 'mr' ? 'केस बंद' : 'Case Closed'
+        label: language === 'mr' ? 'फाईल केलेले' : 'Case Closed'
       }
     };
 

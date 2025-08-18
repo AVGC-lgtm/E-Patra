@@ -204,11 +204,11 @@ const MyInwardLetters = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {language === 'mr' ? 'माझी पत्रे' : 'My Letters'}
+            {language === 'mr' ? 'एकूण अर्ज' : 'My Letters'}
           </h1>
           <p className="text-gray-500">
             {language === 'mr' ? 
-              'तुमच्या सबमिट केलेल्या पत्रांची यादी' : 
+              'तुमच्या सबमिट केलेल्या अर्जांची यादी' : 
               'List of your submitted letters'}
           </p>
         </div>
