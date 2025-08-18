@@ -133,7 +133,7 @@ const Login = ({ onLogin }) => {
                 />
               </div>
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white tracking-wide">ई-पत्र</h1>
+                <h1 className="text-2xl md:text-3xl font-bold text-white tracking-wide">ई-अर्ज</h1>
            
               </div>
             </div>

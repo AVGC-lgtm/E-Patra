@@ -288,7 +288,7 @@ const HeadDashboard = () => {
     if (statusLower.includes('approved') || statusLower.includes('मंजूर')) return 'approved';
     if (statusLower.includes('rejected') || statusLower.includes('नाकारले')) return 'rejected';
     if (statusLower.includes('sent to head') || statusLower.includes('प्रमुखांकडे पाठवले')) return 'sent_to_head';
-    if (statusLower.includes('case close') || statusLower.includes('केस बंद') || statusLower.includes('closed')) return 'closed';
+    if (statusLower.includes('case close') || statusLower.includes('फाईल केलेले') || statusLower.includes('closed')) return 'closed';
     return 'other';
   };
 
@@ -524,7 +524,7 @@ const HeadDashboard = () => {
         <div className="flex items-center justify-between mb-10">
           <div>
             <h3 className="text-2xl font-bold text-gray-900">
-              {language === 'mr' ? 'मासिक पत्र वितरण' : 'Monthly Letter Distribution'}
+              {language === 'mr' ? 'मासिक अर्ज संख्या' : 'Monthly Letter Distribution'}
             </h3>
             <p className="text-base text-gray-600 mt-2">
               {language === 'mr' ? 'वर्ष 2025 - संपूर्ण वार्षिक विश्लेषण' : 'Year 2025 - Complete Annual Analysis'}
@@ -676,7 +676,7 @@ const HeadDashboard = () => {
           </div>
           <p className="text-gray-600">
             {language === 'mr' 
-              ? 'प्रमुख टेबलला पाठवलेली अर्ज' 
+              ? 'प्रमुख टेबलला पाठवलेले अर्ज' 
               : 'Letters sent to Head table'}
           </p>
           <div className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mt-2">
@@ -709,7 +709,7 @@ const HeadDashboard = () => {
       {/* Stats Cards - Matching SP dashboard design with gradients */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <StatCard
-          title={language === 'mr' ? 'आजची अर्ज' : 'Today\'s Letters'}
+          title={language === 'mr' ? 'आजचे अर्ज' : 'Today\'s Letters'}
           value={todayCount}
           subtitle="Today"
           icon={<FiClock className="w-6 h-6 text-white" />}
@@ -737,7 +737,7 @@ const HeadDashboard = () => {
           color="bg-gradient-to-br from-emerald-400 to-emerald-600"
         />
         <StatCard
-          title={language === 'mr' ? 'केस बंद' : 'Closed Cases'}
+          title={language === 'mr' ? 'फाईल केलेले' : 'Closed Cases'}
           value={closedCasesCount}
           subtitle={`${closedCasesCount} cases`}
           icon={<FiXCircle className="w-6 h-6 text-white" />}

@@ -49,7 +49,7 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
     { value: 'pending', label: language === 'mr' ? 'प्रलंबित' : 'Pending' },
     { value: 'approved', label: language === 'mr' ? 'मंजूर' : 'Approved' },
     { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' },
-    { value: 'case close', label: language === 'mr' ? 'केस बंद' : 'Case Closed' }
+    { value: 'case close', label: language === 'mr' ? 'फाईल केलेले' : 'Case Closed' }
   ];
 
   // Sign Status filter options
@@ -61,9 +61,9 @@ const BaseLetterComponent = ({ role, apiEndpoint, additionalColumns = [] }) => {
 
   // Case Status filter options
   const caseStatusOptions = [
-    { value: 'All', label: language === 'mr' ? 'सर्व केस' : 'All Cases' },
-    { value: 'open', label: language === 'mr' ? 'खुले केस' : 'Open Cases' },
-    { value: 'closed', label: language === 'mr' ? 'बंद केस' : 'Closed Cases' }
+    { value: 'All', label: language === 'mr' ? 'सर्व अर्ज' : 'All Cases' },
+    { value: 'open', label: language === 'mr' ? 'फाईल न केलेले' : 'Open Cases' },
+    { value: 'closed', label: language === 'mr' ? 'फाईल केलेले' : 'Closed Cases' }
   ];
 
   // Add event listener for signature completion

@@ -41,7 +41,7 @@ const HODLetters = () => {
     { value: 'pending', label: language === 'mr' ? 'प्रलंबित' : 'Pending' },
     { value: 'approved', label: language === 'mr' ? 'मंजूर' : 'Approved' },
     { value: 'rejected', label: language === 'mr' ? 'नाकारले' : 'Rejected' },
-    { value: 'case close', label: language === 'mr' ? 'केस बंद' : 'Case Closed' }
+    { value: 'case close', label: language === 'mr' ? 'फाईल केलेले' : 'Case Closed' }
   ];
 
   // Sign Status filter options

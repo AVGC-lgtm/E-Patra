@@ -111,7 +111,7 @@ const SimpleDashboardLayout = ({ children, onLogout, userRole: propUserRole }) =
     if (userRole === 'inward_user') {
       return [
         { path: '/inward-dashboard', icon: '📊', label: language === 'mr' ? 'डॅशबोर्ड' : 'Dashboard', key: 'dashboard' },
-        { path: '/inward-dashboard/inward-letter', icon: '✉️', label: language === 'mr' ? 'आवक पत्र' : 'Inward Letter', key: 'inward-letter' },
+        { path: '/inward-dashboard/inward-letter', icon: '✉️', label: language === 'mr' ? 'आवक अर्ज' : 'Inward Letter', key: 'inward-letter' },
         { path: '/inward-dashboard/my-letters', icon: '📋', label: language === 'mr' ? 'एकूण  अर्ज' : 'My Letters', key: 'my-letters' }
       ];
     } else if (userRole === 'head') {

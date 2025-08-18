@@ -121,7 +121,7 @@ const OutwardDashboard = () => {
   // Calculate statistics with change indicators
   const stats = [
     {
-      title: language === 'mr' ? 'आजची अर्ज' : "Today's Letters",
+      title: language === 'mr' ? 'आजचे अर्ज' : "Today's Letters",
       value: letters.filter(letter => {
         const today = new Date();
         const letterDate = new Date(letter.createdAt);
@@ -161,11 +161,11 @@ const OutwardDashboard = () => {
       color: 'amber'
     },
     {
-      title: language === 'mr' ? 'केस बंद' : 'Closed Cases',
+      title: language === 'mr' ? 'फाईल केलेले' : 'Closed Cases',
       value: letters.filter(letter => 
         letter.letterStatus && (
           letter.letterStatus.toLowerCase().includes('case close') ||
-          letter.letterStatus.toLowerCase().includes('केस बंद') ||
+          letter.letterStatus.toLowerCase().includes('फाईल केलेले') ||
           letter.letterStatus.toLowerCase().includes('closed') ||
           letter.inwardPatraClose === true
         )
@@ -273,7 +273,7 @@ const OutwardDashboard = () => {
         </div>
         <p className="text-gray-500 mt-1">
           {userInfo?.table ? 
-            (language === 'mr' ? `${userInfo.table} टेबलला पाठवलेली अर्ज` : `Letters forwarded to ${userInfo.table} table`) :
+            (language === 'mr' ? `${userInfo.table} टेबलला पाठवलेले अर्ज` : `Letters forwarded to ${userInfo.table} table`) :
             (language === 'mr' ? 'जावक पत्रांचे व्यवस्थापन आणि ट्रैकिंग' : 'Manage and track your outward letters')
           }
         </p>
@@ -316,7 +316,7 @@ const OutwardDashboard = () => {
           className="bg-white rounded-xl shadow-lg p-6 border border-gray-100"
         >
           <h3 className="text-lg font-semibold text-gray-800 mb-4">
-            {language === 'mr' ? 'मासिक पत्र संख्या' : 'Monthly Letter Count'}
+            {language === 'mr' ? 'मासिक अर्ज संख्या' : 'Monthly Letter Count'}
           </h3>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
