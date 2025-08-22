@@ -1,0 +1,29 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+/* Import Shree Devanagari 714 font for Marathi */
+@import url('https://fonts.googleapis.com/css2?family=Shree+Devanagari+714&display=swap');
+
+/* Base font configuration */
+* {
+  font-family: Arial, sans-serif;
+}
+
+/* Marathi text styling */
+:lang(mr),
+.marathi,
+[lang="mr"] {
+  font-family: 'Shree Devanagari 714', Arial, sans-serif;
+}
+
+/* Apply to body for global font */
+body {
+  font-family: Arial, sans-serif;
+}
+
+/* Marathi language class */
+body.marathi,
+body[lang="mr"] {
+  font-family: 'Shree Devanagari 714', Arial, sans-serif;
+}
