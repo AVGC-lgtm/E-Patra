@@ -122,6 +122,8 @@ const NewLetter = () => {
       toast.error('Error downloading file');
     }
   };
+
+
   
   // Handle main letter file upload
   const handleMainFileChange = async (e) => {
@@ -865,7 +867,7 @@ const NewLetter = () => {
                 className="px-3 py-1 bg-green-600 text-white text-xs rounded-md hover:bg-green-700 transition-colors flex items-center gap-1"
               >
                 <FiEye className="h-3 w-3" />
-                {currentLanguage === 'mr' ? 'पूर्वावलोकन' : 'Preview'}
+                {currentLanguage === 'mr' ? 'पूर्वावलोड' : 'Preview'}
               </button>
               <button
                 type="button"
@@ -875,6 +877,7 @@ const NewLetter = () => {
                 <FiDownload className="h-3 w-3" />
                 {currentLanguage === 'mr' ? 'डाउनलोड' : 'Download'}
               </button>
+
             </div>
           )}
         </div>

@@ -658,7 +658,7 @@ class S3Service {
             new Paragraph({
               children: [
                 new TextRun({
-                  text: "    आदेश अनुसरणे",
+                  text: "    यांच्या आदेशानुसार",
                   bold: true,
                   size: 20,
                 }),

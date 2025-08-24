@@ -511,11 +511,25 @@ const getPatraByUserId = async (req, res) => {
     
     console.log('getPatraByUserId - Found', patras.length, 'letters for userId:', userId);
 
-    // Format the response with Word document URLs
-    const formattedPatras = patras.map(patra => ({
-      ...patra.toJSON(),
-      coveringLetter: formatCoveringLetterData(patra.coveringLetter)
-    }));
+    // Format the response with Word document URLs and uploaded reports
+    const formattedPatras = patras.map(patra => {
+      // Parse report files if they exist
+      let reportFiles = [];
+      if (patra.reportFiles && patra.reportFiles !== '[]' && patra.reportFiles !== 'null') {
+        try {
+          reportFiles = JSON.parse(patra.reportFiles);
+        } catch (parseError) {
+          console.error('Error parsing report files:', parseError);
+          reportFiles = [];
+        }
+      }
+
+      return {
+        ...patra.toJSON(),
+        coveringLetter: formatCoveringLetterData(patra.coveringLetter),
+        uploadedReports: reportFiles // Include uploaded reports in response
+      };
+    });
 
     return res.status(200).json({
       success: true,
@@ -1008,31 +1022,10 @@ const uploadReportFiles = async (req, res) => {
         id: patra.id,
         referenceNumber: patra.referenceNumber,
         letterStatus: patra.letterStatus,
-        hasCoveringLetter: !!patra.coveringLetter,
-        isSigned: patra.coveringLetter?.isSigned
+        hasCoveringLetter: !!patra.coveringLetter
       });
 
-      // Check if letter is completed (simplified logic)
-      const hasCompletedSignature = patra.coveringLetter && 
-                                   patra.coveringLetter.isSigned === true;
-
-      console.log('Signature check:', {
-        hasCoveringLetter: !!patra.coveringLetter,
-        isSigned: patra.coveringLetter?.isSigned,
-        hasCompletedSignature
-      });
-
-      if (!hasCompletedSignature) {
-        console.log('Letter signature not completed');
-        return res.status(400).json({ 
-          error: 'Cannot upload report. Letter signature is not completed.',
-          signatureStatus: 'incomplete',
-          debug: {
-            hasCoveringLetter: !!patra.coveringLetter,
-            isSigned: patra.coveringLetter?.isSigned
-          }
-        });
-      }
+      // Signature validation removed - reports can be uploaded regardless of signature status
 
       // Process uploaded files
       const uploadedFiles = req.files || [];
@@ -1325,6 +1318,273 @@ const getCoveringLetterById = async (req, res) => {
 
 // Function removed - no table forwarding needed
 
+// NEW FUNCTION: Merge covering letter with uploaded file for extraction
+const mergeCoveringLetterWithUploadedFile = async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    // Find the patra with covering letter
+    const patra = await InwardPatra.findByPk(id, {
+      include: [
+        {
+          model: CoveringLetter,
+          as: 'coveringLetter',
+          required: false,
+          include: [
+            {
+              model: File,
+              as: 'attachedFile',
+              attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+              required: false
+            }
+          ]
+        }
+      ]
+    });
+
+    if (!patra) {
+      return res.status(404).json({ error: 'Patra not found' });
+    }
+
+    if (!patra.coveringLetter) {
+      return res.status(400).json({ error: 'No covering letter found for this patra' });
+    }
+
+    if (!patra.fileId) {
+      return res.status(400).json({ error: 'No uploaded file found for this patra' });
+    }
+
+    // Get the uploaded file information
+    const uploadedFile = await File.findByPk(patra.fileId);
+    if (!uploadedFile) {
+      return res.status(400).json({ error: 'Uploaded file not found' });
+    }
+
+    // Import PDF manipulation libraries
+    const { PDFDocument } = require('pdf-lib');
+    // Use built-in https module instead of fetch
+    const https = require('https');
+    const http = require('http');
+
+    try {
+      // Helper function to download file using built-in modules
+      const downloadFile = (url) => {
+        return new Promise((resolve, reject) => {
+          const protocol = url.startsWith('https:') ? https : http;
+          
+          const request = protocol.get(url, (response) => {
+            if (response.statusCode !== 200) {
+              reject(new Error(`Failed to download file: ${response.statusCode}`));
+              return;
+            }
+            
+            const chunks = [];
+            response.on('data', (chunk) => chunks.push(chunk));
+            response.on('end', () => {
+              const buffer = Buffer.concat(chunks);
+              resolve(buffer);
+            });
+          });
+          
+          request.on('error', (error) => {
+            reject(new Error(`Request failed: ${error.message}`));
+          });
+          
+          request.setTimeout(30000, () => {
+            request.destroy();
+            reject(new Error('Request timeout'));
+          });
+        });
+      };
+
+      // Download covering letter PDF
+      const coveringLetterBuffer = await downloadFile(patra.coveringLetter.pdfUrl);
+      
+      // Download uploaded file (convert to PDF if needed or use as is)
+      let uploadedFileBuffer;
+      if (uploadedFile.fileUrl.endsWith('.pdf')) {
+        uploadedFileBuffer = await downloadFile(uploadedFile.fileUrl);
+      } else {
+        // For non-PDF files, we'll need to handle conversion
+        // For now, just return the covering letter
+        uploadedFileBuffer = coveringLetterBuffer;
+      }
+
+      // Create new PDF document
+      const mergedPdf = await PDFDocument.create();
+
+      // Load covering letter PDF
+      const coveringLetterPdf = await PDFDocument.load(coveringLetterBuffer);
+      const coveringLetterPages = await mergedPdf.copyPages(coveringLetterPdf, coveringLetterPdf.getPageIndices());
+      coveringLetterPages.forEach(page => mergedPdf.addPage(page));
+
+      // Load uploaded file PDF
+      const uploadedFilePdf = await PDFDocument.load(uploadedFileBuffer);
+      const uploadedFilePages = await mergedPdf.copyPages(uploadedFilePdf, uploadedFilePdf.getPageIndices());
+      uploadedFilePages.forEach(page => mergedPdf.addPage(page));
+
+      // Generate merged PDF
+      const mergedPdfBytes = await mergedPdf.save();
+
+      // Set response headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="merged-file-${patra.referenceNumber}.pdf"`);
+      res.setHeader('Content-Length', mergedPdfBytes.length);
+
+      // Send the merged PDF
+      res.send(Buffer.from(mergedPdfBytes));
+
+    } catch (pdfError) {
+      console.error('Error merging PDFs:', pdfError);
+      return res.status(500).json({ 
+        error: 'Failed to merge PDFs', 
+        details: pdfError.message 
+      });
+    }
+
+  } catch (error) {
+    console.error('Error in mergeCoveringLetterWithUploadedFile:', error);
+    return res.status(500).json({ 
+      error: 'Server error', 
+      details: error.message 
+    });
+  }
+};
+
+// NEW FUNCTION: Merge covering letter with uploaded report PDF
+const mergeCoveringLetterWithReport = async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    // Find the patra with covering letter and uploaded reports
+    const patra = await InwardPatra.findByPk(id, {
+      include: [
+        {
+          model: CoveringLetter,
+          as: 'coveringLetter',
+          required: false,
+          include: [
+            {
+              model: File,
+              as: 'attachedFile',
+              attributes: ['id', 'originalName', 'fileName', 'fileUrl'],
+              required: false
+            }
+          ]
+        }
+      ]
+    });
+
+    if (!patra) {
+      return res.status(404).json({ error: 'Patra not found' });
+    }
+
+    if (!patra.coveringLetter) {
+      return res.status(400).json({ error: 'No covering letter found for this patra' });
+    }
+
+    // Parse uploaded reports
+    let uploadedReports = [];
+    if (patra.reportFiles && patra.reportFiles !== '[]' && patra.reportFiles !== 'null') {
+      try {
+        uploadedReports = JSON.parse(patra.reportFiles);
+      } catch (parseError) {
+        console.error('Error parsing report files:', parseError);
+        uploadedReports = [];
+      }
+    }
+
+    if (uploadedReports.length === 0) {
+      return res.status(400).json({ error: 'No uploaded reports found for this patra' });
+    }
+
+    // Get the first uploaded report (assuming single report for now)
+    const uploadedReport = uploadedReports[0];
+    
+    // Import PDF manipulation libraries
+    const { PDFDocument } = require('pdf-lib');
+    // Use built-in https module instead of fetch
+    const https = require('https');
+    const http = require('http');
+
+    try {
+      // Helper function to download file using built-in modules
+      const downloadFile = (url) => {
+        return new Promise((resolve, reject) => {
+          const protocol = url.startsWith('https:') ? https : http;
+          
+          const request = protocol.get(url, (response) => {
+            if (response.statusCode !== 200) {
+              reject(new Error(`Failed to download file: ${response.statusCode}`));
+              return;
+            }
+            
+            const chunks = [];
+            response.on('data', (chunk) => chunks.push(chunk));
+            response.on('end', () => {
+              const buffer = Buffer.concat(chunks);
+              resolve(buffer);
+            });
+          });
+          
+          request.on('error', (error) => {
+            reject(new Error(`Request failed: ${error.message}`));
+          });
+          
+          request.setTimeout(30000, () => {
+            request.destroy();
+            reject(new Error('Request timeout'));
+          });
+        });
+      };
+
+      // Download covering letter PDF
+      const coveringLetterBuffer = await downloadFile(patra.coveringLetter.pdfUrl);
+      
+      // Download uploaded report PDF
+      const reportBuffer = await downloadFile(uploadedReport.s3Url);
+
+      // Create new PDF document
+      const mergedPdf = await PDFDocument.create();
+
+      // Load covering letter PDF
+      const coveringLetterPdf = await PDFDocument.load(coveringLetterBuffer);
+      const coveringLetterPages = await mergedPdf.copyPages(coveringLetterPdf, coveringLetterPdf.getPageIndices());
+      coveringLetterPages.forEach(page => mergedPdf.addPage(page));
+
+      // Load uploaded report PDF
+      const reportPdf = await PDFDocument.load(reportBuffer);
+      const reportPages = await mergedPdf.copyPages(reportPdf, reportPdf.getPageIndices());
+      reportPages.forEach(page => mergedPdf.addPage(page));
+
+      // Generate merged PDF
+      const mergedPdfBytes = await mergedPdf.save();
+
+      // Set response headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="merged-report-${patra.referenceNumber}.pdf"`);
+      res.setHeader('Content-Length', mergedPdfBytes.length);
+
+      // Send the merged PDF
+      res.send(Buffer.from(mergedPdfBytes));
+
+    } catch (pdfError) {
+      console.error('Error merging PDFs:', pdfError);
+      return res.status(500).json({ 
+        error: 'Failed to merge PDFs', 
+        details: pdfError.message 
+      });
+    }
+
+  } catch (error) {
+    console.error('Error in mergeCoveringLetterWithReport:', error);
+    return res.status(500).json({ 
+      error: 'Server error', 
+      details: error.message 
+    });
+  }
+};
+
 module.exports = {
   createPatra,
   getAllPatras,
@@ -1345,5 +1605,7 @@ module.exports = {
   generateReferenceNumber,
   generateOwReferenceNumber,
   uploadReportFiles,
-  closeCase
+  closeCase,
+  mergeCoveringLetterWithReport,
+  mergeCoveringLetterWithUploadedFile
 };

@@ -44,6 +44,12 @@ router.put('/:id/resend', authenticateToken, patraController.resendLetter);
 // Upload report files for completed letters (MUST BE BEFORE /:id route)
 router.post('/:id/upload-report', authenticateToken, patraController.uploadReportFiles);
 
+// Download merged PDF (covering letter + uploaded report) (MUST BE BEFORE /:id route)
+router.get('/:id/download-merged', authenticateToken, patraController.mergeCoveringLetterWithReport);
+
+// Download merged PDF (covering letter + uploaded file for extraction) (MUST BE BEFORE /:id route)
+router.get('/:id/download-merged-file', authenticateToken, patraController.mergeCoveringLetterWithUploadedFile);
+
 // Close case for letters with uploaded reports (MUST BE BEFORE /:id route)
 router.put('/:id/close-case', authenticateToken, patraController.closeCase);
 

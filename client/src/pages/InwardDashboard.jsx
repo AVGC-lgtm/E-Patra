@@ -195,6 +195,8 @@ const InwardDashboard = () => {
     }));
   };
 
+
+
   // Function to download both covering letter and uploaded file together
   const downloadLetterWithAttachments = async (letter) => {
     if (downloadingLetters.has(letter.id)) return;
@@ -523,7 +525,7 @@ const InwardDashboard = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-7xl">
         <motion.div 
-          className="mb-8 sm:mb-10"
+          className="mt-8 mb-8 sm:mb-10"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
@@ -539,7 +541,7 @@ const InwardDashboard = () => {
                 <span className="text-white text-xs font-bold">✓</span>
               </div>
             </div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            <h1 className="text-2xl sm:text-2xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent leading-tight pt-2">
               ई-अर्ज
             </h1>
           </div>
@@ -814,6 +816,7 @@ const InwardDashboard = () => {
             </div>
           )}
         </motion.div>
+      </div>
 
           {/* Recent Activity */}
           <motion.div 
@@ -887,10 +890,12 @@ const InwardDashboard = () => {
           </div>
         </motion.div>
       </div>
-      </div> 
+      
+
+      
       <ToastContainer />
     </div>
   );
 };
 
-export default InwardDashboard; 
+export default InwardDashboard;
